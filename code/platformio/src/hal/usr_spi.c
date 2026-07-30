@@ -4,11 +4,21 @@
 
 #include "soc/soc_caps.h"
 
+/*
+ * brief: Check whether the given SPI host id is within valid SoC range.
+ * input: host - SPI host id to validate.
+ * output: true when host is valid; otherwise false.
+ */
 static bool spi_host_is_valid(spi_host_device_t host)
 {
     return ((int)host >= 0) && ((int)host < SOC_SPI_PERIPH_NUM);
 }
 
+/*
+ * brief: Initialize SPI bus and register one SPI device handle.
+ * input: spi - pointer to initialized usr_spi_s configuration.
+ * output: ESP_OK on success; otherwise ESP-IDF error code.
+ */
 static esp_err_t spi_init_device(usr_spi_s *spi)
 {
     spi_device_interface_config_t dev_config = {0};
@@ -30,6 +40,11 @@ static esp_err_t spi_init_device(usr_spi_s *spi)
     return ret;
 }
 
+/*
+ * brief: Create and initialize one SPI device from user pin and speed config.
+ * input: spi/host/miso/mosi/clk/cs_pin/speed_hz - device and bus parameters.
+ * output: ESP_OK when device is ready; otherwise ESP-IDF error code.
+ */
 esp_err_t spi_create_device(usr_spi_s *spi,
                             spi_host_device_t host,
                             gpio_num_t miso,
@@ -38,8 +53,6 @@ esp_err_t spi_create_device(usr_spi_s *spi,
                             gpio_num_t cs_pin,
                             int speed_hz)
 {
-    esp_err_t ret;
-
     if (spi == NULL)
     {
         return ESP_ERR_INVALID_ARG;
@@ -86,6 +99,11 @@ esp_err_t spi_create_device(usr_spi_s *spi,
     return spi_init_device(spi);
 }
 
+/*
+ * brief: Write N bytes to SPI using blocking polling transmit mode.
+ * input: spi - device handle wrapper; data - tx buffer; len - byte count.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or driver error.
+ */
 esp_err_t spi_write_nbyte(usr_spi_s *spi, const uint8_t *data, size_t len)
 {
     spi_transaction_t t = {0};
@@ -104,6 +122,11 @@ esp_err_t spi_write_nbyte(usr_spi_s *spi, const uint8_t *data, size_t len)
     return spi_device_polling_transmit(spi->fd, &t);
 }
 
+/*
+ * brief: Read N bytes from SPI using blocking polling transmit mode.
+ * input: spi - device handle wrapper; data - rx buffer; len - byte count.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or driver error.
+ */
 esp_err_t spi_read_nbyte(usr_spi_s *spi, uint8_t *data, size_t len)
 {
     spi_transaction_t t = {0};

@@ -9,12 +9,12 @@
 #include "freertos/task.h"
 
 #include "hal/usr_spi.h"
+#include "peripherals/gpba02b.h"
+#include "bsp/bsp.h"
 
 #define TAG "MAIN"
-#define SPI_TEST_INTERVAL_MS 5
 
-usr_spi_s gpba02_spi;
-void app_main(void)
+static void print_heap_info(void)
 {
 #if CONFIG_SPIRAM
 	size_t psram_chip_bytes = esp_psram_get_size();
@@ -28,33 +28,20 @@ void app_main(void)
 #else
 	ESP_LOGW(TAG, "CONFIG_SPIRAM is disabled.");
 #endif
+}
 
-	esp_err_t ret = spi_create_device(&gpba02_spi,
-									  SPI2_HOST,
-									  GPBA02_IO_MISO,
-									  GPBA02_IO_MOSI,
-									  GPBA02_IO_CLK,
-									  GPBA02_IO_CS,
-									  GPBA02_DEFAULT_CLOCK_HZ);
-	if (ret != ESP_OK)
-	{
-		ESP_LOGE(TAG, "spi_create_device failed: %d", (int)ret);
-		return;
-	}
+void app_main(void)
+{
+	print_heap_info();
+	gpba02b_init_device();
+	bsp_power_on();
 
-	const TickType_t interval_ticks_raw = pdMS_TO_TICKS(SPI_TEST_INTERVAL_MS);
-	const TickType_t interval_ticks = (interval_ticks_raw == 0) ? 1 : interval_ticks_raw;
-	uint8_t data[4] = {0x01, 0x02, 0x03, 0x04};
+	gpba02b_pin_set_mode(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, GPBA02B_PIN_MODE_OUTPUT);
 	while (1)
 	{
-		ret = spi_write_nbyte(&gpba02_spi, data, sizeof(data));
-		if (ret != ESP_OK)
-		{
-			ESP_LOGE(TAG, "spi_write_nbyte failed: %d", (int)ret);
-			vTaskDelay(pdMS_TO_TICKS(1000));
-			continue;
-		}
-
-		vTaskDelay(interval_ticks);
+		gpba02b_pin_write(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, true);
+		vTaskDelay(1);
+		gpba02b_pin_write(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, false);
+		vTaskDelay(1);
 	}
 }
