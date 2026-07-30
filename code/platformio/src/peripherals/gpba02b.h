@@ -2,7 +2,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
+#include "esp_log.h"
 #include "esp_err.h"
 
 #include "hal/usr_spi.h"

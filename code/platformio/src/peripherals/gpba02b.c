@@ -1,9 +1,5 @@
 #include "gpba02b.h"
 
-#include <stddef.h>
-
-#include "esp_log.h"
-
 #define TAG "GPBA02B"
 
 static usr_spi_s s_gpba02_spi;
@@ -217,7 +213,7 @@ esp_err_t gpba02b_init_device(void)
     }
 
     ret = spi_create_device(&s_gpba02_spi,
-                            SPI2_HOST,
+                            GPBA02B_SPI_HOST,
                             GPBA02_IO_MISO,
                             GPBA02_IO_MOSI,
                             GPBA02_IO_CLK,
