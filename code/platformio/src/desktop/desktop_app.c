@@ -1,52 +1,6 @@
 #include "desktop_app.h"
 
-#include "esp_heap_caps.h"
-#include "esp_log.h"
-#include "esp_timer.h"
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-#include "lvgl.h"
-
-#include "peripherals/st7365p.h"
-
 #define TAG "DESKTOP"
-
-#define LVGL_TICK_PERIOD_MS 2U
-#define LVGL_TASK_PERIOD_MS 5U
-#define LVGL_DRAW_BUF_LINES 40U
-
-#define DESKTOP_ICON_COLS 3U
-#define DESKTOP_ICON_ROWS 4U
-#define DESKTOP_ICON_COUNT (DESKTOP_ICON_COLS * DESKTOP_ICON_ROWS)
-
-#define DESKTOP_MARGIN_X 12
-#define DESKTOP_TOP_Y 58
-#define DESKTOP_BOTTOM_MARGIN 42
-#define DESKTOP_ICON_GAP_X 10
-#define DESKTOP_ICON_GAP_Y 10
-
-#if LV_FONT_MONTSERRAT_22
-#define DESKTOP_FONT_TITLE (&lv_font_montserrat_22)
-#define DESKTOP_FONT_ICON (&lv_font_montserrat_22)
-#else
-#define DESKTOP_FONT_TITLE LV_FONT_DEFAULT
-#define DESKTOP_FONT_ICON LV_FONT_DEFAULT
-#endif
-
-#if LV_FONT_MONTSERRAT_18
-#define DESKTOP_FONT_TEXT (&lv_font_montserrat_18)
-#else
-#define DESKTOP_FONT_TEXT LV_FONT_DEFAULT
-#endif
-
-typedef struct
-{
-    const char *symbol;
-    const char *name;
-    lv_color_t color;
-} desktop_icon_s;
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_HOME, "Home", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF)},
@@ -67,7 +21,8 @@ static lv_disp_draw_buf_t s_lv_draw_buf;
 static lv_disp_drv_t s_lv_disp_drv;
 static lv_color_t *s_lv_buf_1 = NULL;
 static esp_timer_handle_t s_lv_tick_timer = NULL;
-static lv_obj_t *s_status_label = NULL;
+static lv_obj_t *s_clock_label = NULL;
+static lv_timer_t *s_clock_timer = NULL;
 static uint16_t s_lcd_width = 0;
 static uint16_t s_lcd_height = 0;
 
@@ -94,12 +49,45 @@ static void desktop_icon_click_cb(lv_event_t *e)
 {
     const desktop_icon_s *icon = (const desktop_icon_s *)lv_event_get_user_data(e);
 
-    if ((icon == NULL) || (s_status_label == NULL))
+    if (icon == NULL)
     {
         return;
     }
 
-    lv_label_set_text_fmt(s_status_label, "%s opened", icon->name);
+    ESP_LOGI(TAG, "%s opened", icon->name);
+}
+
+static void desktop_update_clock_text(void)
+{
+    char clock_text[6];
+    time_t now = time(NULL);
+    struct tm local_tm;
+
+    if ((now > 0) && (localtime_r(&now, &local_tm) != NULL) && (local_tm.tm_year >= (2020 - 1900)))
+    {
+        (void)snprintf(clock_text, sizeof(clock_text), "%02d:%02d", local_tm.tm_hour, local_tm.tm_min);
+    }
+    else
+    {
+        uint64_t uptime_min = (uint64_t)(esp_timer_get_time() / 1000000ULL) / 60ULL;
+        uint32_t hour = (uint32_t)((uptime_min / 60ULL) % 24ULL);
+        uint32_t minute = (uint32_t)(uptime_min % 60ULL);
+        (void)snprintf(clock_text, sizeof(clock_text), "%02u:%02u", (unsigned)hour, (unsigned)minute);
+    }
+
+    lv_label_set_text(s_clock_label, clock_text);
+}
+
+static void desktop_clock_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+
+    if (s_clock_label == NULL)
+    {
+        return;
+    }
+
+    desktop_update_clock_text();
 }
 
 static void desktop_create_ui(void)
@@ -107,36 +95,63 @@ static void desktop_create_ui(void)
     static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     lv_obj_t *scr = lv_scr_act();
-    lv_obj_t *title;
-    lv_obj_t *subtitle;
+    lv_obj_t *top_bar;
+    lv_obj_t *bottom_bar;
+    lv_obj_t *net_symbol;
     lv_obj_t *grid;
+    lv_coord_t grid_y;
     lv_coord_t grid_h;
     lv_coord_t i;
 
-    grid_h = (lv_coord_t)s_lcd_height - DESKTOP_TOP_Y - DESKTOP_BOTTOM_MARGIN;
-    if (grid_h < 120)
+    grid_y = DESKTOP_BAR_HEIGHT + DESKTOP_GRID_TOP_GAP;
+    grid_h = (lv_coord_t)s_lcd_height - grid_y - DESKTOP_BAR_HEIGHT - DESKTOP_GRID_BOTTOM_GAP;
+    if (grid_h < 80)
     {
-        grid_h = 120;
+        grid_h = 80;
     }
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    title = lv_label_create(scr);
-    lv_label_set_text(title, "LVGL Desktop");
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE2E8F0), 0);
-    lv_obj_set_style_text_font(title, DESKTOP_FONT_TITLE, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
+    top_bar = lv_obj_create(scr);
+    lv_obj_set_size(top_bar, (lv_coord_t)s_lcd_width, DESKTOP_BAR_HEIGHT);
+    lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1D4ED8), 0);
+    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(top_bar, 0, 0);
+    lv_obj_set_style_radius(top_bar, 0, 0);
+    lv_obj_set_style_pad_all(top_bar, 0, 0);
 
-    subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Portrait 3x4 Launcher");
-    lv_obj_set_style_text_color(subtitle, lv_color_hex(0x94A3B8), 0);
-    lv_obj_set_style_text_font(subtitle, DESKTOP_FONT_TEXT, 0);
-    lv_obj_align_to(subtitle, title, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+    net_symbol = lv_label_create(top_bar);
+    lv_label_set_text(net_symbol, LV_SYMBOL_WIFI);
+    lv_obj_set_style_text_color(net_symbol, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_text_font(net_symbol, DESKTOP_FONT_TEXT, 0);
+    lv_obj_align(net_symbol, LV_ALIGN_RIGHT_MID, -8, 0);
+
+    bottom_bar = lv_obj_create(scr);
+    lv_obj_set_size(bottom_bar, (lv_coord_t)s_lcd_width, DESKTOP_BAR_HEIGHT);
+    lv_obj_align(bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_set_style_bg_color(bottom_bar, lv_color_hex(0x1D4ED8), 0);
+    lv_obj_set_style_bg_opa(bottom_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(bottom_bar, 0, 0);
+    lv_obj_set_style_radius(bottom_bar, 0, 0);
+    lv_obj_set_style_pad_all(bottom_bar, 0, 0);
+
+    s_clock_label = lv_label_create(bottom_bar);
+    lv_obj_set_style_text_color(s_clock_label, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_text_font(s_clock_label, DESKTOP_FONT_TEXT, 0);
+    lv_obj_align(s_clock_label, LV_ALIGN_CENTER, 0, 0);
+    desktop_update_clock_text();
+
+    if (s_clock_timer != NULL)
+    {
+        lv_timer_del(s_clock_timer);
+    }
+    s_clock_timer = lv_timer_create(desktop_clock_timer_cb, 1000, NULL);
 
     grid = lv_obj_create(scr);
     lv_obj_set_size(grid, (lv_coord_t)s_lcd_width - (2 * DESKTOP_MARGIN_X), grid_h);
-    lv_obj_set_pos(grid, DESKTOP_MARGIN_X, DESKTOP_TOP_Y);
+    lv_obj_set_pos(grid, DESKTOP_MARGIN_X, grid_y);
     lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(grid, 0, 0);
     lv_obj_set_style_radius(grid, 0, 0);
@@ -161,30 +176,24 @@ static void desktop_create_ui(void)
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(btn, 0, 0);
         lv_obj_set_style_radius(btn, 14, 0);
-        lv_obj_set_style_shadow_color(btn, lv_color_hex(0x020617), 0);
-        lv_obj_set_style_shadow_width(btn, 10, 0);
-        lv_obj_set_style_shadow_opa(btn, LV_OPA_30, 0);
+        lv_obj_set_style_shadow_width(btn, 0, 0);
+        lv_obj_set_style_shadow_opa(btn, LV_OPA_TRANSP, 0);
         lv_obj_set_style_pad_all(btn, 6, 0);
         lv_obj_add_event_cb(btn, desktop_icon_click_cb, LV_EVENT_CLICKED, (void *)&s_desktop_icons[i]);
 
         symbol = lv_label_create(btn);
         lv_label_set_text(symbol, s_desktop_icons[i].symbol);
-        lv_obj_set_style_text_color(symbol, lv_color_hex(0xF8FAFC), 0);
+        lv_obj_set_style_text_color(symbol, lv_color_black(), LV_PART_MAIN | LV_STATE_ANY);
         lv_obj_set_style_text_font(symbol, DESKTOP_FONT_ICON, 0);
         lv_obj_align(symbol, LV_ALIGN_TOP_MID, 0, 4);
 
         name = lv_label_create(btn);
         lv_label_set_text(name, s_desktop_icons[i].name);
-        lv_obj_set_style_text_color(name, lv_color_hex(0xF8FAFC), 0);
-        lv_obj_set_style_text_font(name, DESKTOP_FONT_TEXT, 0);
+        lv_obj_set_style_text_color(name, lv_color_black(), LV_PART_MAIN | LV_STATE_ANY);
+        lv_obj_set_style_text_font(name, DESKTOP_FONT_ICON_NAME, 0);
+        lv_obj_set_style_text_letter_space(name, 1, 0);
         lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -6);
     }
-
-    s_status_label = lv_label_create(scr);
-    lv_label_set_text(s_status_label, "Desktop ready");
-    lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xCBD5E1), 0);
-    lv_obj_set_style_text_font(s_status_label, DESKTOP_FONT_TEXT, 0);
-    lv_obj_align(s_status_label, LV_ALIGN_BOTTOM_MID, 0, -10);
 }
 
 static esp_err_t desktop_lvgl_init(void)
@@ -202,7 +211,7 @@ static esp_err_t desktop_lvgl_init(void)
 
     draw_buf_pixels = (size_t)s_lcd_width * LVGL_DRAW_BUF_LINES;
     s_lv_buf_1 = (lv_color_t *)heap_caps_malloc(draw_buf_pixels * sizeof(lv_color_t),
-                                                 MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+                                                MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (s_lv_buf_1 == NULL)
     {
         return ESP_ERR_NO_MEM;
@@ -215,6 +224,7 @@ static esp_err_t desktop_lvgl_init(void)
     s_lv_disp_drv.ver_res = s_lcd_height;
     s_lv_disp_drv.flush_cb = lvgl_flush_cb;
     s_lv_disp_drv.draw_buf = &s_lv_draw_buf;
+    s_lv_disp_drv.antialiasing = 0;
     lv_disp_drv_register(&s_lv_disp_drv);
 
     ret = esp_timer_create(&tick_timer_args, &s_lv_tick_timer);
