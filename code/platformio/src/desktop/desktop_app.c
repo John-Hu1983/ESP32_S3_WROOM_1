@@ -3,14 +3,14 @@
 #define TAG "DESKTOP"
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
-    {LV_SYMBOL_HOME, "Home", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF)},
-    {LV_SYMBOL_SETTINGS, "Settings", LV_COLOR_MAKE(0x00, 0xA8, 0x78)},
+    {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF)},
+    {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0x00, 0xA8, 0x78)},
     {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xEB, 0x4D, 0x8A)},
     {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x6D, 0x5D, 0xF6)},
     {LV_SYMBOL_VIDEO, "Video", LV_COLOR_MAKE(0x00, 0xA1, 0xD6)},
     {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0x22, 0xB0, 0x7D)},
     {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0x1E, 0x90, 0xFF)},
-    {LV_SYMBOL_SD_CARD, "Storage", LV_COLOR_MAKE(0xFF, 0x8A, 0x00)},
+    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xFF, 0x8A, 0x00)},
     {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x5D, 0x66, 0x7A)},
     {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xD2, 0x4D, 0x57)},
     {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x7A, 0x4D, 0xD8)},
@@ -267,11 +267,9 @@ static void desktop_lvgl_task(void *param)
     }
 }
 
-esp_err_t desktop_app_start(void)
+static esp_err_t desktop_prepare_monitor(void)
 {
     esp_err_t ret;
-    BaseType_t task_ok;
-
     ret = st7365p_panel_init(NULL);
     if (ret != ESP_OK)
     {
@@ -295,6 +293,20 @@ esp_err_t desktop_app_start(void)
     st7365p_get_resolution(&s_lcd_width, &s_lcd_height);
 
     ESP_LOGI(TAG, "LVGL desktop init on %ux%u", (unsigned)s_lcd_width, (unsigned)s_lcd_height);
+    return ESP_OK;
+}
+
+esp_err_t desktop_app_start(void)
+{
+    esp_err_t ret;
+    BaseType_t task_ok;
+
+    ret = desktop_prepare_monitor();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "desktop_prepare_monitor failed: %d", (int)ret);
+        return ret;
+    }
 
     ret = desktop_lvgl_init();
     if (ret != ESP_OK)
