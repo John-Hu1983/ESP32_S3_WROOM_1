@@ -1,6 +1,8 @@
 #include "bsp.h"
 
 #define TAG "BSP"
+
+/* Drive the external power lock pin high to turn system power on. */
 esp_err_t bsp_power_on(void)
 {
     gpba02b_pin_set_mode(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, GPBA02B_PIN_MODE_OUTPUT);
@@ -8,6 +10,7 @@ esp_err_t bsp_power_on(void)
     return ESP_OK;
 }
 
+/* Drive the external power lock pin low to turn system power off. */
 esp_err_t bsp_power_off(void)
 {
     gpba02b_pin_set_mode(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, GPBA02B_PIN_MODE_OUTPUT);
@@ -15,6 +18,7 @@ esp_err_t bsp_power_off(void)
     return ESP_OK;
 }
 
+/* Print current PSRAM chip and heap status when available. */
 static void print_heap_info(void)
 {
 #if CONFIG_SPIRAM
@@ -31,6 +35,7 @@ static void print_heap_info(void)
 #endif
 }
 
+/* Initialize board services in the expected startup order. */
 esp_err_t bsp_init_whole(void)
 {
     esp_err_t ret;

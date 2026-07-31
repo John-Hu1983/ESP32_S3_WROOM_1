@@ -15,6 +15,9 @@
 #include "hal/usr_spi.h"
 #include "peripherals/gpba02b.h"
 
+/* Enable board power output path (power lock high). */
 esp_err_t bsp_power_on(void);
+/* Disable board power output path (power lock low). */
 esp_err_t bsp_power_off(void);
+/* Initialize board-level peripherals and default power state. */
 esp_err_t bsp_init_whole(void);

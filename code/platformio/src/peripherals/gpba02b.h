@@ -81,24 +81,42 @@ typedef enum
 
 typedef void (*gpba02b_int_callback_t)(uint8_t int_flags, void *user_ctx);
 
+/* Initialize GPBA02B SPI backend and unlock advanced function registers. */
 esp_err_t gpba02b_init_device(void);
+/* Write one GPBA02B register value. */
 esp_err_t gpba02b_reg_write(uint8_t reg_addr, uint8_t value);
+/* Read one GPBA02B register value. */
 esp_err_t gpba02b_reg_read(uint8_t reg_addr, uint8_t *value);
+/* Return register mapping metadata for the selected GPIO port. */
 esp_err_t gpba02b_get_gpio_regs(gpba02b_port_t port, const gpba02b_gpio_s **gpio_regs);
 
+/* Configure one GPIO pin mode on the selected port. */
 esp_err_t gpba02b_pin_set_mode(gpba02b_port_t port, uint8_t pin, gpba02b_pin_mode_t mode);
+/* Write the full 8-bit output latch value for one GPIO port. */
 esp_err_t gpba02b_port_write(gpba02b_port_t port, uint8_t value);
+/* Read the full 8-bit input status value for one GPIO port. */
 esp_err_t gpba02b_port_read(gpba02b_port_t port, uint8_t *value);
+/* Write one GPIO output pin level. */
 esp_err_t gpba02b_pin_write(gpba02b_port_t port, uint8_t pin, bool level);
+/* Read one GPIO input pin level. */
 esp_err_t gpba02b_pin_read(gpba02b_port_t port, uint8_t pin, bool *level);
 
+/* Enable or disable multiple PWM channels using a bit mask. */
 esp_err_t gpba02b_pwm_enable_mask(gpba02b_port_t port, uint8_t channel_mask, bool enable);
+/* Set duty value for one PWM channel. */
 esp_err_t gpba02b_pwm_set_duty(gpba02b_port_t port, uint8_t channel, uint8_t duty);
+/* Set PWM clock divider for a PWM-capable port. */
 esp_err_t gpba02b_pwm_set_clock_div(gpba02b_port_t port, gpba02b_pwm_div_t div);
 
+/* Configure interrupt enable mask bits. */
 esp_err_t gpba02b_int_set_enable_mask(uint8_t enable_mask);
+/* Configure falling-edge selection mask for interrupt inputs. */
 esp_err_t gpba02b_int_set_falling_edge_mask(uint8_t falling_edge_mask);
+/* Read current latched interrupt flags. */
 esp_err_t gpba02b_int_get_flags(uint8_t *int_flags);
+/* Clear selected interrupt flags. */
 esp_err_t gpba02b_int_clear_flags(uint8_t int_flags);
+/* Register callback invoked when an external interrupt event is handled. */
 void gpba02b_int_set_callback(gpba02b_int_callback_t cb, void *user_ctx);
+/* Handle one external interrupt event: read flags, clear them, and invoke callback. */
 esp_err_t gpba02b_int_handle_external_event(void);

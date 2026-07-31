@@ -4,6 +4,11 @@
 
 static st7365p_state_t s_st7365p = {0};
 
+/*
+ * brief: Delay for the requested milliseconds while enforcing at least one RTOS tick.
+ * input: ms - delay time in milliseconds.
+ * output: none.
+ */
 static void st7365p_delay_ms(uint32_t ms)
 {
     TickType_t ticks = pdMS_TO_TICKS(ms);
@@ -14,6 +19,11 @@ static void st7365p_delay_ms(uint32_t ms)
     vTaskDelay(ticks);
 }
 
+/*
+ * brief: Configure LCD RS pin as push-pull output and set default level to data mode.
+ * input: none.
+ * output: ESP_OK on success; otherwise GPIO configuration error or invalid argument.
+ */
 static esp_err_t st7365p_init_rs_pin(void)
 {
     gpio_config_t io_cfg = {0};
@@ -39,11 +49,21 @@ static esp_err_t st7365p_init_rs_pin(void)
     return gpio_set_level(LCD_IO_RS, 1);
 }
 
+/*
+ * brief: Set LCD RS line state used to select command or data phase.
+ * input: level - 0 for command, non-zero for data.
+ * output: ESP_OK on success; otherwise GPIO driver error.
+ */
 static esp_err_t st7365p_set_rs_level(uint32_t level)
 {
     return gpio_set_level(LCD_IO_RS, (int)level);
 }
 
+/*
+ * brief: Write bytes to LCD over SPI and switch to queued DMA path for large transfers.
+ * input: data - source byte buffer; len - number of bytes to transmit.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or SPI driver error.
+ */
 static esp_err_t st7365p_write_bytes(const void *data, size_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
@@ -70,6 +90,11 @@ static esp_err_t st7365p_write_bytes(const void *data, size_t len)
     return spi_write_nbyte(&s_st7365p.spi, p, len);
 }
 
+/*
+ * brief: Send one LCD command byte.
+ * input: cmd - command value.
+ * output: ESP_OK on success; otherwise GPIO/SPI driver error.
+ */
 static esp_err_t st7365p_write_cmd(uint8_t cmd)
 {
     esp_err_t ret;
@@ -83,6 +108,11 @@ static esp_err_t st7365p_write_cmd(uint8_t cmd)
     return st7365p_write_bytes(&cmd, 1);
 }
 
+/*
+ * brief: Send LCD payload bytes in data mode.
+ * input: data - payload buffer; len - payload byte count.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG or GPIO/SPI driver error.
+ */
 static esp_err_t st7365p_write_data(const void *data, size_t len)
 {
     esp_err_t ret;
@@ -106,6 +136,11 @@ static esp_err_t st7365p_write_data(const void *data, size_t len)
     return st7365p_write_bytes(data, len);
 }
 
+/*
+ * brief: Send one command followed immediately by an optional data payload.
+ * input: cmd - command value; data - payload buffer; len - payload byte count.
+ * output: ESP_OK on success; otherwise GPIO/SPI driver error.
+ */
 static esp_err_t st7365p_write_cmd_data(uint8_t cmd, const void *data, size_t len)
 {
     esp_err_t ret;
@@ -119,6 +154,11 @@ static esp_err_t st7365p_write_cmd_data(uint8_t cmd, const void *data, size_t le
     return st7365p_write_data(data, len);
 }
 
+/*
+ * brief: Lazily initialize LCD SPI device and RS GPIO resources.
+ * input: none.
+ * output: ESP_OK when resources are ready; otherwise initialization error.
+ */
 static esp_err_t st7365p_ensure_spi_ready(void)
 {
     esp_err_t ret;
@@ -152,6 +192,11 @@ static esp_err_t st7365p_ensure_spi_ready(void)
     return ESP_OK;
 }
 
+/*
+ * brief: Convert logical rotation index to MADCTL bitfield while preserving BGR configuration.
+ * input: rotation - orientation index; madctl_base - base MADCTL value from configuration.
+ * output: Encoded MADCTL byte for panel register programming.
+ */
 static uint8_t st7365p_rotation_to_madctl(uint8_t rotation, uint8_t madctl_base)
 {
     uint8_t bgr = (uint8_t)(madctl_base & ST7365P_MADCTL_BGR);
@@ -169,6 +214,11 @@ static uint8_t st7365p_rotation_to_madctl(uint8_t rotation, uint8_t madctl_base)
     }
 }
 
+/*
+ * brief: Fill configuration structure with default panel parameters.
+ * input: cfg - output configuration pointer.
+ * output: none.
+ */
 void st7365p_get_default_cfg(st7365p_cfg_t *cfg)
 {
     if (cfg == NULL)
@@ -185,11 +235,21 @@ void st7365p_get_default_cfg(st7365p_cfg_t *cfg)
     cfg->invert_color = false;
 }
 
+/*
+ * brief: Query whether panel initialization has completed.
+ * input: none.
+ * output: true when panel is ready; otherwise false.
+ */
 bool st7365p_is_ready(void)
 {
     return s_st7365p.panel_ready;
 }
 
+/*
+ * brief: Return current logical resolution after applying active rotation.
+ * input: width - output width pointer; height - output height pointer.
+ * output: none.
+ */
 void st7365p_get_resolution(uint16_t *width, uint16_t *height)
 {
     if (width != NULL)
@@ -203,6 +263,11 @@ void st7365p_get_resolution(uint16_t *width, uint16_t *height)
     }
 }
 
+/*
+ * brief: Execute panel hardware reset timing sequence through GPBA02B reset pin control.
+ * input: none.
+ * output: ESP_OK on success; otherwise GPBA02B or SPI/backend error.
+ */
 esp_err_t st7365p_reset_sequence(void)
 {
     esp_err_t ret;
@@ -243,11 +308,21 @@ esp_err_t st7365p_reset_sequence(void)
     return ESP_OK;
 }
 
+/*
+ * brief: Backward-compatible wrapper for historical misspelled reset API name.
+ * input: none.
+ * output: ESP_OK on success; otherwise propagated reset-sequence error.
+ */
 esp_err_t st7365p_reset_sequency(void)
 {
     return st7365p_reset_sequence();
 }
 
+/*
+ * brief: Send sleep-out command and wait for panel internal wake-up.
+ * input: none.
+ * output: ESP_OK on success; otherwise state or SPI/GPIO error.
+ */
 esp_err_t st7365p_sleep_out(void)
 {
     esp_err_t ret;
@@ -268,6 +343,11 @@ esp_err_t st7365p_sleep_out(void)
     return ESP_OK;
 }
 
+/*
+ * brief: Enable panel display output.
+ * input: none.
+ * output: ESP_OK on success; otherwise state or SPI/GPIO error.
+ */
 esp_err_t st7365p_display_on(void)
 {
     esp_err_t ret;
@@ -281,6 +361,11 @@ esp_err_t st7365p_display_on(void)
     return st7365p_write_cmd(ST7365P_CMD_DISPON);
 }
 
+/*
+ * brief: Disable panel display output.
+ * input: none.
+ * output: ESP_OK on success; otherwise state or SPI/GPIO error.
+ */
 esp_err_t st7365p_display_off(void)
 {
     esp_err_t ret;
@@ -294,6 +379,11 @@ esp_err_t st7365p_display_off(void)
     return st7365p_write_cmd(ST7365P_CMD_DISPOFF);
 }
 
+/*
+ * brief: Apply panel rotation and update cached logical resolution.
+ * input: rotation - orientation index (0..3, modulo applied internally).
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_STATE or SPI error.
+ */
 esp_err_t st7365p_set_rotation(uint8_t rotation)
 {
     uint8_t madctl;
@@ -325,6 +415,11 @@ esp_err_t st7365p_set_rotation(uint8_t rotation)
     return ESP_OK;
 }
 
+/*
+ * brief: Program draw window (CASET/RASET) and enter RAM write mode.
+ * input: x1/y1 - top-left coordinate; x2/y2 - bottom-right coordinate.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or SPI error.
+ */
 esp_err_t st7365p_set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
 {
     uint16_t xs;
@@ -375,6 +470,11 @@ esp_err_t st7365p_set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
     return st7365p_write_cmd(ST7365P_CMD_RAMWR);
 }
 
+/*
+ * brief: Draw one RGB565 bitmap rectangle to panel GRAM.
+ * input: x1/y1/x2/y2 - destination rectangle; rgb565_data - source pixel buffer.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or SPI error.
+ */
 esp_err_t st7365p_draw_bitmap(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, const void *rgb565_data)
 {
     uint32_t pixel_count;
@@ -398,6 +498,11 @@ esp_err_t st7365p_draw_bitmap(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2
     return st7365p_write_data(rgb565_data, bytes);
 }
 
+/*
+ * brief: Fill panel GRAM stream with a repeated RGB565 color for a target pixel count.
+ * input: rgb565 - color value; pixel_count - number of pixels to write.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_STATE or SPI error.
+ */
 esp_err_t st7365p_fill_color(uint16_t rgb565, uint32_t pixel_count)
 {
     static uint8_t fill_chunk[ST7365P_FILL_TX_BYTES];
@@ -433,6 +538,11 @@ esp_err_t st7365p_fill_color(uint16_t rgb565, uint32_t pixel_count)
     return ESP_OK;
 }
 
+/*
+ * brief: Flush LVGL draw area to panel with clipping and row-wise transfer.
+ * input: x1/y1/x2/y2 - LVGL area; color_map - RGB565 source buffer.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or SPI error.
+ */
 esp_err_t st7365p_lvgl_flush(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const void *color_map)
 {
     int32_t clip_x1;
@@ -494,6 +604,11 @@ esp_err_t st7365p_lvgl_flush(int32_t x1, int32_t y1, int32_t x2, int32_t y2, con
     return ESP_OK;
 }
 
+/*
+ * brief: Perform full panel bring-up from configuration to display-on state.
+ * input: cfg - optional panel configuration; NULL uses default settings.
+ * output: ESP_OK on success; otherwise argument, backend, GPIO, or SPI error.
+ */
 esp_err_t st7365p_panel_init(const st7365p_cfg_t *cfg)
 {
     st7365p_cfg_t active_cfg;
@@ -578,6 +693,11 @@ esp_err_t st7365p_panel_init(const st7365p_cfg_t *cfg)
     return ESP_OK;
 }
 
+/*
+ * brief: Initialize panel using default configuration values.
+ * input: none.
+ * output: ESP_OK on success; otherwise propagated panel-initialization error.
+ */
 esp_err_t st7365p_init_device(void)
 {
     return st7365p_panel_init(NULL);

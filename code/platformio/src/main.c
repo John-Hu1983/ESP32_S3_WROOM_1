@@ -25,6 +25,7 @@ static const uint16_t s_lcd_test_colors[] = {
 	0x0000	// black
 };
 
+/* Main entry: initialize board and LCD, then cycle full-screen test colors forever. */
 void app_main(void)
 {
 	esp_err_t ret;
