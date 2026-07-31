@@ -1,0 +1,49 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "PIO Build",
+			"type": "shell",
+			"command": "pio",
+			"args": [
+				"run",
+				"-d",
+				"."
+			],
+			"isBackground": false
+		},
+		{
+			"label": "PIO Build Check",
+			"type": "shell",
+			"command": "C:\\Users\\hujia\\.platformio\\penv\\Scripts\\pio.exe",
+			"args": [
+				"run",
+				"-d",
+				"."
+			],
+			"isBackground": false
+		},
+		{
+			"label": "PIO Build ICE Workaround",
+			"type": "shell",
+			"command": "pio",
+			"args": [
+				"run",
+				"-d",
+				"."
+			],
+			"isBackground": false
+		},
+		{
+			"label": "PIO Build LVGL",
+			"type": "shell",
+			"command": "pio",
+			"args": [
+				"run",
+				"-d",
+				"."
+			],
+			"isBackground": false
+		}
+	]
+}

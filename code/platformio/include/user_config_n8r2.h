@@ -28,6 +28,7 @@
 #define LCD_IO_RESET_PIN 5
 #define LCD_DEFAULT_WIDTH 320
 #define LCD_DEFAULT_HEIGHT 480
+#define LCD_DEFAULT_MADCTL 0x40
 
 /*
     GPBA02B peripheral

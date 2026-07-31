@@ -199,19 +199,27 @@ static esp_err_t st7365p_ensure_spi_ready(void)
  */
 static uint8_t st7365p_rotation_to_madctl(uint8_t rotation, uint8_t madctl_base)
 {
-    uint8_t bgr = (uint8_t)(madctl_base & ST7365P_MADCTL_BGR);
+    uint8_t base = (uint8_t)(madctl_base &
+                             (ST7365P_MADCTL_MY | ST7365P_MADCTL_MX | ST7365P_MADCTL_MV | ST7365P_MADCTL_BGR));
+    uint8_t delta = 0;
 
     switch (rotation & 0x03U)
     {
     case 0:
-        return bgr;
+        delta = 0;
+        break;
     case 1:
-        return (uint8_t)(bgr | ST7365P_MADCTL_MV | ST7365P_MADCTL_MX);
+        delta = (uint8_t)(ST7365P_MADCTL_MV | ST7365P_MADCTL_MX);
+        break;
     case 2:
-        return (uint8_t)(bgr | ST7365P_MADCTL_MX | ST7365P_MADCTL_MY);
+        delta = (uint8_t)(ST7365P_MADCTL_MX | ST7365P_MADCTL_MY);
+        break;
     default:
-        return (uint8_t)(bgr | ST7365P_MADCTL_MV | ST7365P_MADCTL_MY);
+        delta = (uint8_t)(ST7365P_MADCTL_MV | ST7365P_MADCTL_MY);
+        break;
     }
+
+    return (uint8_t)(base ^ delta);
 }
 
 /*
@@ -230,7 +238,7 @@ void st7365p_get_default_cfg(st7365p_cfg_t *cfg)
     cfg->height = LCD_DEFAULT_HEIGHT;
     cfg->x_offset = 0;
     cfg->y_offset = 0;
-    cfg->madctl = 0;
+    cfg->madctl = LCD_DEFAULT_MADCTL;
     cfg->colmod = 0x55;
     cfg->invert_color = false;
 }
