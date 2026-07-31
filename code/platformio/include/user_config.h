@@ -1,42 +1,9 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-
-#include "driver/gpio.h"
-
-#include "user_def.h"
-
-#define CAMERA_APP_EN EN
-
-/*
-    power control
-*/
-#define POWER_LOCK_IO_PORT GPBA02B_PORT_B
-#define POWER_LOCK_IO_PIN 3
-
-/*
-    LCD monitor
-*/
-#define LCD_SPI_HOST SPI2_HOST
-#define LCD_IO_RS GPIO_NUM_14
-#define LCD_IO_CS GPIO_NUM_21
-#define LCD_IO_MISO GPIO_NUM_NC
-#define LCD_IO_MOSI GPIO_NUM_13
-#define LCD_IO_CLK GPIO_NUM_12
-#define LCD_DEFAULT_CLOCK_HZ (40 * 1000 * 1000)
-#define LCD_IO_RESET_PORT GPBA02B_PORT_A
-#define LCD_IO_RESET_PIN 5
-#define LCD_DEFAULT_WIDTH 320
-#define LCD_DEFAULT_HEIGHT 480
-
-/*
-    GPBA02B peripheral
-*/
-#define GPBA02B_SPI_HOST SPI3_HOST
-#define GPBA02_IO_MISO GPIO_NUM_47
-#define GPBA02_IO_MOSI GPIO_NUM_48
-#define GPBA02_IO_CLK GPIO_NUM_45
-#define GPBA02_IO_CS GPIO_NUM_46
-#define GPBA02_DEFAULT_CLOCK_HZ (10 * 1000 * 1000)
+#if defined(USER_CONFIG_BOARD_N8R2)
+#include "user_config_n8r2.h"
+#elif defined(USER_CONFIG_BOARD_N16R8)
+#include "user_config_n16r8.h"
+#else
+#error "No board user config selected. Define USER_CONFIG_BOARD_N8R2 or USER_CONFIG_BOARD_N16R8 in platformio.ini build_flags."
+#endif
