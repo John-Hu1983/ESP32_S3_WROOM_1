@@ -1,0 +1,7 @@
+# Name,   Type, SubType, Offset,  Size,  Flags
+# 16MB flash profile for esp32-s3-wroom-1-n16r8 (single app, no OTA)
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xF000,  0x1000,
+factory,  app,  factory, 0x10000, 7M,
+coredump, data, coredump,,        128K,
+storage,  data, spiffs,  ,        8M,
