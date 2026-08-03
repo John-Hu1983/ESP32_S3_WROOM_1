@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <string.h>
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -14,6 +15,7 @@
 #include "lvgl.h"
 
 #include "peripherals/st7365p.h"
+#include "../apps/oscilloscope_app.h"
 
 #define LVGL_TICK_PERIOD_MS 2U
 #define LVGL_TASK_PERIOD_MS 5U

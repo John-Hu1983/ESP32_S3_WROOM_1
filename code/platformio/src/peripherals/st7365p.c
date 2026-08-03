@@ -562,6 +562,7 @@ esp_err_t st7365p_lvgl_flush(int32_t x1, int32_t y1, int32_t x2, int32_t y2, con
     int32_t copy_h;
     int32_t start_src_x;
     int32_t start_src_y;
+    size_t bytes_per_row;
     const uint8_t *src = (const uint8_t *)color_map;
     esp_err_t ret;
     int32_t row;
@@ -591,6 +592,7 @@ esp_err_t st7365p_lvgl_flush(int32_t x1, int32_t y1, int32_t x2, int32_t y2, con
     copy_h = (clip_y2 - clip_y1 + 1);
     start_src_x = (clip_x1 - x1);
     start_src_y = (clip_y1 - y1);
+    bytes_per_row = (size_t)copy_w * ST7365P_BYTES_PER_PIXEL;
 
     ret = st7365p_set_window((uint16_t)clip_x1, (uint16_t)clip_y1, (uint16_t)clip_x2, (uint16_t)clip_y2);
     if (ret != ESP_OK)
@@ -602,7 +604,7 @@ esp_err_t st7365p_lvgl_flush(int32_t x1, int32_t y1, int32_t x2, int32_t y2, con
     {
         const uint8_t *row_ptr = src +
                                  (size_t)(((start_src_y + row) * src_w + start_src_x) * ST7365P_BYTES_PER_PIXEL);
-        ret = st7365p_write_data(row_ptr, (size_t)(copy_w * ST7365P_BYTES_PER_PIXEL));
+        ret = st7365p_write_data(row_ptr, bytes_per_row);
         if (ret != ESP_OK)
         {
             return ret;
