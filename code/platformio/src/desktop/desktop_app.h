@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
@@ -14,10 +15,22 @@
 
 #include "lvgl.h"
 
+#include "../apps/alerts_app.h"
+#include "../apps/app_home_nav.h"
 #include "../apps/app_status_bar.h"
 #include "../apps/apps_idle_task.h"
+#include "../apps/battery_app.h"
+#include "../apps/bt_app.h"
+#include "../apps/camera_app.h"
+#include "../apps/gallery_app.h"
+#include "../apps/music_app.h"
 #include "peripherals/st7365p.h"
 #include "../apps/oscilloscope_app.h"
+#include "../apps/power_app.h"
+#include "../apps/sd_app.h"
+#include "../apps/setting_app.h"
+#include "../apps/tools_app.h"
+#include "../apps/wifi_app.h"
 
 #define LVGL_TICK_PERIOD_MS 2U
 #define LVGL_TASK_PERIOD_MS 5U
@@ -54,11 +67,36 @@
 #define DESKTOP_FONT_TEXT LV_FONT_DEFAULT
 #endif
 
+typedef lv_obj_t *(*desktop_app_create_screen_cb_t)(lv_coord_t lcd_w, lv_coord_t lcd_h);
+typedef void (*desktop_app_release_cb_t)(void);
+
 typedef struct
 {
     const char *symbol;
     const char *name;
     lv_color_t color;
+    desktop_app_create_screen_cb_t create_screen_cb;
+    desktop_app_release_cb_t release_cb;
 } desktop_icon_s;
+
+typedef struct
+{
+    lv_obj_t *icon_btns[DESKTOP_ICON_COUNT];
+    lv_obj_t *icon_symbols[DESKTOP_ICON_COUNT];
+    lv_obj_t *icon_names[DESKTOP_ICON_COUNT];
+    lv_obj_t *desktop_screen;
+    lv_obj_t *active_app_screen;
+    uint32_t icon_selected_idx;
+    uint32_t active_app_idx;
+    uint32_t pending_app_idx;
+    uint8_t app_switching;
+} desktop_app_select_s;
+
 /* Initialize ST7365 panel, start LVGL task, and create desktop UI. */
 esp_err_t desktop_app_start(void);
+/* Destroy desktop main screen and enter child app by icon index. */
+esp_err_t desktop_app_open_by_index(uint32_t idx);
+/* Destroy desktop main screen and enter child app by icon name. */
+esp_err_t desktop_app_open_by_name(const char *name);
+/* Destroy current child app screen and return to desktop main screen. */
+void desktop_app_return_to_home(void);

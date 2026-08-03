@@ -1,21 +1,20 @@
 #include "desktop_app.h"
 
 #define TAG "DESKTOP"
-#define DESKTOP_APP_SCOPE_NAME "Scope"
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
-    {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF)},
-    {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xEB, 0x4D, 0x8A)},
-    {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x6D, 0x5D, 0xF6)},
-    {LV_SYMBOL_VIDEO, "Scope", LV_COLOR_MAKE(0x00, 0xA1, 0xD6)},
-    {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0x22, 0xB0, 0x7D)},
-    {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0x1E, 0x90, 0xFF)},
-    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xFF, 0x8A, 0x00)},
-    {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x5D, 0x66, 0x7A)},
-    {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xD2, 0x4D, 0x57)},
-    {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x7A, 0x4D, 0xD8)},
-    {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0x00, 0xA8, 0x78)},
-    {LV_SYMBOL_POWER, "Power", LV_COLOR_MAKE(0x1F, 0x29, 0x37)},
+    {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF), camera_app_create_screen, camera_app_release_resources},
+    {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xEB, 0x4D, 0x8A), gallery_app_create_screen, gallery_app_release_resources},
+    {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x6D, 0x5D, 0xF6), music_app_create_screen, music_app_release_resources},
+    {LV_SYMBOL_VIDEO, "Scope", LV_COLOR_MAKE(0x00, 0xA1, 0xD6), scope_app_create_screen, scope_app_release_resources},
+    {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0x22, 0xB0, 0x7D), wifi_app_create_screen, wifi_app_release_resources},
+    {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0x1E, 0x90, 0xFF), bt_app_create_screen, bt_app_release_resources},
+    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xFF, 0x8A, 0x00), sd_app_create_screen, sd_app_release_resources},
+    {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x5D, 0x66, 0x7A), battery_app_create_screen, battery_app_release_resources},
+    {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xD2, 0x4D, 0x57), alerts_app_create_screen, alerts_app_release_resources},
+    {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x7A, 0x4D, 0xD8), tools_app_create_screen, tools_app_release_resources},
+    {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0x00, 0xA8, 0x78), setting_app_create_screen, setting_app_release_resources},
+    {LV_SYMBOL_POWER, "Power", LV_COLOR_MAKE(0x1F, 0x29, 0x37), power_app_create_screen, power_app_release_resources},
 };
 
 static lv_disp_draw_buf_t s_lv_draw_buf;
@@ -24,17 +23,22 @@ static lv_color_t *s_lv_buf_1 = NULL;
 static esp_timer_handle_t s_lv_tick_timer = NULL;
 static uint16_t s_lcd_width = 0;
 static uint16_t s_lcd_height = 0;
-static lv_obj_t *s_icon_btns[DESKTOP_ICON_COUNT] = {0};
-static lv_obj_t *s_icon_symbols[DESKTOP_ICON_COUNT] = {0};
-static lv_obj_t *s_icon_names[DESKTOP_ICON_COUNT] = {0};
-static lv_obj_t *s_desktop_screen = NULL;
-static uint32_t s_icon_selected_idx = DESKTOP_ICON_COUNT;
-static uint32_t s_pending_app_idx = DESKTOP_ICON_COUNT;
-static uint8_t s_app_switching = 0U;
+static desktop_app_select_s s_app_select = {
+    .desktop_screen = NULL,
+    .active_app_screen = NULL,
+    .icon_selected_idx = DESKTOP_ICON_COUNT,
+    .active_app_idx = DESKTOP_ICON_COUNT,
+    .pending_app_idx = DESKTOP_ICON_COUNT,
+    .app_switching = 0U,
+};
 
-static void desktop_open_scope_async(void *user_data);
-static lv_obj_t *desktop_create_placeholder_screen(const char *app_name);
-static void desktop_request_open_app(uint32_t idx);
+static void desktop_open_app_async(void *user_data);
+static void desktop_return_home_async(void *user_data);
+static esp_err_t desktop_request_open_app(uint32_t idx);
+static esp_err_t desktop_request_return_home(void);
+static void desktop_release_active_app_resources(void);
+static void desktop_reset_icon_refs(void);
+static void desktop_create_ui(void);
 
 static void desktop_set_icon_checked(uint32_t idx, uint8_t checked)
 {
@@ -47,14 +51,14 @@ static void desktop_set_icon_checked(uint32_t idx, uint8_t checked)
         return;
     }
 
-    btn = s_icon_btns[idx];
+    btn = s_app_select.icon_btns[idx];
     if (btn == NULL)
     {
         return;
     }
 
-    symbol = s_icon_symbols[idx];
-    name = s_icon_names[idx];
+    symbol = s_app_select.icon_symbols[idx];
+    name = s_app_select.icon_names[idx];
 
     if (checked != 0U)
     {
@@ -108,7 +112,7 @@ static void desktop_select_icon(uint32_t idx)
         return;
     }
 
-    prev_idx = s_icon_selected_idx;
+    prev_idx = s_app_select.icon_selected_idx;
     if (prev_idx == idx)
     {
         return;
@@ -120,7 +124,7 @@ static void desktop_select_icon(uint32_t idx)
     }
 
     desktop_set_icon_checked(idx, 1U);
-    s_icon_selected_idx = idx;
+    s_app_select.icon_selected_idx = idx;
 }
 
 static uint32_t desktop_find_icon_index(const desktop_icon_s *icon)
@@ -136,21 +140,6 @@ static uint32_t desktop_find_icon_index(const desktop_icon_s *icon)
     }
 
     return DESKTOP_ICON_COUNT;
-}
-
-static uint32_t desktop_find_scope_icon_index(void)
-{
-    uint32_t i;
-
-    for (i = 0; i < DESKTOP_ICON_COUNT; i++)
-    {
-        if (strcmp(s_desktop_icons[i].name, DESKTOP_APP_SCOPE_NAME) == 0)
-        {
-            return i;
-        }
-    }
-
-    return 0U;
 }
 
 static void lvgl_tick_cb(void *arg)
@@ -185,118 +174,173 @@ static void desktop_icon_click_cb(lv_event_t *e)
     if (idx < DESKTOP_ICON_COUNT)
     {
         desktop_select_icon(idx);
-        desktop_request_open_app(idx);
+        (void)desktop_request_open_app(idx);
     }
 
     ESP_LOGI(TAG, "%s opened", icon->name);
 }
 
-static void desktop_request_open_app(uint32_t idx)
+static void desktop_release_active_app_resources(void)
 {
-    if (idx >= DESKTOP_ICON_COUNT)
+    uint32_t app_idx;
+
+    app_idx = s_app_select.active_app_idx;
+    if (app_idx >= DESKTOP_ICON_COUNT)
     {
         return;
     }
 
-    if (s_app_switching != 0U)
+    if (s_desktop_icons[app_idx].release_cb != NULL)
     {
-        return;
-    }
-
-    s_pending_app_idx = idx;
-    s_app_switching = 1U;
-    if (lv_async_call(desktop_open_scope_async, NULL) != LV_RES_OK)
-    {
-        s_pending_app_idx = DESKTOP_ICON_COUNT;
-        s_app_switching = 0U;
-        ESP_LOGE(TAG, "lv_async_call desktop_open_scope_async failed");
+        s_desktop_icons[app_idx].release_cb();
     }
 }
 
-static void desktop_open_scope_async(void *user_data)
+static esp_err_t desktop_request_open_app(uint32_t idx)
 {
-    lv_obj_t *scope_screen;
-    const char *app_name = NULL;
+    if (idx >= DESKTOP_ICON_COUNT)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (s_app_select.app_switching != 0U)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    s_app_select.pending_app_idx = idx;
+    s_app_select.app_switching = 1U;
+    if (lv_async_call(desktop_open_app_async, NULL) != LV_RES_OK)
+    {
+        s_app_select.pending_app_idx = DESKTOP_ICON_COUNT;
+        s_app_select.app_switching = 0U;
+        ESP_LOGE(TAG, "lv_async_call desktop_open_app_async failed");
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t desktop_request_return_home(void)
+{
+    if (s_app_select.app_switching != 0U)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if ((s_app_select.active_app_screen == NULL) ||
+        (s_app_select.active_app_idx >= DESKTOP_ICON_COUNT))
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    s_app_select.app_switching = 1U;
+    if (lv_async_call(desktop_return_home_async, NULL) != LV_RES_OK)
+    {
+        s_app_select.app_switching = 0U;
+        ESP_LOGE(TAG, "lv_async_call desktop_return_home_async failed");
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+static void desktop_open_app_async(void *user_data)
+{
+    lv_obj_t *app_screen;
+    lv_obj_t *old_app_screen;
+    const char *app_name;
     uint32_t app_idx;
-    uint32_t i;
 
     (void)user_data;
 
-    app_idx = s_pending_app_idx;
-    s_pending_app_idx = DESKTOP_ICON_COUNT;
+    app_idx = s_app_select.pending_app_idx;
+    s_app_select.pending_app_idx = DESKTOP_ICON_COUNT;
     if (app_idx >= DESKTOP_ICON_COUNT)
     {
-        s_app_switching = 0U;
+        s_app_select.app_switching = 0U;
         return;
     }
 
     app_name = s_desktop_icons[app_idx].name;
-    if (strcmp(app_name, DESKTOP_APP_SCOPE_NAME) == 0)
+    if (s_desktop_icons[app_idx].create_screen_cb == NULL)
     {
-        scope_screen = scope_app_create_screen((lv_coord_t)s_lcd_width, (lv_coord_t)s_lcd_height);
-    }
-    else
-    {
-        scope_screen = desktop_create_placeholder_screen(app_name);
-    }
-
-    if (scope_screen == NULL)
-    {
-        ESP_LOGE(TAG, "create app screen failed for %s", app_name);
-        s_app_switching = 0U;
+        ESP_LOGE(TAG, "create callback missing for %s", app_name);
+        s_app_select.app_switching = 0U;
         return;
     }
 
-    lv_scr_load(scope_screen);
-
-    if ((s_desktop_screen != NULL) && lv_obj_is_valid(s_desktop_screen))
+    old_app_screen = s_app_select.active_app_screen;
+    if ((old_app_screen != NULL) && lv_obj_is_valid(old_app_screen))
     {
-        lv_obj_del_async(s_desktop_screen);
+        desktop_release_active_app_resources();
+        lv_obj_del_async(old_app_screen);
+    }
+    s_app_select.active_app_screen = NULL;
+    s_app_select.active_app_idx = DESKTOP_ICON_COUNT;
+
+    app_screen = s_desktop_icons[app_idx].create_screen_cb((lv_coord_t)s_lcd_width,
+                                                           (lv_coord_t)s_lcd_height);
+    if (app_screen == NULL)
+    {
+        ESP_LOGE(TAG, "create app screen failed for %s", app_name);
+
+        if ((s_app_select.desktop_screen == NULL) || !lv_obj_is_valid(s_app_select.desktop_screen))
+        {
+            desktop_create_ui();
+        }
+
+        s_app_select.app_switching = 0U;
+        return;
     }
 
-    s_desktop_screen = NULL;
-    s_icon_selected_idx = DESKTOP_ICON_COUNT;
-    for (i = 0; i < DESKTOP_ICON_COUNT; i++)
+    lv_scr_load(app_screen);
+
+    s_app_select.active_app_screen = app_screen;
+    s_app_select.active_app_idx = app_idx;
+
+    if ((s_app_select.desktop_screen != NULL) && lv_obj_is_valid(s_app_select.desktop_screen))
     {
-        s_icon_btns[i] = NULL;
-        s_icon_symbols[i] = NULL;
-        s_icon_names[i] = NULL;
+        lv_obj_del_async(s_app_select.desktop_screen);
     }
 
-    s_app_switching = 0U;
+    s_app_select.desktop_screen = NULL;
+    desktop_reset_icon_refs();
+    s_app_select.app_switching = 0U;
 }
 
-static lv_obj_t *desktop_create_placeholder_screen(const char *app_name)
+static void desktop_return_home_async(void *user_data)
 {
-    lv_obj_t *scr;
-    lv_obj_t *title;
-    lv_obj_t *tip;
-    lv_coord_t content_top;
-    lv_coord_t content_bottom;
+    lv_obj_t *app_screen;
 
-    if (app_name == NULL)
+    (void)user_data;
+
+    app_screen = s_app_select.active_app_screen;
+    desktop_release_active_app_resources();
+
+    if ((app_screen != NULL) && lv_obj_is_valid(app_screen))
     {
-        app_name = "App";
+        lv_obj_del_async(app_screen);
     }
 
-    scr = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    s_app_select.active_app_screen = NULL;
+    s_app_select.active_app_idx = DESKTOP_ICON_COUNT;
 
-    content_top = app_status_bar_content_top();
-    content_bottom = app_status_bar_content_bottom();
+    desktop_create_ui();
+    s_app_select.app_switching = 0U;
+}
 
-    title = lv_label_create(scr);
-    lv_label_set_text_fmt(title, "%s", app_name);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, content_top + 6);
+static void desktop_reset_icon_refs(void)
+{
+    uint32_t i;
 
-    tip = lv_label_create(scr);
-    lv_label_set_text_fmt(tip, "%s app", app_name);
-    lv_obj_set_style_text_color(tip, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_align(tip, LV_ALIGN_CENTER, 0, (content_top - ((lv_coord_t)s_lcd_height - content_bottom)) / 2);
-
-    return scr;
+    s_app_select.icon_selected_idx = DESKTOP_ICON_COUNT;
+    for (i = 0; i < DESKTOP_ICON_COUNT; i++)
+    {
+        s_app_select.icon_btns[i] = NULL;
+        s_app_select.icon_symbols[i] = NULL;
+        s_app_select.icon_names[i] = NULL;
+    }
 }
 
 static void desktop_create_ui(void)
@@ -309,14 +353,17 @@ static void desktop_create_ui(void)
     lv_coord_t grid_h;
     lv_coord_t i;
 
-    if ((s_desktop_screen != NULL) && lv_obj_is_valid(s_desktop_screen))
+    if ((s_app_select.desktop_screen != NULL) && lv_obj_is_valid(s_app_select.desktop_screen))
     {
-        lv_obj_del(s_desktop_screen);
-        s_desktop_screen = NULL;
+        lv_obj_del(s_app_select.desktop_screen);
+        s_app_select.desktop_screen = NULL;
     }
 
+    s_app_select.active_app_screen = NULL;
+    s_app_select.active_app_idx = DESKTOP_ICON_COUNT;
+
     scr = lv_obj_create(NULL);
-    s_desktop_screen = scr;
+    s_app_select.desktop_screen = scr;
 
     grid_y = app_status_bar_content_top() + DESKTOP_GRID_TOP_GAP;
     grid_h = app_status_bar_content_bottom() - grid_y - DESKTOP_GRID_BOTTOM_GAP;
@@ -341,19 +388,16 @@ static void desktop_create_ui(void)
 
     for (i = 0; i < DESKTOP_ICON_COUNT; i++)
     {
-        s_icon_btns[i] = NULL;
-        s_icon_symbols[i] = NULL;
-        s_icon_names[i] = NULL;
-    }
-
-    for (i = 0; i < DESKTOP_ICON_COUNT; i++)
-    {
         lv_obj_t *btn;
         lv_obj_t *symbol;
         lv_obj_t *name;
         lv_color_t selected_color;
         lv_coord_t row = i / DESKTOP_ICON_COLS;
         lv_coord_t col = i % DESKTOP_ICON_COLS;
+
+        s_app_select.icon_btns[i] = NULL;
+        s_app_select.icon_symbols[i] = NULL;
+        s_app_select.icon_names[i] = NULL;
 
         btn = lv_btn_create(grid);
         lv_obj_remove_style_all(btn);
@@ -385,7 +429,7 @@ static void desktop_create_ui(void)
         lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(btn, 6, LV_PART_MAIN);
         lv_obj_add_event_cb(btn, desktop_icon_click_cb, LV_EVENT_CLICKED, (void *)&s_desktop_icons[i]);
-        s_icon_btns[i] = btn;
+        s_app_select.icon_btns[i] = btn;
 
         symbol = lv_label_create(btn);
         lv_label_set_text(symbol, s_desktop_icons[i].symbol);
@@ -393,7 +437,7 @@ static void desktop_create_ui(void)
         lv_obj_set_style_text_color(symbol, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_text_font(symbol, DESKTOP_FONT_ICON, 0);
         lv_obj_align(symbol, LV_ALIGN_TOP_MID, 0, 4);
-        s_icon_symbols[i] = symbol;
+        s_app_select.icon_symbols[i] = symbol;
 
         name = lv_label_create(btn);
         lv_label_set_text(name, s_desktop_icons[i].name);
@@ -402,12 +446,10 @@ static void desktop_create_ui(void)
         lv_obj_set_style_text_font(name, DESKTOP_FONT_ICON_NAME, 0);
         lv_obj_set_style_text_letter_space(name, 1, 0);
         lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -6);
-        s_icon_names[i] = name;
+        s_app_select.icon_names[i] = name;
     }
-
-    s_icon_selected_idx = DESKTOP_ICON_COUNT;
-    s_app_switching = 0U;
-    desktop_select_icon(desktop_find_scope_icon_index());
+    desktop_reset_icon_refs();
+    s_app_select.app_switching = 0U;
     lv_scr_load(scr);
 }
 
@@ -489,7 +531,7 @@ static void desktop_lvgl_task(void *param)
             start_time += wait_ms;
             if (start_time >= 3000)
             {
-                desktop_request_open_app(desktop_find_scope_icon_index());
+                (void)desktop_app_open_by_name("Scope");
                 scope_flag = 1;
             }
         }
@@ -525,6 +567,36 @@ static esp_err_t desktop_prepare_monitor(void)
     return ESP_OK;
 }
 
+esp_err_t desktop_app_open_by_index(uint32_t idx)
+{
+    return desktop_request_open_app(idx);
+}
+
+esp_err_t desktop_app_open_by_name(const char *name)
+{
+    uint32_t i;
+
+    if (name == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for (i = 0; i < DESKTOP_ICON_COUNT; i++)
+    {
+        if (strcmp(s_desktop_icons[i].name, name) == 0)
+        {
+            return desktop_request_open_app(i);
+        }
+    }
+
+    return ESP_ERR_NOT_FOUND;
+}
+
+void desktop_app_return_to_home(void)
+{
+    (void)desktop_request_return_home();
+}
+
 esp_err_t desktop_app_start(void)
 {
     esp_err_t ret;
@@ -557,6 +629,8 @@ esp_err_t desktop_app_start(void)
         ESP_LOGE(TAG, "apps_idle_task_start failed: %d", (int)ret);
         return ret;
     }
+
+    app_home_nav_set_callback(desktop_app_return_to_home);
 
     desktop_create_ui();
 

@@ -30,5 +30,7 @@ typedef struct
 	int8_t rssi_dbm;
 } network_status_t;
 
+/* Start idle hooks and the 1000ms status sampling task. */
 esp_err_t apps_idle_task_start(void);
+/* Update network state used by status-bar snapshots and immediate display. */
 void apps_idle_task_set_network_state(bool connected, int8_t rssi_dbm);

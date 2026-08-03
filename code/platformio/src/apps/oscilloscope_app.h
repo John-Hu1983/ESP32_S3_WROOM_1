@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 
+#include "app_home_nav.h"
 #include "app_status_bar.h"
 #include "lvgl.h"
 
@@ -10,6 +11,7 @@
 
 typedef struct
 {
+	lv_obj_t *screen;
 	lv_obj_t *chart;
 	lv_chart_series_t *series;
 	lv_timer_t *timer;
@@ -18,3 +20,5 @@ typedef struct
 } scope_app_ctx_t;
 
 lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
+void scope_app_release_resources(void);
+void scope_app_destroy_and_return(void);

@@ -14,6 +14,11 @@ static network_status_t s_network = {
     .rssi_dbm = 0,
 };
 
+/*
+ * brief: Idle hook callback on CPU0; counts how often CPU0 reaches idle state.
+ * input: none.
+ * output: true, so callback runs once per idle cycle.
+ */
 static bool apps_idle_hook_cpu0(void)
 {
     s_idle_hits[0]++;
@@ -21,6 +26,11 @@ static bool apps_idle_hook_cpu0(void)
 }
 
 #if (APPS_IDLE_CORE_COUNT > 1)
+/*
+ * brief: Idle hook callback on CPU1; counts how often CPU1 reaches idle state.
+ * input: none.
+ * output: true, so callback runs once per idle cycle.
+ */
 static bool apps_idle_hook_cpu1(void)
 {
     s_idle_hits[1]++;
@@ -28,6 +38,11 @@ static bool apps_idle_hook_cpu1(void)
 }
 #endif
 
+/*
+ * brief: Convert total/free bytes into a usage percent value.
+ * input: total - total memory bytes; free - currently free bytes.
+ * output: usage percent in range 0..100.
+ */
 static uint8_t apps_idle_calc_usage_percent(size_t total, size_t free)
 {
     size_t used;
@@ -46,6 +61,11 @@ static uint8_t apps_idle_calc_usage_percent(size_t total, size_t free)
     return (uint8_t)((used * 100U) / total);
 }
 
+/*
+ * brief: Estimate CPU usage from idle-hook hit deltas across all cores.
+ * input: none.
+ * output: estimated CPU usage percent in range 0..100.
+ */
 static uint8_t apps_idle_calc_cpu_usage_percent(void)
 {
     uint64_t idle_delta_sum = 0;
@@ -93,6 +113,11 @@ static uint8_t apps_idle_calc_cpu_usage_percent(void)
     }
 }
 
+/*
+ * brief: Format current wall time as HH:MM, with uptime fallback if RTC time is unavailable.
+ * input: out_time - output buffer with size 6 bytes.
+ * output: none.
+ */
 static void apps_idle_fill_time_hhmm(char out_time[6])
 {
     time_t now = time(NULL);
@@ -112,6 +137,11 @@ static void apps_idle_fill_time_hhmm(char out_time[6])
     }
 }
 
+/*
+ * brief: Periodic worker that samples runtime stats and pushes snapshots to status bar.
+ * input: param - unused task argument.
+ * output: none.
+ */
 static void apps_idle_task(void *param)
 {
     (void)param;
@@ -146,6 +176,11 @@ static void apps_idle_task(void *param)
     }
 }
 
+/*
+ * brief: Register idle hooks and start the periodic runtime-stats task once.
+ * input: none.
+ * output: ESP_OK on success, otherwise ESP-IDF error code.
+ */
 esp_err_t apps_idle_task_start(void)
 {
     BaseType_t task_ok;
@@ -188,6 +223,11 @@ esp_err_t apps_idle_task_start(void)
     return ESP_OK;
 }
 
+/*
+ * brief: Update network status source used by periodic snapshot reporting.
+ * input: connected - link state; rssi_dbm - signal strength in dBm.
+ * output: none.
+ */
 void apps_idle_task_set_network_state(bool connected, int8_t rssi_dbm)
 {
     s_network.connected = connected;
