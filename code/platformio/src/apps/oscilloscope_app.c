@@ -1,27 +1,14 @@
-#include "../apps/oscilloscope_app.h"
+#include "oscilloscope_app.h"
 
-#include <math.h>
-
-#define SCOPE_BAR_HEIGHT 24
 #define SCOPE_MARGIN_X 12
 #define SCOPE_TOP_GAP 8
 #define SCOPE_BOTTOM_GAP 8
 
-#define SCOPE_POINT_COUNT 96U
 #define SCOPE_UPDATE_PERIOD_MS 40U
 #define SCOPE_AMPLITUDE 80.0f
 #define SCOPE_WAVE_FREQ_RAD 0.18f
 #define SCOPE_PHASE_STEP_RAD 0.30f
 #define SCOPE_TWO_PI 6.2831853f
-
-typedef struct
-{
-    lv_obj_t *chart;
-    lv_chart_series_t *series;
-    lv_timer_t *timer;
-    float phase;
-    int16_t points[SCOPE_POINT_COUNT];
-} scope_app_ctx_t;
 
 static void scope_app_fill_points(scope_app_ctx_t *ctx)
 {
@@ -95,17 +82,16 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 {
     scope_app_ctx_t *ctx;
     lv_obj_t *scr;
-    lv_obj_t *top_bar;
-    lv_obj_t *bottom_bar;
     lv_obj_t *title;
     lv_obj_t *chart;
     lv_coord_t content_y;
     lv_coord_t content_h;
+    lv_coord_t content_bottom;
     lv_coord_t wave_w;
     lv_coord_t wave_h;
     lv_coord_t wave_y;
 
-    if ((lcd_w <= (2 * SCOPE_MARGIN_X)) || (lcd_h <= (2 * SCOPE_BAR_HEIGHT + 20)))
+    if ((lcd_w <= (2 * SCOPE_MARGIN_X)) || (lcd_h <= (2 * APP_STATUS_BAR_HEIGHT + 20)))
     {
         return NULL;
     }
@@ -127,31 +113,14 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    top_bar = lv_obj_create(scr);
-    lv_obj_set_size(top_bar, lcd_w, SCOPE_BAR_HEIGHT);
-    lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1D4ED8), 0);
-    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(top_bar, 0, 0);
-    lv_obj_set_style_radius(top_bar, 0, 0);
-    lv_obj_set_style_pad_all(top_bar, 0, 0);
-
-    title = lv_label_create(top_bar);
+    title = lv_label_create(scr);
     lv_label_set_text(title, "Scope");
     lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_LEFT_MID, 8, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, app_status_bar_content_top() + 6);
 
-    bottom_bar = lv_obj_create(scr);
-    lv_obj_set_size(bottom_bar, lcd_w, SCOPE_BAR_HEIGHT);
-    lv_obj_align(bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(bottom_bar, lv_color_hex(0x1D4ED8), 0);
-    lv_obj_set_style_bg_opa(bottom_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(bottom_bar, 0, 0);
-    lv_obj_set_style_radius(bottom_bar, 0, 0);
-    lv_obj_set_style_pad_all(bottom_bar, 0, 0);
-
-    content_y = SCOPE_BAR_HEIGHT + SCOPE_TOP_GAP;
-    content_h = lcd_h - content_y - SCOPE_BAR_HEIGHT - SCOPE_BOTTOM_GAP;
+    content_y = app_status_bar_content_top() + SCOPE_TOP_GAP;
+    content_bottom = app_status_bar_content_bottom() - SCOPE_BOTTOM_GAP;
+    content_h = content_bottom - content_y;
     if (content_h < 90)
     {
         content_h = 90;

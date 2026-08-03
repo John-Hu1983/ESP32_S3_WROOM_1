@@ -1,6 +1,18 @@
 #pragma once
 
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
 #include "driver/spi_master.h"
+
+#include "esp_err.h"
+#include "esp_heap_caps.h"
+
+#include "freertos/FreeRTOS.h"
+
+#include "soc/soc_caps.h"
 
 #include "user_config.h"
 typedef struct

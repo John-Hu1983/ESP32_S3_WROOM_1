@@ -14,6 +14,8 @@
 
 #include "lvgl.h"
 
+#include "../apps/app_status_bar.h"
+#include "../apps/apps_idle_task.h"
 #include "peripherals/st7365p.h"
 #include "../apps/oscilloscope_app.h"
 

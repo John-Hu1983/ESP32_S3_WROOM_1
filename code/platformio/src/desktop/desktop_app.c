@@ -22,8 +22,6 @@ static lv_disp_draw_buf_t s_lv_draw_buf;
 static lv_disp_drv_t s_lv_disp_drv;
 static lv_color_t *s_lv_buf_1 = NULL;
 static esp_timer_handle_t s_lv_tick_timer = NULL;
-static lv_obj_t *s_clock_label = NULL;
-static lv_timer_t *s_clock_timer = NULL;
 static uint16_t s_lcd_width = 0;
 static uint16_t s_lcd_height = 0;
 static lv_obj_t *s_icon_btns[DESKTOP_ICON_COUNT] = {0};
@@ -249,14 +247,6 @@ static void desktop_open_scope_async(void *user_data)
         return;
     }
 
-    if (s_clock_timer != NULL)
-    {
-        lv_timer_del(s_clock_timer);
-        s_clock_timer = NULL;
-    }
-
-    s_clock_label = NULL;
-
     lv_scr_load(scope_screen);
 
     if ((s_desktop_screen != NULL) && lv_obj_is_valid(s_desktop_screen))
@@ -279,10 +269,10 @@ static void desktop_open_scope_async(void *user_data)
 static lv_obj_t *desktop_create_placeholder_screen(const char *app_name)
 {
     lv_obj_t *scr;
-    lv_obj_t *top_bar;
-    lv_obj_t *bottom_bar;
     lv_obj_t *title;
     lv_obj_t *tip;
+    lv_coord_t content_top;
+    lv_coord_t content_bottom;
 
     if (app_name == NULL)
     {
@@ -293,68 +283,20 @@ static lv_obj_t *desktop_create_placeholder_screen(const char *app_name)
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    top_bar = lv_obj_create(scr);
-    lv_obj_set_size(top_bar, (lv_coord_t)s_lcd_width, DESKTOP_BAR_HEIGHT);
-    lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1D4ED8), 0);
-    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(top_bar, 0, 0);
-    lv_obj_set_style_radius(top_bar, 0, 0);
-    lv_obj_set_style_pad_all(top_bar, 0, 0);
+    content_top = app_status_bar_content_top();
+    content_bottom = app_status_bar_content_bottom();
 
-    title = lv_label_create(top_bar);
+    title = lv_label_create(scr);
     lv_label_set_text_fmt(title, "%s", app_name);
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_LEFT_MID, 8, 0);
-
-    bottom_bar = lv_obj_create(scr);
-    lv_obj_set_size(bottom_bar, (lv_coord_t)s_lcd_width, DESKTOP_BAR_HEIGHT);
-    lv_obj_align(bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(bottom_bar, lv_color_hex(0x1D4ED8), 0);
-    lv_obj_set_style_bg_opa(bottom_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(bottom_bar, 0, 0);
-    lv_obj_set_style_radius(bottom_bar, 0, 0);
-    lv_obj_set_style_pad_all(bottom_bar, 0, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, content_top + 6);
 
     tip = lv_label_create(scr);
     lv_label_set_text_fmt(tip, "%s app", app_name);
     lv_obj_set_style_text_color(tip, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_align(tip, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(tip, LV_ALIGN_CENTER, 0, (content_top - ((lv_coord_t)s_lcd_height - content_bottom)) / 2);
 
     return scr;
-}
-
-static void desktop_update_clock_text(void)
-{
-    char clock_text[6];
-    time_t now = time(NULL);
-    struct tm local_tm;
-
-    if ((now > 0) && (localtime_r(&now, &local_tm) != NULL) && (local_tm.tm_year >= (2020 - 1900)))
-    {
-        (void)snprintf(clock_text, sizeof(clock_text), "%02d:%02d", local_tm.tm_hour, local_tm.tm_min);
-    }
-    else
-    {
-        uint64_t uptime_min = (uint64_t)(esp_timer_get_time() / 1000000ULL) / 60ULL;
-        uint32_t hour = (uint32_t)((uptime_min / 60ULL) % 24ULL);
-        uint32_t minute = (uint32_t)(uptime_min % 60ULL);
-        (void)snprintf(clock_text, sizeof(clock_text), "%02u:%02u", (unsigned)hour, (unsigned)minute);
-    }
-
-    lv_label_set_text(s_clock_label, clock_text);
-}
-
-static void desktop_clock_timer_cb(lv_timer_t *timer)
-{
-    (void)timer;
-
-    if (s_clock_label == NULL)
-    {
-        return;
-    }
-
-    desktop_update_clock_text();
 }
 
 static void desktop_create_ui(void)
@@ -362,9 +304,6 @@ static void desktop_create_ui(void)
     static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     lv_obj_t *scr;
-    lv_obj_t *top_bar;
-    lv_obj_t *bottom_bar;
-    lv_obj_t *net_symbol;
     lv_obj_t *grid;
     lv_coord_t grid_y;
     lv_coord_t grid_h;
@@ -379,8 +318,8 @@ static void desktop_create_ui(void)
     scr = lv_obj_create(NULL);
     s_desktop_screen = scr;
 
-    grid_y = DESKTOP_BAR_HEIGHT + DESKTOP_GRID_TOP_GAP;
-    grid_h = (lv_coord_t)s_lcd_height - grid_y - DESKTOP_BAR_HEIGHT - DESKTOP_GRID_BOTTOM_GAP;
+    grid_y = app_status_bar_content_top() + DESKTOP_GRID_TOP_GAP;
+    grid_h = app_status_bar_content_bottom() - grid_y - DESKTOP_GRID_BOTTOM_GAP;
     if (grid_h < 80)
     {
         grid_h = 80;
@@ -388,42 +327,6 @@ static void desktop_create_ui(void)
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-
-    top_bar = lv_obj_create(scr);
-    lv_obj_set_size(top_bar, (lv_coord_t)s_lcd_width, DESKTOP_BAR_HEIGHT);
-    lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(top_bar, lv_color_hex(0x1D4ED8), 0);
-    lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(top_bar, 0, 0);
-    lv_obj_set_style_radius(top_bar, 0, 0);
-    lv_obj_set_style_pad_all(top_bar, 0, 0);
-
-    net_symbol = lv_label_create(top_bar);
-    lv_label_set_text(net_symbol, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_color(net_symbol, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_set_style_text_font(net_symbol, DESKTOP_FONT_TEXT, 0);
-    lv_obj_align(net_symbol, LV_ALIGN_RIGHT_MID, -8, 0);
-
-    bottom_bar = lv_obj_create(scr);
-    lv_obj_set_size(bottom_bar, (lv_coord_t)s_lcd_width, DESKTOP_BAR_HEIGHT);
-    lv_obj_align(bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(bottom_bar, lv_color_hex(0x1D4ED8), 0);
-    lv_obj_set_style_bg_opa(bottom_bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(bottom_bar, 0, 0);
-    lv_obj_set_style_radius(bottom_bar, 0, 0);
-    lv_obj_set_style_pad_all(bottom_bar, 0, 0);
-
-    s_clock_label = lv_label_create(bottom_bar);
-    lv_obj_set_style_text_color(s_clock_label, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_set_style_text_font(s_clock_label, DESKTOP_FONT_TEXT, 0);
-    lv_obj_align(s_clock_label, LV_ALIGN_CENTER, 0, 0);
-    desktop_update_clock_text();
-
-    if (s_clock_timer != NULL)
-    {
-        lv_timer_del(s_clock_timer);
-    }
-    s_clock_timer = lv_timer_create(desktop_clock_timer_cb, 1000, NULL);
 
     grid = lv_obj_create(scr);
     lv_obj_set_size(grid, (lv_coord_t)s_lcd_width - (2 * DESKTOP_MARGIN_X), grid_h);
@@ -638,6 +541,20 @@ esp_err_t desktop_app_start(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "desktop_lvgl_init failed: %d", (int)ret);
+        return ret;
+    }
+
+    ret = app_status_bar_init((lv_coord_t)s_lcd_width, (lv_coord_t)s_lcd_height);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "app_status_bar_init failed: %d", (int)ret);
+        return ret;
+    }
+
+    ret = apps_idle_task_start();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "apps_idle_task_start failed: %d", (int)ret);
         return ret;
     }
 

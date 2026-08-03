@@ -1,11 +1,5 @@
 #include "usr_spi.h"
 
-#include <string.h>
-
-#include "esp_heap_caps.h"
-#include "freertos/FreeRTOS.h"
-#include "soc/soc_caps.h"
-
 #define USR_SPI_DEVICE_QUEUE_SIZE 6U
 
 /*
