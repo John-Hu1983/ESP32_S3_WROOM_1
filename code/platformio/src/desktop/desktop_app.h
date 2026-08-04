@@ -26,6 +26,7 @@
 #include "../apps/camera_app.h"
 #include "../apps/gallery_app.h"
 #include "../apps/music_app.h"
+#include "peripherals/ht517.h"
 #include "peripherals/st7365p.h"
 #include "../apps/oscilloscope_app.h"
 #include "../apps/power_app.h"

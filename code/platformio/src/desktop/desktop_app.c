@@ -2,6 +2,8 @@
 
 #define TAG "DESKTOP"
 
+#define DESKTOP_HT517_DONG_INTERVAL_MS 2000U
+
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF), camera_app_create_screen, camera_app_release_resources},
     {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xEB, 0x4D, 0x8A), gallery_app_create_screen, gallery_app_release_resources},
@@ -548,6 +550,7 @@ static void desktop_lvgl_task(void *param)
     // uint32_t start_time = 0;
     // uint8_t scope_flag = 0;
     bool btn_up, btn_down;
+    uint32_t dong_elapsed_ms = 0U;
     esp_err_t ret;
     (void)param;
 
@@ -555,6 +558,22 @@ static void desktop_lvgl_task(void *param)
     {
         lv_timer_handler();
         delay_ms(LVGL_TASK_PERIOD_MS);
+
+        // dong_elapsed_ms += LVGL_TASK_PERIOD_MS;
+        // if (dong_elapsed_ms >= DESKTOP_HT517_DONG_INTERVAL_MS)
+        // {
+        //     dong_elapsed_ms = 0U;
+        //     ret = ht517_play_success_prompt();
+        //     if (ret != ESP_OK)
+        //     {
+        //         ESP_LOGW(TAG, "ht517_play_success_prompt failed: %d, fallback to dong", (int)ret);
+        //         ret = ht517_play_dong();
+        //         if (ret != ESP_OK)
+        //         {
+        //             ESP_LOGE(TAG, "ht517_play_dong failed: %d", (int)ret);
+        //         }
+        //     }
+        // }
 
         ret = gpba02b_pin_read(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN, &btn_up);
         if (ret == ESP_OK && btn_up == 0)
@@ -595,6 +614,13 @@ esp_err_t desktop_app_start(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "desktop_lvgl_init failed: %d", (int)ret);
+        return ret;
+    }
+
+    ret = ht517_init_device();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "ht517_init_device failed: %d", (int)ret);
         return ret;
     }
 

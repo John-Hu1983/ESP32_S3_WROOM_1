@@ -65,35 +65,44 @@ void delay_ms(uint32_t ms)
  */
 esp_err_t bsp_init_whole(void)
 {
-    esp_err_t ret;
+    /*
+    extend & power lock
+    */
+    USER_RETURN_ON_ERROR(gpba02b_init_device(), TAG, "gpba02b_init_device failed");
+    USER_RETURN_ON_ERROR(bsp_power_on(), TAG, "bsp_power_on failed");
+
+    /*
+        resource usage info
+    */
     print_heap_info();
 
-    ret = gpba02b_init_device();
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "gpba02b_init_device failed: %d", (int)ret);
-        return ret;
-    }
+    /*
+    buttons
+    */
+    USER_RETURN_ON_ERROR(gpba02b_pin_set_mode(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN,
+                                              GPBA02B_PIN_MODE_INPUT_PULLUP),
+                         TAG, "gpba02b_pin_set_mode BUTTON_UP failed");
+    USER_RETURN_ON_ERROR(gpba02b_pin_set_mode(BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN,
+                                              GPBA02B_PIN_MODE_INPUT_PULLUP),
+                         TAG, "gpba02b_pin_set_mode BUTTON_DOWN failed");
 
-    ret = bsp_power_on();
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "bsp_power_on failed: %d", (int)ret);
-        return ret;
-    }
+    /*
+    pdm enable
+    */
+    USER_RETURN_ON_ERROR(gpba02b_pin_set_mode(PDM_EN_PORT, PDM_EN_PIN,
+                                              GPBA02B_PIN_MODE_OUTPUT),
+                         TAG, "gpba02b_pin_set_mode PDM_EN failed");
+    USER_RETURN_ON_ERROR(gpba02b_pin_write(PDM_EN_PORT, PDM_EN_PIN, true),
+                         TAG, "gpba02b_pin_write PDM_EN failed");
 
-    ret = gpba02b_pin_set_mode(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN, GPBA02B_PIN_MODE_INPUT_PULLUP);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "gpba02b_pin_set_mode BUTTON_UP failed: %d", (int)ret);
-        return ret;
-    }
-    ret = gpba02b_pin_set_mode(BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN, GPBA02B_PIN_MODE_INPUT_PULLUP);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "gpba02b_pin_set_mode BUTTON_DOWN failed: %d", (int)ret);
-        return ret;
-    }
+    /*
+    I2S enable
+    */
+    USER_RETURN_ON_ERROR(gpba02b_pin_set_mode(I2S_EN_PORT, I2S_EN_PIN,
+                                              GPBA02B_PIN_MODE_OUTPUT),
+                         TAG, "gpba02b_pin_set_mode I2S_EN failed");
+    USER_RETURN_ON_ERROR(gpba02b_pin_write(I2S_EN_PORT, I2S_EN_PIN, true),
+                         TAG, "gpba02b_pin_write I2S_EN failed");
 
     return ESP_OK;
 }
