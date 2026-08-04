@@ -15,6 +15,8 @@
 
 #include "lvgl.h"
 
+
+#include "bsp/bsp.h"
 #include "../apps/alerts_app.h"
 #include "../apps/app_home_nav.h"
 #include "../apps/app_status_bar.h"
@@ -32,8 +34,8 @@
 #include "../apps/tools_app.h"
 #include "../apps/wifi_app.h"
 
-#define LVGL_TICK_PERIOD_MS 2U
-#define LVGL_TASK_PERIOD_MS 5U
+#define LVGL_TICK_PERIOD_MS 10U
+#define LVGL_TASK_PERIOD_MS 10U
 #define LVGL_DRAW_BUF_LINES 40U
 
 #define DESKTOP_ICON_COLS 3U

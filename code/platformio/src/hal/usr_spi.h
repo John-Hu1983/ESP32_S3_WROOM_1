@@ -24,6 +24,15 @@ typedef struct
     int clock_speed_hz;
 } usr_spi_s;
 
+/* Initialize mutex for one SPI host shared by multiple peripherals. */
+esp_err_t spi_bus_mutex_init(spi_host_device_t host);
+/* Acquire SPI host mutex before performing one or more bus transactions. */
+esp_err_t spi_bus_acquire(spi_host_device_t host, TickType_t timeout_ticks);
+/* Release SPI host mutex after finishing bus transactions. */
+esp_err_t spi_bus_release(spi_host_device_t host);
+/* Return true when SPI host mutex is currently not owned by any task. */
+bool spi_bus_is_idle(spi_host_device_t host);
+
 /* Create one SPI device with bus pins, CS pin, and target clock speed. */
 esp_err_t spi_create_device(usr_spi_s *spi,
                             spi_host_device_t host,
@@ -34,6 +43,12 @@ esp_err_t spi_create_device(usr_spi_s *spi,
                             int speed_hz);
 /* Send a raw byte buffer over SPI using blocking transfer. */
 esp_err_t spi_write_nbyte(usr_spi_s *spi, const uint8_t *data, size_t len);
+/* Send TX bytes then receive RX bytes as one logical operation, keeping CS asserted between phases. */
+esp_err_t spi_write_read_nbyte(usr_spi_s *spi,
+                               const uint8_t *tx_data,
+                               size_t tx_len,
+                               uint8_t *rx_data,
+                               size_t rx_len);
 /* Send a large byte buffer over SPI using queued DMA chunks. */
 esp_err_t spi_write_nbyte_dma_queue(usr_spi_s *spi,
                                     const uint8_t *data,

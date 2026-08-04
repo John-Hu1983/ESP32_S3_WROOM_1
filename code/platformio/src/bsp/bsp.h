@@ -21,3 +21,4 @@ esp_err_t bsp_power_on(void);
 esp_err_t bsp_power_off(void);
 /* Initialize board-level peripherals and default power state. */
 esp_err_t bsp_init_whole(void);
+void delay_ms(uint32_t ms);

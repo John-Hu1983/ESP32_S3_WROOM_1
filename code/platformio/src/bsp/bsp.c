@@ -2,7 +2,11 @@
 
 #define TAG "BSP"
 
-/* Drive the external power lock pin high to turn system power on. */
+/*
+ * brief: Drive the external power lock pin high to turn system power on.
+ * input: None.
+ * output: ESP_OK (current implementation always returns success).
+ */
 esp_err_t bsp_power_on(void)
 {
     gpba02b_pin_set_mode(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, GPBA02B_PIN_MODE_OUTPUT);
@@ -10,7 +14,11 @@ esp_err_t bsp_power_on(void)
     return ESP_OK;
 }
 
-/* Drive the external power lock pin low to turn system power off. */
+/*
+ * brief: Drive the external power lock pin low to turn system power off.
+ * input: None.
+ * output: ESP_OK (current implementation always returns success).
+ */
 esp_err_t bsp_power_off(void)
 {
     gpba02b_pin_set_mode(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, GPBA02B_PIN_MODE_OUTPUT);
@@ -18,7 +26,11 @@ esp_err_t bsp_power_off(void)
     return ESP_OK;
 }
 
-/* Print current PSRAM chip and heap status when available. */
+/*
+ * brief: Print current PSRAM chip size and heap usage information when enabled.
+ * input: None.
+ * output: None.
+ */
 static void print_heap_info(void)
 {
 #if CONFIG_SPIRAM
@@ -35,7 +47,22 @@ static void print_heap_info(void)
 #endif
 }
 
-/* Initialize board services in the expected startup order. */
+/*
+ * brief: Delay execution for at least the requested millisecond duration.
+ * input: ms - delay time in milliseconds.
+ * output: None.
+ */
+void delay_ms(uint32_t ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(ms) < 1 ? 1 : pdMS_TO_TICKS(ms);
+    vTaskDelay(ticks);
+}
+
+/*
+ * brief: Initialize board services in startup order and enable default power.
+ * input: None.
+ * output: ESP_OK on success; otherwise propagated initialization error.
+ */
 esp_err_t bsp_init_whole(void)
 {
     esp_err_t ret;
@@ -52,6 +79,19 @@ esp_err_t bsp_init_whole(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "bsp_power_on failed: %d", (int)ret);
+        return ret;
+    }
+
+    ret = gpba02b_pin_set_mode(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN, GPBA02B_PIN_MODE_INPUT_PULLUP);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "gpba02b_pin_set_mode BUTTON_UP failed: %d", (int)ret);
+        return ret;
+    }
+    ret = gpba02b_pin_set_mode(BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN, GPBA02B_PIN_MODE_INPUT_PULLUP);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "gpba02b_pin_set_mode BUTTON_DOWN failed: %d", (int)ret);
         return ret;
     }
 

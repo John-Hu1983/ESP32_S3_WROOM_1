@@ -136,10 +136,26 @@ static esp_err_t gpba02b_get_pwm_duty_reg(gpba02b_port_t port, uint8_t channel, 
 static esp_err_t _write_reg_via_spi(uint8_t reg_addr, uint8_t value)
 {
     uint8_t frame[2];
+    esp_err_t ret;
+    esp_err_t unlock_ret;
 
     frame[0] = gpba02b_build_command(true, reg_addr);
     frame[1] = value;
-    return spi_write_nbyte(&s_gpba02_spi, frame, sizeof(frame));
+
+    ret = spi_bus_acquire(s_gpba02_spi.host, portMAX_DELAY);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    ret = spi_write_nbyte(&s_gpba02_spi, frame, sizeof(frame));
+    unlock_ret = spi_bus_release(s_gpba02_spi.host);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    return unlock_ret;
 }
 
 /*
@@ -151,20 +167,28 @@ static esp_err_t _read_reg_via_spi(uint8_t reg_addr, uint8_t *value)
 {
     uint8_t cmd;
     esp_err_t ret;
+    esp_err_t unlock_ret;
 
     if (value == NULL)
     {
         return ESP_ERR_INVALID_ARG;
     }
 
-    cmd = gpba02b_build_command(false, reg_addr);
-    ret = spi_write_nbyte(&s_gpba02_spi, &cmd, 1);
+    ret = spi_bus_acquire(s_gpba02_spi.host, portMAX_DELAY);
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    return spi_read_nbyte(&s_gpba02_spi, value, 1);
+    cmd = gpba02b_build_command(false, reg_addr);
+    ret = spi_write_read_nbyte(&s_gpba02_spi, &cmd, 1, value, 1);
+    unlock_ret = spi_bus_release(s_gpba02_spi.host);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    return unlock_ret;
 }
 
 /*

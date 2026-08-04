@@ -1,6 +1,17 @@
 #include "usr_spi.h"
 
+#include "freertos/semphr.h"
+
 #define USR_SPI_DEVICE_QUEUE_SIZE 6U
+
+struct spi_host_mutex_s
+{
+    SemaphoreHandle_t mutex;
+    StaticSemaphore_t storage;
+};
+
+static struct spi_host_mutex_s s_spi_host_mutexes[SOC_SPI_PERIPH_NUM];
+static portMUX_TYPE s_spi_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
 
 /*
  * brief: Check whether the given SPI host id is within valid SoC range.
@@ -10,6 +21,138 @@
 static bool spi_host_is_valid(spi_host_device_t host)
 {
     return ((int)host >= 0) && ((int)host < SOC_SPI_PERIPH_NUM);
+}
+
+/*
+ * brief: Lazily create or return one FreeRTOS mutex assigned to an SPI host.
+ * input: host - SPI host id.
+ * output: Valid mutex handle on success; otherwise NULL.
+ */
+static SemaphoreHandle_t spi_host_get_mutex(spi_host_device_t host)
+{
+    SemaphoreHandle_t mutex;
+
+    if (!spi_host_is_valid(host))
+    {
+        return NULL;
+    }
+
+    mutex = s_spi_host_mutexes[host].mutex;
+    if (mutex != NULL)
+    {
+        return mutex;
+    }
+
+    taskENTER_CRITICAL(&s_spi_mutex_init_lock);
+    mutex = s_spi_host_mutexes[host].mutex;
+    if (mutex == NULL)
+    {
+        mutex = xSemaphoreCreateMutexStatic(&s_spi_host_mutexes[host].storage);
+        s_spi_host_mutexes[host].mutex = mutex;
+    }
+    taskEXIT_CRITICAL(&s_spi_mutex_init_lock);
+
+    return mutex;
+}
+
+/*
+ * brief: Initialize mutex state for a shared SPI host.
+ * input: host - SPI host id.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG or ESP_ERR_NO_MEM.
+ */
+esp_err_t spi_bus_mutex_init(spi_host_device_t host)
+{
+    if (!spi_host_is_valid(host))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return (spi_host_get_mutex(host) != NULL) ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+/*
+ * brief: Acquire shared SPI host mutex with timeout.
+ * input: host - SPI host id; timeout_ticks - wait timeout in RTOS ticks.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/NO_MEM/TIMEOUT.
+ */
+esp_err_t spi_bus_acquire(spi_host_device_t host, TickType_t timeout_ticks)
+{
+    SemaphoreHandle_t mutex;
+
+    if (!spi_host_is_valid(host))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    mutex = spi_host_get_mutex(host);
+    if (mutex == NULL)
+    {
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (xSemaphoreTake(mutex, timeout_ticks) != pdTRUE)
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    return ESP_OK;
+}
+
+/*
+ * brief: Release shared SPI host mutex.
+ * input: host - SPI host id.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE.
+ */
+esp_err_t spi_bus_release(spi_host_device_t host)
+{
+    SemaphoreHandle_t mutex;
+
+    if (!spi_host_is_valid(host))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    mutex = s_spi_host_mutexes[host].mutex;
+    if (mutex == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xSemaphoreGive(mutex) != pdTRUE)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return ESP_OK;
+}
+
+/*
+ * brief: Check whether shared SPI host mutex is currently free.
+ * input: host - SPI host id.
+ * output: true when mutex can be acquired immediately; otherwise false.
+ */
+bool spi_bus_is_idle(spi_host_device_t host)
+{
+    SemaphoreHandle_t mutex;
+
+    if (!spi_host_is_valid(host))
+    {
+        return false;
+    }
+
+    mutex = s_spi_host_mutexes[host].mutex;
+    if (mutex == NULL)
+    {
+        return true;
+    }
+
+    if (xSemaphoreTake(mutex, 0) != pdTRUE)
+    {
+        return false;
+    }
+
+    (void)xSemaphoreGive(mutex);
+    return true;
 }
 
 /*
@@ -84,6 +227,11 @@ esp_err_t spi_create_device(usr_spi_s *spi,
         return ESP_ERR_INVALID_ARG;
     }
 
+    if (spi_bus_mutex_init(host) != ESP_OK)
+    {
+        return ESP_ERR_NO_MEM;
+    }
+
     memset(spi, 0, sizeof(*spi));
 
     spi->host = host;
@@ -119,6 +267,57 @@ esp_err_t spi_write_nbyte(usr_spi_s *spi, const uint8_t *data, size_t len)
     t.length = len * 8;
     t.tx_buffer = data;
     return spi_device_polling_transmit(spi->fd, &t);
+}
+
+/*
+ * brief: Write TX bytes then read RX bytes as one logical operation while keeping CS asserted.
+ * input: spi - device handle wrapper; tx_data/tx_len - transmit phase payload;
+ *        rx_data/rx_len - receive phase buffer and length.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or driver error.
+ */
+esp_err_t spi_write_read_nbyte(usr_spi_s *spi,
+                               const uint8_t *tx_data,
+                               size_t tx_len,
+                               uint8_t *rx_data,
+                               size_t rx_len)
+{
+    spi_transaction_t tx = {0};
+    spi_transaction_t rx = {0};
+    esp_err_t ret;
+
+    if ((spi == NULL) || (tx_data == NULL) || (tx_len == 0) || (rx_data == NULL) || (rx_len == 0))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (spi->fd == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ret = spi_device_acquire_bus(spi->fd, portMAX_DELAY);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    tx.length = tx_len * 8U;
+    tx.tx_buffer = tx_data;
+    tx.flags = SPI_TRANS_CS_KEEP_ACTIVE;
+    ret = spi_device_polling_transmit(spi->fd, &tx);
+    if (ret != ESP_OK)
+    {
+        (void)spi_device_release_bus(spi->fd);
+        return ret;
+    }
+
+    rx.length = 0;
+    rx.rxlength = rx_len * 8U;
+    rx.rx_buffer = rx_data;
+    ret = spi_device_polling_transmit(spi->fd, &rx);
+
+    spi_device_release_bus(spi->fd);
+    return ret;
 }
 
 /*
