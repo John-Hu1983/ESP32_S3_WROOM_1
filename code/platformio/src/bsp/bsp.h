@@ -12,8 +12,11 @@
 #include "freertos/task.h"
 
 #include "user_config.h"
+#include "filesystem/usr_fs.h"
 #include "hal/usr_spi.h"
 #include "peripherals/gpba02b.h"
+#include "peripherals/ht517.h"
+ 
 
 /* Enable board power output path (power lock high). */
 esp_err_t bsp_power_on(void);

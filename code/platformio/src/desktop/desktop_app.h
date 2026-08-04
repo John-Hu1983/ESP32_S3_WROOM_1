@@ -17,6 +17,7 @@
 
 
 #include "bsp/bsp.h"
+ 
 #include "../apps/alerts_app.h"
 #include "../apps/app_home_nav.h"
 #include "../apps/app_status_bar.h"

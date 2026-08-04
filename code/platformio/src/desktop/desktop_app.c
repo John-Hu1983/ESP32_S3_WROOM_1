@@ -1,8 +1,7 @@
 #include "desktop_app.h"
 
 #define TAG "DESKTOP"
-
-#define DESKTOP_HT517_DONG_INTERVAL_MS 2000U
+#define DESKTOP_COMMON_OGG_INTERVAL_MS 3000U
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF), camera_app_create_screen, camera_app_release_resources},
@@ -549,31 +548,42 @@ static void desktop_lvgl_task(void *param)
 
     // uint32_t start_time = 0;
     // uint8_t scope_flag = 0;
+    uint32_t common_ogg_elapsed_ms;
+    bool common_ogg_disabled;
     bool btn_up, btn_down;
-    uint32_t dong_elapsed_ms = 0U;
     esp_err_t ret;
     (void)param;
+
+    common_ogg_elapsed_ms = 0U;
+    common_ogg_disabled = false;
 
     while (1)
     {
         lv_timer_handler();
         delay_ms(LVGL_TASK_PERIOD_MS);
 
-        // dong_elapsed_ms += LVGL_TASK_PERIOD_MS;
-        // if (dong_elapsed_ms >= DESKTOP_HT517_DONG_INTERVAL_MS)
-        // {
-        //     dong_elapsed_ms = 0U;
-        //     ret = ht517_play_success_prompt();
-        //     if (ret != ESP_OK)
-        //     {
-        //         ESP_LOGW(TAG, "ht517_play_success_prompt failed: %d, fallback to dong", (int)ret);
-        //         ret = ht517_play_dong();
-        //         if (ret != ESP_OK)
-        //         {
-        //             ESP_LOGE(TAG, "ht517_play_dong failed: %d", (int)ret);
-        //         }
-        //     }
-        // }
+        if (!common_ogg_disabled)
+        {
+            common_ogg_elapsed_ms += LVGL_TASK_PERIOD_MS;
+            if (common_ogg_elapsed_ms >= DESKTOP_COMMON_OGG_INTERVAL_MS)
+            {
+                esp_err_t play_ret;
+
+                common_ogg_elapsed_ms = 0U;
+                play_ret = ht517_play_next_common_ogg();
+                if (play_ret == ESP_ERR_NOT_FOUND)
+                {
+                    common_ogg_disabled = true;
+                    ESP_LOGW(TAG, "no .ogg found under /storage/common, disable auto-play");
+                }
+                else if (play_ret != ESP_OK)
+                {
+                    ESP_LOGW(TAG,
+                             "ht517_play_next_common_ogg failed: %d",
+                             (int)play_ret);
+                }
+            }
+        }
 
         ret = gpba02b_pin_read(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN, &btn_up);
         if (ret == ESP_OK && btn_up == 0)
@@ -617,13 +627,6 @@ esp_err_t desktop_app_start(void)
         return ret;
     }
 
-    ret = ht517_init_device();
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "ht517_init_device failed: %d", (int)ret);
-        return ret;
-    }
-
     ret = app_status_bar_init((lv_coord_t)s_lcd_width, (lv_coord_t)s_lcd_height);
     if (ret != ESP_OK)
     {
@@ -644,7 +647,7 @@ esp_err_t desktop_app_start(void)
 
     task_ok = xTaskCreate(desktop_lvgl_task,
                           "desktop_lvgl",
-                          6144,
+                          10240,
                           NULL,
                           5,
                           NULL);

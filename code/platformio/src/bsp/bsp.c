@@ -72,9 +72,14 @@ esp_err_t bsp_init_whole(void)
     USER_RETURN_ON_ERROR(bsp_power_on(), TAG, "bsp_power_on failed");
 
     /*
-        resource usage info
+    resource usage info
     */
     print_heap_info();
+
+    /*
+    filesystem
+    */
+    USER_RETURN_ON_ERROR(usr_fs_init(), TAG, "usr_fs_init failed");
 
     /*
     buttons
@@ -103,6 +108,11 @@ esp_err_t bsp_init_whole(void)
                          TAG, "gpba02b_pin_set_mode I2S_EN failed");
     USER_RETURN_ON_ERROR(gpba02b_pin_write(I2S_EN_PORT, I2S_EN_PIN, true),
                          TAG, "gpba02b_pin_write I2S_EN failed");
+
+    /*
+    amplifier
+    */
+    USER_RETURN_ON_ERROR(ht517_init_device(), TAG, "ht517_init_device failed");
 
     return ESP_OK;
 }

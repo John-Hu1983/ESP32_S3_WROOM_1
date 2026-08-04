@@ -17,6 +17,8 @@
 	} while (0)
 #endif
 
+
+
 #if defined(USER_CONFIG_BOARD_N8R2)
 #include "user_config_n8r2.h"
 #elif defined(USER_CONFIG_BOARD_N16R8)
