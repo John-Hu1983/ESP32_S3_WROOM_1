@@ -1,7 +1,14 @@
 #include "desktop_app.h"
 
 #define TAG "DESKTOP"
-#define DESKTOP_COMMON_OGG_INTERVAL_MS 3000U
+
+#ifndef USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
+#define USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START 0
+#endif
+
+#ifndef USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR
+#define USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR "/storage/common"
+#endif
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF), camera_app_create_screen, camera_app_release_resources},
@@ -33,7 +40,7 @@ static desktop_app_select_s s_app_select = {
     .app_switching = 0U,
 };
 
-static void desktop_set_checked_state(lv_obj_t *obj, uint8_t checked)
+static void _desktop_set_checked_state(lv_obj_t *obj, uint8_t checked)
 {
     if (obj == NULL)
     {
@@ -56,7 +63,7 @@ static void desktop_set_checked_state(lv_obj_t *obj, uint8_t checked)
     }
 }
 
-static void desktop_set_icon_checked(uint32_t idx, uint8_t checked)
+static void _desktop_set_icon_checked(uint32_t idx, uint8_t checked)
 {
     lv_obj_t *btn;
 
@@ -71,12 +78,12 @@ static void desktop_set_icon_checked(uint32_t idx, uint8_t checked)
         return;
     }
 
-    desktop_set_checked_state(btn, checked);
-    desktop_set_checked_state(s_app_select.icon_symbols[idx], checked);
-    desktop_set_checked_state(s_app_select.icon_names[idx], checked);
+    _desktop_set_checked_state(btn, checked);
+    _desktop_set_checked_state(s_app_select.icon_symbols[idx], checked);
+    _desktop_set_checked_state(s_app_select.icon_names[idx], checked);
 }
 
-static lv_color_t desktop_invert_color(lv_color_t color)
+static lv_color_t _desktop_invert_color(lv_color_t color)
 {
     lv_color32_t color32;
 
@@ -87,7 +94,7 @@ static lv_color_t desktop_invert_color(lv_color_t color)
                          (uint8_t)(0xFFU - color32.ch.blue));
 }
 
-static void desktop_select_icon(uint32_t idx)
+static void _desktop_select_icon(uint32_t idx)
 {
     uint32_t prev_idx;
 
@@ -104,14 +111,14 @@ static void desktop_select_icon(uint32_t idx)
 
     if (prev_idx < DESKTOP_ICON_COUNT)
     {
-        desktop_set_icon_checked(prev_idx, 0U);
+        _desktop_set_icon_checked(prev_idx, 0U);
     }
 
-    desktop_set_icon_checked(idx, 1U);
+    _desktop_set_icon_checked(idx, 1U);
     s_app_select.icon_selected_idx = idx;
 }
 
-static uint32_t desktop_find_icon_index(const desktop_icon_s *icon)
+static uint32_t _desktop_find_icon_index(const desktop_icon_s *icon)
 {
     uint32_t i;
 
@@ -126,13 +133,13 @@ static uint32_t desktop_find_icon_index(const desktop_icon_s *icon)
     return DESKTOP_ICON_COUNT;
 }
 
-static void lvgl_tick_cb(void *arg)
+static void _lvgl_tick_cb(void *arg)
 {
     (void)arg;
     lv_tick_inc(LVGL_TICK_PERIOD_MS);
 }
 
-static void lvgl_flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p)
+static void _lvgl_flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p)
 {
     esp_err_t ret;
 
@@ -144,7 +151,7 @@ static void lvgl_flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_col
     lv_disp_flush_ready(disp_drv);
 }
 
-static void desktop_icon_click_cb(lv_event_t *e)
+static void _desktop_icon_click_cb(lv_event_t *e)
 {
     const desktop_icon_s *icon = (const desktop_icon_s *)lv_event_get_user_data(e);
     uint32_t idx;
@@ -154,17 +161,17 @@ static void desktop_icon_click_cb(lv_event_t *e)
         return;
     }
 
-    idx = desktop_find_icon_index(icon);
+    idx = _desktop_find_icon_index(icon);
     if (idx < DESKTOP_ICON_COUNT)
     {
-        desktop_select_icon(idx);
+        _desktop_select_icon(idx);
         (void)desktop_app_open_by_index(idx);
     }
 
     ESP_LOGI(TAG, "%s opened", icon->name);
 }
 
-static void desktop_release_active_app_resources(void)
+static void _desktop_release_active_app_resources(void)
 {
     uint32_t app_idx;
 
@@ -180,7 +187,7 @@ static void desktop_release_active_app_resources(void)
     }
 }
 
-static void desktop_reset_icon_refs(void)
+static void _desktop_reset_icon_refs(void)
 {
     uint32_t i;
 
@@ -193,7 +200,7 @@ static void desktop_reset_icon_refs(void)
     }
 }
 
-static void desktop_create_ui(void)
+static void _desktop_create_ui(void)
 {
     static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
@@ -251,7 +258,7 @@ static void desktop_create_ui(void)
 
         btn = lv_btn_create(grid);
         lv_obj_remove_style_all(btn);
-        selected_color = desktop_invert_color(s_desktop_icons[i].color);
+        selected_color = _desktop_invert_color(s_desktop_icons[i].color);
 
         lv_obj_set_grid_cell(btn,
                              LV_GRID_ALIGN_STRETCH, col, 1,
@@ -278,7 +285,7 @@ static void desktop_create_ui(void)
         lv_obj_set_style_transform_width(btn, 0, LV_PART_MAIN);
         lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(btn, 6, LV_PART_MAIN);
-        lv_obj_add_event_cb(btn, desktop_icon_click_cb, LV_EVENT_CLICKED, (void *)&s_desktop_icons[i]);
+        lv_obj_add_event_cb(btn, _desktop_icon_click_cb, LV_EVENT_CLICKED, (void *)&s_desktop_icons[i]);
         s_app_select.icon_btns[i] = btn;
 
         symbol = lv_label_create(btn);
@@ -298,12 +305,12 @@ static void desktop_create_ui(void)
         lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -6);
         s_app_select.icon_names[i] = name;
     }
-    desktop_reset_icon_refs();
+    _desktop_reset_icon_refs();
     s_app_select.app_switching = 0U;
     lv_scr_load(scr);
 }
 
-static void desktop_open_app_async(void *user_data)
+static void _desktop_open_app_async(void *user_data)
 {
     lv_obj_t *app_screen;
     lv_obj_t *old_app_screen;
@@ -331,7 +338,7 @@ static void desktop_open_app_async(void *user_data)
     old_app_screen = s_app_select.active_app_screen;
     if ((old_app_screen != NULL) && lv_obj_is_valid(old_app_screen))
     {
-        desktop_release_active_app_resources();
+        _desktop_release_active_app_resources();
         lv_obj_del_async(old_app_screen);
     }
     s_app_select.active_app_screen = NULL;
@@ -345,7 +352,7 @@ static void desktop_open_app_async(void *user_data)
 
         if ((s_app_select.desktop_screen == NULL) || !lv_obj_is_valid(s_app_select.desktop_screen))
         {
-            desktop_create_ui();
+            _desktop_create_ui();
         }
 
         s_app_select.app_switching = 0U;
@@ -363,18 +370,18 @@ static void desktop_open_app_async(void *user_data)
     }
 
     s_app_select.desktop_screen = NULL;
-    desktop_reset_icon_refs();
+    _desktop_reset_icon_refs();
     s_app_select.app_switching = 0U;
 }
 
-static void desktop_return_home_async(void *user_data)
+static void _desktop_return_home_async(void *user_data)
 {
     lv_obj_t *app_screen;
 
     (void)user_data;
 
     app_screen = s_app_select.active_app_screen;
-    desktop_release_active_app_resources();
+    _desktop_release_active_app_resources();
 
     if ((app_screen != NULL) && lv_obj_is_valid(app_screen))
     {
@@ -384,11 +391,11 @@ static void desktop_return_home_async(void *user_data)
     s_app_select.active_app_screen = NULL;
     s_app_select.active_app_idx = DESKTOP_ICON_COUNT;
 
-    desktop_create_ui();
+    _desktop_create_ui();
     s_app_select.app_switching = 0U;
 }
 
-static esp_err_t desktop_request_open_app(uint32_t idx)
+static esp_err_t _desktop_request_open_app(uint32_t idx)
 {
     if (idx >= DESKTOP_ICON_COUNT)
     {
@@ -402,18 +409,18 @@ static esp_err_t desktop_request_open_app(uint32_t idx)
 
     s_app_select.pending_app_idx = idx;
     s_app_select.app_switching = 1U;
-    if (lv_async_call(desktop_open_app_async, NULL) != LV_RES_OK)
+    if (lv_async_call(_desktop_open_app_async, NULL) != LV_RES_OK)
     {
         s_app_select.pending_app_idx = DESKTOP_ICON_COUNT;
         s_app_select.app_switching = 0U;
-        ESP_LOGE(TAG, "lv_async_call desktop_open_app_async failed");
+        ESP_LOGE(TAG, "lv_async_call _desktop_open_app_async failed");
         return ESP_FAIL;
     }
 
     return ESP_OK;
 }
 
-static esp_err_t desktop_request_return_home(void)
+static esp_err_t _desktop_request_return_home(void)
 {
     if (s_app_select.app_switching != 0U)
     {
@@ -427,20 +434,20 @@ static esp_err_t desktop_request_return_home(void)
     }
 
     s_app_select.app_switching = 1U;
-    if (lv_async_call(desktop_return_home_async, NULL) != LV_RES_OK)
+    if (lv_async_call(_desktop_return_home_async, NULL) != LV_RES_OK)
     {
         s_app_select.app_switching = 0U;
-        ESP_LOGE(TAG, "lv_async_call desktop_return_home_async failed");
+        ESP_LOGE(TAG, "lv_async_call _desktop_return_home_async failed");
         return ESP_FAIL;
     }
 
     return ESP_OK;
 }
 
-static esp_err_t desktop_lvgl_init(void)
+static esp_err_t _desktop_lvgl_init(void)
 {
     esp_timer_create_args_t tick_timer_args = {
-        .callback = lvgl_tick_cb,
+        .callback = _lvgl_tick_cb,
         .arg = NULL,
         .dispatch_method = ESP_TIMER_TASK,
         .name = "lvgl_tick",
@@ -463,7 +470,7 @@ static esp_err_t desktop_lvgl_init(void)
     lv_disp_drv_init(&s_lv_disp_drv);
     s_lv_disp_drv.hor_res = s_lcd_width;
     s_lv_disp_drv.ver_res = s_lcd_height;
-    s_lv_disp_drv.flush_cb = lvgl_flush_cb;
+    s_lv_disp_drv.flush_cb = _lvgl_flush_cb;
     s_lv_disp_drv.draw_buf = &s_lv_draw_buf;
     s_lv_disp_drv.full_refresh = 0;
     s_lv_disp_drv.antialiasing = 0;
@@ -484,7 +491,7 @@ static esp_err_t desktop_lvgl_init(void)
     return ESP_OK;
 }
 
-static esp_err_t desktop_prepare_monitor(void)
+static esp_err_t _desktop_prepare_monitor(void)
 {
     esp_err_t ret;
     ret = st7365p_panel_init(NULL);
@@ -513,9 +520,71 @@ static esp_err_t desktop_prepare_monitor(void)
     return ESP_OK;
 }
 
+/*
+ * brief: Search one directory and enqueue all .ogg/.pcm files into HT517 FIFO task.
+ * input: dir_path - absolute directory path under mounted filesystem.
+ * output: ESP_OK on success; otherwise propagated search/enqueue error.
+ */
+static esp_err_t _desktop_batch_enqueue_audio_dir(const char *dir_path)
+{
+    char **paths;
+    size_t count;
+    size_t i;
+    size_t queued;
+    esp_err_t ret;
+
+    if ((dir_path == NULL) || (dir_path[0] == '\0'))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    paths = NULL;
+    count = 0U;
+    ret = usr_fs_search_all_files(dir_path, &paths, &count);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    queued = 0U;
+    for (i = 0U; i < count; i++)
+    {
+        if (!usr_fs_path_has_suffix(paths[i], ".ogg") &&
+            !usr_fs_path_has_suffix(paths[i], ".pcm"))
+        {
+            continue;
+        }
+
+        ret = ht517_load(paths[i]);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGW(TAG,
+                     "enqueue failed, path=%s err=%d",
+                     paths[i],
+                     (int)ret);
+            continue;
+        }
+
+        queued++;
+    }
+
+    usr_fs_free_file_paths(paths, count);
+
+    if (queued == 0U)
+    {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    ESP_LOGI(TAG,
+             "batch enqueue done, dir=%s queued=%u",
+             dir_path,
+             (unsigned)queued);
+    return ESP_OK;
+}
+
 esp_err_t desktop_app_open_by_index(uint32_t idx)
 {
-    return desktop_request_open_app(idx);
+    return _desktop_request_open_app(idx);
 }
 
 esp_err_t desktop_app_open_by_name(const char *name)
@@ -531,7 +600,7 @@ esp_err_t desktop_app_open_by_name(const char *name)
     {
         if (strcmp(s_desktop_icons[i].name, name) == 0)
         {
-            return desktop_request_open_app(i);
+            return _desktop_request_open_app(i);
         }
     }
 
@@ -540,50 +609,55 @@ esp_err_t desktop_app_open_by_name(const char *name)
 
 void desktop_app_return_to_home(void)
 {
-    (void)desktop_request_return_home();
+    (void)_desktop_request_return_home();
 }
 
-static void desktop_lvgl_task(void *param)
+static void _desktop_lvgl_task(void *param)
 {
-
-    // uint32_t start_time = 0;
-    // uint8_t scope_flag = 0;
-    uint32_t common_ogg_elapsed_ms;
-    bool common_ogg_disabled;
     bool btn_up, btn_down;
     esp_err_t ret;
+#if USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
+    bool enqueue_test_done;
+#endif
     (void)param;
 
-    common_ogg_elapsed_ms = 0U;
-    common_ogg_disabled = false;
+#if USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
+    enqueue_test_done = false;
+#endif
 
     while (1)
     {
         lv_timer_handler();
         delay_ms(LVGL_TASK_PERIOD_MS);
 
-        if (!common_ogg_disabled)
+#if USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
+        if (!enqueue_test_done)
         {
-            common_ogg_elapsed_ms += LVGL_TASK_PERIOD_MS;
-            if (common_ogg_elapsed_ms >= DESKTOP_COMMON_OGG_INTERVAL_MS)
-            {
-                esp_err_t play_ret;
+            esp_err_t enqueue_ret;
 
-                common_ogg_elapsed_ms = 0U;
-                play_ret = ht517_play_next_common_ogg();
-                if (play_ret == ESP_ERR_NOT_FOUND)
-                {
-                    common_ogg_disabled = true;
-                    ESP_LOGW(TAG, "no .ogg found under /storage/common, disable auto-play");
-                }
-                else if (play_ret != ESP_OK)
-                {
-                    ESP_LOGW(TAG,
-                             "ht517_play_next_common_ogg failed: %d",
-                             (int)play_ret);
-                }
+            enqueue_test_done = true;
+            enqueue_ret = _desktop_batch_enqueue_audio_dir(USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR);
+            if (enqueue_ret == ESP_OK)
+            {
+                ESP_LOGI(TAG,
+                         "audio queue test started from: %s",
+                         USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR);
+            }
+            else if (enqueue_ret == ESP_ERR_NOT_FOUND)
+            {
+                ESP_LOGW(TAG,
+                         "audio queue test found no .ogg/.pcm in: %s",
+                         USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR);
+            }
+            else
+            {
+                ESP_LOGW(TAG,
+                         "audio queue test failed, dir=%s err=%d",
+                         USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR,
+                         (int)enqueue_ret);
             }
         }
+#endif
 
         ret = gpba02b_pin_read(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN, &btn_up);
         if (ret == ESP_OK && btn_up == 0)
@@ -595,16 +669,6 @@ static void desktop_lvgl_task(void *param)
         {
             ESP_LOGI(TAG, "Button DOWN pressed");
         }
-
-        // if (scope_flag == 0)
-        // {
-        //     start_time += LVGL_TASK_PERIOD_MS;
-        //     if (start_time >= 1000)
-        //     {
-        //         (void)desktop_app_open_by_name("Scope");
-        //         scope_flag = 1;
-        //     }
-        // }
     }
 }
 
@@ -613,17 +677,17 @@ esp_err_t desktop_app_start(void)
     esp_err_t ret;
     BaseType_t task_ok;
 
-    ret = desktop_prepare_monitor();
+    ret = _desktop_prepare_monitor();
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "desktop_prepare_monitor failed: %d", (int)ret);
+        ESP_LOGE(TAG, "_desktop_prepare_monitor failed: %d", (int)ret);
         return ret;
     }
 
-    ret = desktop_lvgl_init();
+    ret = _desktop_lvgl_init();
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "desktop_lvgl_init failed: %d", (int)ret);
+        ESP_LOGE(TAG, "_desktop_lvgl_init failed: %d", (int)ret);
         return ret;
     }
 
@@ -643,9 +707,9 @@ esp_err_t desktop_app_start(void)
 
     app_home_nav_set_callback(desktop_app_return_to_home);
 
-    desktop_create_ui();
+    _desktop_create_ui();
 
-    task_ok = xTaskCreate(desktop_lvgl_task,
+    task_ok = xTaskCreate(_desktop_lvgl_task,
                           "desktop_lvgl",
                           10240,
                           NULL,

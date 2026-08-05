@@ -18,7 +18,7 @@ static const gpba02b_gpio_s s_gpio_regs[3] = {
  * input: is_write - true for write command, false for read command; reg_addr - register address.
  * output: Encoded command byte for SPI transfer.
  */
-static uint8_t gpba02b_build_command(bool is_write, uint8_t reg_addr)
+static uint8_t _gpba02b_build_command(bool is_write, uint8_t reg_addr)
 {
     return (uint8_t)(((is_write ? 1U : 0U) << 7) |
                      ((GPBA02B_DEVICE_SELECT_BIT & 0x01U) << 6) |
@@ -30,7 +30,7 @@ static uint8_t gpba02b_build_command(bool is_write, uint8_t reg_addr)
  * input: port - target port identifier.
  * output: true for valid port A/B/C; otherwise false.
  */
-static bool gpba02b_port_is_valid(gpba02b_port_t port)
+static bool _gpba02b_port_is_valid(gpba02b_port_t port)
 {
     return (port == GPBA02B_PORT_A) || (port == GPBA02B_PORT_B) || (port == GPBA02B_PORT_C);
 }
@@ -42,7 +42,7 @@ static bool gpba02b_port_is_valid(gpba02b_port_t port)
  */
 esp_err_t gpba02b_get_gpio_regs(gpba02b_port_t port, const gpba02b_gpio_s **gpio_regs)
 {
-    if ((gpio_regs == NULL) || !gpba02b_port_is_valid(port))
+    if ((gpio_regs == NULL) || !_gpba02b_port_is_valid(port))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -56,7 +56,7 @@ esp_err_t gpba02b_get_gpio_regs(gpba02b_port_t port, const gpba02b_gpio_s **gpio
  * input: value - source byte; bit - bit index 0..7; set - desired bit state.
  * output: Updated byte with target bit modified.
  */
-static uint8_t gpba02b_set_bit(uint8_t value, uint8_t bit, bool set)
+static uint8_t _gpba02b_set_bit(uint8_t value, uint8_t bit, bool set)
 {
     uint8_t mask = (uint8_t)(1U << bit);
     if (set)
@@ -71,7 +71,7 @@ static uint8_t gpba02b_set_bit(uint8_t value, uint8_t bit, bool set)
  * input: port - target PWM port; reg - output register address pointer.
  * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG.
  */
-static esp_err_t gpba02b_get_pwm_enable_reg(gpba02b_port_t port, uint8_t *reg)
+static esp_err_t _gpba02b_get_pwm_enable_reg(gpba02b_port_t port, uint8_t *reg)
 {
     if (reg == NULL)
     {
@@ -96,7 +96,7 @@ static esp_err_t gpba02b_get_pwm_enable_reg(gpba02b_port_t port, uint8_t *reg)
  * input: port - target PWM port; channel - channel index 0..7; reg - output register address pointer.
  * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG.
  */
-static esp_err_t gpba02b_get_pwm_duty_reg(gpba02b_port_t port, uint8_t channel, uint8_t *reg)
+static esp_err_t _gpba02b_get_pwm_duty_reg(gpba02b_port_t port, uint8_t channel, uint8_t *reg)
 {
     static const uint8_t pc_duty_map[GPBA02B_PORT_PIN_COUNT] = {0x2F, 0x33, 0x37, 0x3B,
                                                                 0x3C, 0x3D, 0x3E, 0x3F};
@@ -139,7 +139,7 @@ static esp_err_t _write_reg_via_spi(uint8_t reg_addr, uint8_t value)
     esp_err_t ret;
     esp_err_t unlock_ret;
 
-    frame[0] = gpba02b_build_command(true, reg_addr);
+    frame[0] = _gpba02b_build_command(true, reg_addr);
     frame[1] = value;
 
     ret = spi_bus_acquire(s_gpba02_spi.host, portMAX_DELAY);
@@ -180,7 +180,7 @@ static esp_err_t _read_reg_via_spi(uint8_t reg_addr, uint8_t *value)
         return ret;
     }
 
-    cmd = gpba02b_build_command(false, reg_addr);
+    cmd = _gpba02b_build_command(false, reg_addr);
     ret = spi_write_read_nbyte(&s_gpba02_spi, &cmd, 1, value, 1);
     unlock_ret = spi_bus_release(s_gpba02_spi.host);
     if (ret != ESP_OK)
@@ -196,7 +196,7 @@ static esp_err_t _read_reg_via_spi(uint8_t reg_addr, uint8_t *value)
  * input: None.
  * output: ESP_OK on success; otherwise SPI write error.
  */
-static esp_err_t gpba02b_enable_new_functions(void)
+static esp_err_t _gpba02b_enable_new_functions(void)
 {
     esp_err_t ret;
 
@@ -249,7 +249,7 @@ esp_err_t gpba02b_init_device(void)
         return ret;
     }
 
-    ret = gpba02b_enable_new_functions();
+    ret = _gpba02b_enable_new_functions();
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "enable new functions failed: %d", (int)ret);
@@ -302,7 +302,7 @@ esp_err_t gpba02b_pin_set_mode(gpba02b_port_t port, uint8_t pin, gpba02b_pin_mod
     uint8_t att_val;
     esp_err_t ret;
 
-    if (!s_gpba02b_ready || (pin >= GPBA02B_PORT_PIN_COUNT) || !gpba02b_port_is_valid(port))
+    if (!s_gpba02b_ready || (pin >= GPBA02B_PORT_PIN_COUNT) || !_gpba02b_port_is_valid(port))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -332,37 +332,37 @@ esp_err_t gpba02b_pin_set_mode(gpba02b_port_t port, uint8_t pin, gpba02b_pin_mod
     switch (mode)
     {
     case GPBA02B_PIN_MODE_INPUT_FLOATING:
-        buf_val = gpba02b_set_bit(buf_val, pin, false);
-        dir_val = gpba02b_set_bit(dir_val, pin, false);
-        att_val = gpba02b_set_bit(att_val, pin, false);
+        buf_val = _gpba02b_set_bit(buf_val, pin, false);
+        dir_val = _gpba02b_set_bit(dir_val, pin, false);
+        att_val = _gpba02b_set_bit(att_val, pin, false);
         break;
     case GPBA02B_PIN_MODE_INPUT_PULLDOWN:
-        buf_val = gpba02b_set_bit(buf_val, pin, true);
-        dir_val = gpba02b_set_bit(dir_val, pin, false);
-        att_val = gpba02b_set_bit(att_val, pin, false);
+        buf_val = _gpba02b_set_bit(buf_val, pin, true);
+        dir_val = _gpba02b_set_bit(dir_val, pin, false);
+        att_val = _gpba02b_set_bit(att_val, pin, false);
         break;
     case GPBA02B_PIN_MODE_INPUT_PULLUP:
-        buf_val = gpba02b_set_bit(buf_val, pin, true);
-        dir_val = gpba02b_set_bit(dir_val, pin, false);
-        att_val = gpba02b_set_bit(att_val, pin, true);
+        buf_val = _gpba02b_set_bit(buf_val, pin, true);
+        dir_val = _gpba02b_set_bit(dir_val, pin, false);
+        att_val = _gpba02b_set_bit(att_val, pin, true);
         break;
     case GPBA02B_PIN_MODE_OUTPUT:
-        dir_val = gpba02b_set_bit(dir_val, pin, true);
-        att_val = gpba02b_set_bit(att_val, pin, false);
+        dir_val = _gpba02b_set_bit(dir_val, pin, true);
+        att_val = _gpba02b_set_bit(att_val, pin, false);
         break;
     case GPBA02B_PIN_MODE_OUTPUT_INVERTED:
-        dir_val = gpba02b_set_bit(dir_val, pin, true);
-        att_val = gpba02b_set_bit(att_val, pin, true);
+        dir_val = _gpba02b_set_bit(dir_val, pin, true);
+        att_val = _gpba02b_set_bit(att_val, pin, true);
         break;
     case GPBA02B_PIN_MODE_OPEN_DRAIN_NMOS:
-        buf_val = gpba02b_set_bit(buf_val, pin, false);
-        dir_val = gpba02b_set_bit(dir_val, pin, false);
-        att_val = gpba02b_set_bit(att_val, pin, false);
+        buf_val = _gpba02b_set_bit(buf_val, pin, false);
+        dir_val = _gpba02b_set_bit(dir_val, pin, false);
+        att_val = _gpba02b_set_bit(att_val, pin, false);
         break;
     case GPBA02B_PIN_MODE_OPEN_DRAIN_PMOS:
-        buf_val = gpba02b_set_bit(buf_val, pin, false);
-        dir_val = gpba02b_set_bit(dir_val, pin, false);
-        att_val = gpba02b_set_bit(att_val, pin, true);
+        buf_val = _gpba02b_set_bit(buf_val, pin, false);
+        dir_val = _gpba02b_set_bit(dir_val, pin, false);
+        att_val = _gpba02b_set_bit(att_val, pin, true);
         break;
     default:
         return ESP_ERR_INVALID_ARG;
@@ -392,7 +392,7 @@ esp_err_t gpba02b_port_write(gpba02b_port_t port, uint8_t value)
     const gpba02b_gpio_s *gpio_regs;
     esp_err_t ret;
 
-    if (!s_gpba02b_ready || !gpba02b_port_is_valid(port))
+    if (!s_gpba02b_ready || !_gpba02b_port_is_valid(port))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -415,7 +415,7 @@ esp_err_t gpba02b_port_read(gpba02b_port_t port, uint8_t *value)
     const gpba02b_gpio_s *gpio_regs;
     esp_err_t ret;
 
-    if (!s_gpba02b_ready || !gpba02b_port_is_valid(port) || (value == NULL))
+    if (!s_gpba02b_ready || !_gpba02b_port_is_valid(port) || (value == NULL))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -439,7 +439,7 @@ esp_err_t gpba02b_pin_write(gpba02b_port_t port, uint8_t pin, bool level)
     uint8_t value;
     esp_err_t ret;
 
-    if (!s_gpba02b_ready || !gpba02b_port_is_valid(port) || (pin >= GPBA02B_PORT_PIN_COUNT))
+    if (!s_gpba02b_ready || !_gpba02b_port_is_valid(port) || (pin >= GPBA02B_PORT_PIN_COUNT))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -456,7 +456,7 @@ esp_err_t gpba02b_pin_write(gpba02b_port_t port, uint8_t pin, bool level)
         return ret;
     }
 
-    value = gpba02b_set_bit(value, pin, level);
+    value = _gpba02b_set_bit(value, pin, level);
     return _write_reg_via_spi(gpio_regs->buf, value);
 }
 
@@ -470,7 +470,7 @@ esp_err_t gpba02b_pin_read(gpba02b_port_t port, uint8_t pin, bool *level)
     uint8_t value;
     esp_err_t ret;
 
-    if (!s_gpba02b_ready || !gpba02b_port_is_valid(port) || (pin >= GPBA02B_PORT_PIN_COUNT) || (level == NULL))
+    if (!s_gpba02b_ready || !_gpba02b_port_is_valid(port) || (pin >= GPBA02B_PORT_PIN_COUNT) || (level == NULL))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -501,7 +501,7 @@ esp_err_t gpba02b_pwm_enable_mask(gpba02b_port_t port, uint8_t channel_mask, boo
         return ESP_ERR_INVALID_STATE;
     }
 
-    ret = gpba02b_get_pwm_enable_reg(port, &reg);
+    ret = _gpba02b_get_pwm_enable_reg(port, &reg);
     if (ret != ESP_OK)
     {
         return ret;
@@ -540,7 +540,7 @@ esp_err_t gpba02b_pwm_set_duty(gpba02b_port_t port, uint8_t channel, uint8_t dut
         return ESP_ERR_INVALID_STATE;
     }
 
-    ret = gpba02b_get_pwm_duty_reg(port, channel, &reg);
+    ret = _gpba02b_get_pwm_duty_reg(port, channel, &reg);
     if (ret != ESP_OK)
     {
         return ret;

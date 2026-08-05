@@ -12,7 +12,7 @@
 
 static scope_app_ctx_t *s_scope_ctx = NULL;
 
-static void scope_app_fill_points(scope_app_ctx_t *ctx)
+static void _scope_app_fill_points(scope_app_ctx_t *ctx)
 {
     uint32_t i;
 
@@ -24,7 +24,7 @@ static void scope_app_fill_points(scope_app_ctx_t *ctx)
     }
 }
 
-static void scope_chart_draw_part_cb(lv_event_t *e)
+static void _scope_chart_draw_part_cb(lv_event_t *e)
 {
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
 
@@ -43,7 +43,7 @@ static void scope_chart_draw_part_cb(lv_event_t *e)
     }
 }
 
-static void scope_app_timer_cb(lv_timer_t *timer)
+static void _scope_app_timer_cb(lv_timer_t *timer)
 {
     scope_app_ctx_t *ctx = (scope_app_ctx_t *)timer->user_data;
 
@@ -58,17 +58,17 @@ static void scope_app_timer_cb(lv_timer_t *timer)
         ctx->phase -= SCOPE_TWO_PI;
     }
 
-    scope_app_fill_points(ctx);
+    _scope_app_fill_points(ctx);
     lv_chart_refresh(ctx->chart);
 }
 
-static void scope_app_back_click_cb(lv_event_t *e)
+static void _scope_app_back_click_cb(lv_event_t *e)
 {
     (void)e;
     scope_app_destroy_and_return();
 }
 
-static void scope_app_delete_cb(lv_event_t *e)
+static void _scope_app_delete_cb(lv_event_t *e)
 {
     lv_obj_t *target = lv_event_get_target(e);
     scope_app_ctx_t *ctx = (scope_app_ctx_t *)lv_event_get_user_data(e);
@@ -141,7 +141,7 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x1D4ED8), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(back_btn, 10, LV_PART_MAIN);
-    lv_obj_add_event_cb(back_btn, scope_app_back_click_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(back_btn, _scope_app_back_click_cb, LV_EVENT_CLICKED, NULL);
 
     back_text = lv_label_create(back_btn);
     lv_label_set_text(back_text, LV_SYMBOL_LEFT " Home");
@@ -185,7 +185,7 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_line_width(chart, 2, LV_PART_ITEMS);
     lv_obj_set_style_line_color(chart, lv_color_white(), LV_PART_ITEMS);
     lv_obj_set_style_size(chart, 0, LV_PART_INDICATOR);
-    lv_obj_add_event_cb(chart, scope_chart_draw_part_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    lv_obj_add_event_cb(chart, _scope_chart_draw_part_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_chart_set_div_line_count(chart, 4, 10);
@@ -201,11 +201,11 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     }
 
     ctx->chart = chart;
-    scope_app_fill_points(ctx);
+    _scope_app_fill_points(ctx);
     lv_chart_set_ext_y_array(chart, ctx->series, ctx->points);
     lv_chart_refresh(chart);
 
-    ctx->timer = lv_timer_create(scope_app_timer_cb, SCOPE_UPDATE_PERIOD_MS, ctx);
+    ctx->timer = lv_timer_create(_scope_app_timer_cb, SCOPE_UPDATE_PERIOD_MS, ctx);
     if (ctx->timer == NULL)
     {
         lv_obj_del(scr);
@@ -213,7 +213,7 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    lv_obj_add_event_cb(scr, scope_app_delete_cb, LV_EVENT_DELETE, ctx);
+    lv_obj_add_event_cb(scr, _scope_app_delete_cb, LV_EVENT_DELETE, ctx);
     s_scope_ctx = ctx;
     return scr;
 }

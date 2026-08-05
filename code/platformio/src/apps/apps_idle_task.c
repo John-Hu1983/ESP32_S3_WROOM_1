@@ -19,7 +19,7 @@ static network_status_t s_network = {
  * input: none.
  * output: true, so callback runs once per idle cycle.
  */
-static bool apps_idle_hook_cpu0(void)
+static bool _apps_idle_hook_cpu0(void)
 {
     s_idle_hits[0]++;
     return true;
@@ -31,7 +31,7 @@ static bool apps_idle_hook_cpu0(void)
  * input: none.
  * output: true, so callback runs once per idle cycle.
  */
-static bool apps_idle_hook_cpu1(void)
+static bool _apps_idle_hook_cpu1(void)
 {
     s_idle_hits[1]++;
     return true;
@@ -43,7 +43,7 @@ static bool apps_idle_hook_cpu1(void)
  * input: total - total memory bytes; free - currently free bytes.
  * output: usage percent in range 0..100.
  */
-static uint8_t apps_idle_calc_usage_percent(size_t total, size_t free)
+static uint8_t _apps_idle_calc_usage_percent(size_t total, size_t free)
 {
     size_t used;
 
@@ -66,7 +66,7 @@ static uint8_t apps_idle_calc_usage_percent(size_t total, size_t free)
  * input: none.
  * output: estimated CPU usage percent in range 0..100.
  */
-static uint8_t apps_idle_calc_cpu_usage_percent(void)
+static uint8_t _apps_idle_calc_cpu_usage_percent(void)
 {
     uint64_t idle_delta_sum = 0;
     uint32_t i;
@@ -118,7 +118,7 @@ static uint8_t apps_idle_calc_cpu_usage_percent(void)
  * input: out_time - output buffer with size 6 bytes.
  * output: none.
  */
-static void apps_idle_fill_time_hhmm(char out_time[6])
+static void _apps_idle_fill_time_hhmm(char out_time[6])
 {
     time_t now = time(NULL);
     struct tm local_tm;
@@ -142,7 +142,7 @@ static void apps_idle_fill_time_hhmm(char out_time[6])
  * input: param - unused task argument.
  * output: none.
  */
-static void apps_idle_task(void *param)
+static void _apps_idle_task(void *param)
 {
     (void)param;
 
@@ -158,17 +158,17 @@ static void apps_idle_task(void *param)
         snapshot.network_connected = s_network.connected;
         snapshot.network_rssi_dbm = s_network.rssi_dbm;
 
-        snapshot.cpu_usage_percent = apps_idle_calc_cpu_usage_percent();
+        snapshot.cpu_usage_percent = _apps_idle_calc_cpu_usage_percent();
 
         ram_total = heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         ram_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        snapshot.ram_usage_percent = apps_idle_calc_usage_percent(ram_total, ram_free);
+        snapshot.ram_usage_percent = _apps_idle_calc_usage_percent(ram_total, ram_free);
 
         psram_total = heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
         psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-        snapshot.psram_usage_percent = apps_idle_calc_usage_percent(psram_total, psram_free);
+        snapshot.psram_usage_percent = _apps_idle_calc_usage_percent(psram_total, psram_free);
 
-        apps_idle_fill_time_hhmm(snapshot.time_hhmm);
+        _apps_idle_fill_time_hhmm(snapshot.time_hhmm);
 
         app_status_bar_submit_snapshot(&snapshot);
 
@@ -191,7 +191,7 @@ esp_err_t apps_idle_task_start(void)
         return ESP_OK;
     }
 
-    ret = esp_register_freertos_idle_hook_for_cpu(apps_idle_hook_cpu0, 0);
+    ret = esp_register_freertos_idle_hook_for_cpu(_apps_idle_hook_cpu0, 0);
     if ((ret != ESP_OK) && (ret != ESP_ERR_INVALID_STATE))
     {
         ESP_LOGE(TAG, "register idle hook CPU0 failed: %d", (int)ret);
@@ -199,7 +199,7 @@ esp_err_t apps_idle_task_start(void)
     }
 
 #if (APPS_IDLE_CORE_COUNT > 1)
-    ret = esp_register_freertos_idle_hook_for_cpu(apps_idle_hook_cpu1, 1);
+    ret = esp_register_freertos_idle_hook_for_cpu(_apps_idle_hook_cpu1, 1);
     if ((ret != ESP_OK) && (ret != ESP_ERR_INVALID_STATE))
     {
         ESP_LOGE(TAG, "register idle hook CPU1 failed: %d", (int)ret);
@@ -207,7 +207,7 @@ esp_err_t apps_idle_task_start(void)
     }
 #endif
 
-    task_ok = xTaskCreate(apps_idle_task,
+    task_ok = xTaskCreate(_apps_idle_task,
                           "apps_idle",
                           APPS_IDLE_TASK_STACK_SIZE,
                           NULL,

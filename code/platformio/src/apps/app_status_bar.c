@@ -27,7 +27,7 @@ static uint32_t s_applied_version = 0U;
 static lv_coord_t s_lcd_w = 0;
 static lv_coord_t s_lcd_h = 0;
 
-static void app_status_bar_apply_snapshot(void)
+static void _app_status_bar_apply_snapshot(void)
 {
     app_status_snapshot_t local;
     char battery_text[20];
@@ -76,10 +76,10 @@ static void app_status_bar_apply_snapshot(void)
     lv_label_set_text(s_bottom_time_label, local.time_hhmm);
 }
 
-static void app_status_bar_ui_timer_cb(lv_timer_t *timer)
+static void _app_status_bar_ui_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    app_status_bar_apply_snapshot();
+    _app_status_bar_apply_snapshot();
 }
 
 esp_err_t app_status_bar_init(lv_coord_t lcd_w, lv_coord_t lcd_h)
@@ -150,10 +150,10 @@ esp_err_t app_status_bar_init(lv_coord_t lcd_w, lv_coord_t lcd_h)
 
     if (s_ui_timer == NULL)
     {
-        s_ui_timer = lv_timer_create(app_status_bar_ui_timer_cb, 200, NULL);
+        s_ui_timer = lv_timer_create(_app_status_bar_ui_timer_cb, 200, NULL);
     }
 
-    app_status_bar_apply_snapshot();
+    _app_status_bar_apply_snapshot();
     return ESP_OK;
 }
 

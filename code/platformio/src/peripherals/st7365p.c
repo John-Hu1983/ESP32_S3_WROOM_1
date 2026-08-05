@@ -9,7 +9,7 @@ static st7365p_state_t s_st7365p = {0};
  * input: ms - delay time in milliseconds.
  * output: none.
  */
-static void st7365p_delay_ms(uint32_t ms)
+static void _st7365p_delay_ms(uint32_t ms)
 {
     TickType_t ticks = pdMS_TO_TICKS(ms);
     if (ticks == 0)
@@ -24,7 +24,7 @@ static void st7365p_delay_ms(uint32_t ms)
  * input: none.
  * output: ESP_OK on success; otherwise GPIO configuration error or invalid argument.
  */
-static esp_err_t st7365p_init_rs_pin(void)
+static esp_err_t _st7365p_init_rs_pin(void)
 {
     gpio_config_t io_cfg = {0};
     esp_err_t ret;
@@ -54,7 +54,7 @@ static esp_err_t st7365p_init_rs_pin(void)
  * input: level - 0 for command, non-zero for data.
  * output: ESP_OK on success; otherwise GPIO driver error.
  */
-static esp_err_t st7365p_set_rs_level(uint32_t level)
+static esp_err_t _st7365p_set_rs_level(uint32_t level)
 {
     return gpio_set_level(LCD_IO_RS, (int)level);
 }
@@ -64,7 +64,7 @@ static esp_err_t st7365p_set_rs_level(uint32_t level)
  * input: data - source byte buffer; len - number of bytes to transmit.
  * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or SPI driver error.
  */
-static esp_err_t st7365p_write_bytes(const void *data, size_t len)
+static esp_err_t _st7365p_write_bytes(const void *data, size_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
 
@@ -95,17 +95,17 @@ static esp_err_t st7365p_write_bytes(const void *data, size_t len)
  * input: cmd - command value.
  * output: ESP_OK on success; otherwise GPIO/SPI driver error.
  */
-static esp_err_t st7365p_write_cmd(uint8_t cmd)
+static esp_err_t _st7365p_write_cmd(uint8_t cmd)
 {
     esp_err_t ret;
 
-    ret = st7365p_set_rs_level(0);
+    ret = _st7365p_set_rs_level(0);
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    return st7365p_write_bytes(&cmd, 1);
+    return _st7365p_write_bytes(&cmd, 1);
 }
 
 /*
@@ -113,7 +113,7 @@ static esp_err_t st7365p_write_cmd(uint8_t cmd)
  * input: data - payload buffer; len - payload byte count.
  * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG or GPIO/SPI driver error.
  */
-static esp_err_t st7365p_write_data(const void *data, size_t len)
+static esp_err_t _st7365p_write_data(const void *data, size_t len)
 {
     esp_err_t ret;
 
@@ -127,13 +127,13 @@ static esp_err_t st7365p_write_data(const void *data, size_t len)
         return ESP_OK;
     }
 
-    ret = st7365p_set_rs_level(1);
+    ret = _st7365p_set_rs_level(1);
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    return st7365p_write_bytes(data, len);
+    return _st7365p_write_bytes(data, len);
 }
 
 /*
@@ -141,17 +141,17 @@ static esp_err_t st7365p_write_data(const void *data, size_t len)
  * input: cmd - command value; data - payload buffer; len - payload byte count.
  * output: ESP_OK on success; otherwise GPIO/SPI driver error.
  */
-static esp_err_t st7365p_write_cmd_data(uint8_t cmd, const void *data, size_t len)
+static esp_err_t _st7365p_write_cmd_data(uint8_t cmd, const void *data, size_t len)
 {
     esp_err_t ret;
 
-    ret = st7365p_write_cmd(cmd);
+    ret = _st7365p_write_cmd(cmd);
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    return st7365p_write_data(data, len);
+    return _st7365p_write_data(data, len);
 }
 
 /*
@@ -159,7 +159,7 @@ static esp_err_t st7365p_write_cmd_data(uint8_t cmd, const void *data, size_t le
  * input: none.
  * output: ESP_OK when resources are ready; otherwise initialization error.
  */
-static esp_err_t st7365p_ensure_spi_ready(void)
+static esp_err_t _st7365p_ensure_spi_ready(void)
 {
     esp_err_t ret;
 
@@ -181,7 +181,7 @@ static esp_err_t st7365p_ensure_spi_ready(void)
         return ret;
     }
 
-    ret = st7365p_init_rs_pin();
+    ret = _st7365p_init_rs_pin();
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "LCD RS pin init failed: %d", (int)ret);
@@ -197,7 +197,7 @@ static esp_err_t st7365p_ensure_spi_ready(void)
  * input: rotation - orientation index; madctl_base - base MADCTL value from configuration.
  * output: Encoded MADCTL byte for panel register programming.
  */
-static uint8_t st7365p_rotation_to_madctl(uint8_t rotation, uint8_t madctl_base)
+static uint8_t _st7365p_rotation_to_madctl(uint8_t rotation, uint8_t madctl_base)
 {
     uint8_t base = (uint8_t)(madctl_base &
                              (ST7365P_MADCTL_MY | ST7365P_MADCTL_MX | ST7365P_MADCTL_MV | ST7365P_MADCTL_BGR));
@@ -297,21 +297,21 @@ esp_err_t st7365p_reset_sequence(void)
     {
         return ret;
     }
-    st7365p_delay_ms(10);
+    _st7365p_delay_ms(10);
 
     ret = gpba02b_pin_write(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, false);
     if (ret != ESP_OK)
     {
         return ret;
     }
-    st7365p_delay_ms(20);
+    _st7365p_delay_ms(20);
 
     ret = gpba02b_pin_write(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, true);
     if (ret != ESP_OK)
     {
         return ret;
     }
-    st7365p_delay_ms(120);
+    _st7365p_delay_ms(120);
 
     return ESP_OK;
 }
@@ -335,19 +335,19 @@ esp_err_t st7365p_sleep_out(void)
 {
     esp_err_t ret;
 
-    ret = st7365p_ensure_spi_ready();
+    ret = _st7365p_ensure_spi_ready();
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    ret = st7365p_write_cmd(ST7365P_CMD_SLPOUT);
+    ret = _st7365p_write_cmd(ST7365P_CMD_SLPOUT);
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    st7365p_delay_ms(120);
+    _st7365p_delay_ms(120);
     return ESP_OK;
 }
 
@@ -360,13 +360,13 @@ esp_err_t st7365p_display_on(void)
 {
     esp_err_t ret;
 
-    ret = st7365p_ensure_spi_ready();
+    ret = _st7365p_ensure_spi_ready();
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    return st7365p_write_cmd(ST7365P_CMD_DISPON);
+    return _st7365p_write_cmd(ST7365P_CMD_DISPON);
 }
 
 /*
@@ -378,13 +378,13 @@ esp_err_t st7365p_display_off(void)
 {
     esp_err_t ret;
 
-    ret = st7365p_ensure_spi_ready();
+    ret = _st7365p_ensure_spi_ready();
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    return st7365p_write_cmd(ST7365P_CMD_DISPOFF);
+    return _st7365p_write_cmd(ST7365P_CMD_DISPOFF);
 }
 
 /*
@@ -402,8 +402,8 @@ esp_err_t st7365p_set_rotation(uint8_t rotation)
         return ESP_ERR_INVALID_STATE;
     }
 
-    madctl = st7365p_rotation_to_madctl(rotation, s_st7365p.madctl_base);
-    ret = st7365p_write_cmd_data(ST7365P_CMD_MADCTL, &madctl, 1);
+    madctl = _st7365p_rotation_to_madctl(rotation, s_st7365p.madctl_base);
+    ret = _st7365p_write_cmd_data(ST7365P_CMD_MADCTL, &madctl, 1);
     if (ret != ESP_OK)
     {
         return ret;
@@ -463,19 +463,19 @@ esp_err_t st7365p_set_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2)
     row_data[2] = (uint8_t)(ye >> 8);
     row_data[3] = (uint8_t)(ye & 0xFFU);
 
-    ret = st7365p_write_cmd_data(ST7365P_CMD_CASET, col_data, sizeof(col_data));
+    ret = _st7365p_write_cmd_data(ST7365P_CMD_CASET, col_data, sizeof(col_data));
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    ret = st7365p_write_cmd_data(ST7365P_CMD_RASET, row_data, sizeof(row_data));
+    ret = _st7365p_write_cmd_data(ST7365P_CMD_RASET, row_data, sizeof(row_data));
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    return st7365p_write_cmd(ST7365P_CMD_RAMWR);
+    return _st7365p_write_cmd(ST7365P_CMD_RAMWR);
 }
 
 /*
@@ -503,7 +503,7 @@ esp_err_t st7365p_draw_bitmap(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2
         return ret;
     }
 
-    return st7365p_write_data(rgb565_data, bytes);
+    return _st7365p_write_data(rgb565_data, bytes);
 }
 
 /*
@@ -535,7 +535,7 @@ esp_err_t st7365p_fill_color(uint16_t rgb565, uint32_t pixel_count)
     while (remain > 0U)
     {
         uint32_t chunk_pixels = (remain > fill_chunk_pixels) ? fill_chunk_pixels : remain;
-        ret = st7365p_write_data(fill_chunk, (size_t)(chunk_pixels * ST7365P_BYTES_PER_PIXEL));
+        ret = _st7365p_write_data(fill_chunk, (size_t)(chunk_pixels * ST7365P_BYTES_PER_PIXEL));
         if (ret != ESP_OK)
         {
             return ret;
@@ -604,7 +604,7 @@ esp_err_t st7365p_lvgl_flush(int32_t x1, int32_t y1, int32_t x2, int32_t y2, con
     {
         const uint8_t *row_ptr = src +
                                  (size_t)(((start_src_y + row) * src_w + start_src_x) * ST7365P_BYTES_PER_PIXEL);
-        ret = st7365p_write_data(row_ptr, bytes_per_row);
+        ret = _st7365p_write_data(row_ptr, bytes_per_row);
         if (ret != ESP_OK)
         {
             return ret;
@@ -638,7 +638,7 @@ esp_err_t st7365p_panel_init(const st7365p_cfg_t *cfg)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ret = st7365p_ensure_spi_ready();
+    ret = _st7365p_ensure_spi_ready();
     if (ret != ESP_OK)
     {
         return ret;
@@ -655,12 +655,12 @@ esp_err_t st7365p_panel_init(const st7365p_cfg_t *cfg)
         return ret;
     }
 
-    ret = st7365p_write_cmd(ST7365P_CMD_SWRESET);
+    ret = _st7365p_write_cmd(ST7365P_CMD_SWRESET);
     if (ret != ESP_OK)
     {
         return ret;
     }
-    st7365p_delay_ms(120);
+    _st7365p_delay_ms(120);
 
     ret = st7365p_sleep_out();
     if (ret != ESP_OK)
@@ -668,13 +668,13 @@ esp_err_t st7365p_panel_init(const st7365p_cfg_t *cfg)
         return ret;
     }
 
-    ret = st7365p_write_cmd_data(ST7365P_CMD_COLMOD, &active_cfg.colmod, 1);
+    ret = _st7365p_write_cmd_data(ST7365P_CMD_COLMOD, &active_cfg.colmod, 1);
     if (ret != ESP_OK)
     {
         return ret;
     }
 
-    ret = st7365p_write_cmd_data(ST7365P_CMD_MADCTL, &active_cfg.madctl, 1);
+    ret = _st7365p_write_cmd_data(ST7365P_CMD_MADCTL, &active_cfg.madctl, 1);
     if (ret != ESP_OK)
     {
         return ret;
@@ -682,11 +682,11 @@ esp_err_t st7365p_panel_init(const st7365p_cfg_t *cfg)
 
     if (active_cfg.invert_color)
     {
-        ret = st7365p_write_cmd(ST7365P_CMD_INVON);
+        ret = _st7365p_write_cmd(ST7365P_CMD_INVON);
     }
     else
     {
-        ret = st7365p_write_cmd(ST7365P_CMD_INVOFF);
+        ret = _st7365p_write_cmd(ST7365P_CMD_INVOFF);
     }
     if (ret != ESP_OK)
     {

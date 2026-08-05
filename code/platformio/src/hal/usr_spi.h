@@ -11,10 +11,12 @@
 #include "esp_heap_caps.h"
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "soc/soc_caps.h"
 
 #include "user_config.h"
+
 typedef struct
 {
     spi_device_handle_t fd;
@@ -23,6 +25,12 @@ typedef struct
     gpio_num_t cs_pin;
     int clock_speed_hz;
 } usr_spi_s;
+
+typedef struct
+{
+    SemaphoreHandle_t mutex;
+    StaticSemaphore_t storage;
+} spi_host_mutex_s;
 
 /* Initialize mutex for one SPI host shared by multiple peripherals. */
 esp_err_t spi_bus_mutex_init(spi_host_device_t host);

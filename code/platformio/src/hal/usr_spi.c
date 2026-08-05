@@ -1,16 +1,8 @@
 #include "usr_spi.h"
 
-#include "freertos/semphr.h"
-
 #define USR_SPI_DEVICE_QUEUE_SIZE 6U
 
-struct spi_host_mutex_s
-{
-    SemaphoreHandle_t mutex;
-    StaticSemaphore_t storage;
-};
-
-static struct spi_host_mutex_s s_spi_host_mutexes[SOC_SPI_PERIPH_NUM];
+static spi_host_mutex_s s_spi_host_mutexes[SOC_SPI_PERIPH_NUM];
 static portMUX_TYPE s_spi_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
 
 /*
@@ -18,7 +10,7 @@ static portMUX_TYPE s_spi_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
  * input: host - SPI host id to validate.
  * output: true when host is valid; otherwise false.
  */
-static bool spi_host_is_valid(spi_host_device_t host)
+static bool _spi_host_is_valid(spi_host_device_t host)
 {
     return ((int)host >= 0) && ((int)host < SOC_SPI_PERIPH_NUM);
 }
@@ -28,11 +20,11 @@ static bool spi_host_is_valid(spi_host_device_t host)
  * input: host - SPI host id.
  * output: Valid mutex handle on success; otherwise NULL.
  */
-static SemaphoreHandle_t spi_host_get_mutex(spi_host_device_t host)
+static SemaphoreHandle_t _spi_host_get_mutex(spi_host_device_t host)
 {
     SemaphoreHandle_t mutex;
 
-    if (!spi_host_is_valid(host))
+    if (!_spi_host_is_valid(host))
     {
         return NULL;
     }
@@ -62,12 +54,12 @@ static SemaphoreHandle_t spi_host_get_mutex(spi_host_device_t host)
  */
 esp_err_t spi_bus_mutex_init(spi_host_device_t host)
 {
-    if (!spi_host_is_valid(host))
+    if (!_spi_host_is_valid(host))
     {
         return ESP_ERR_INVALID_ARG;
     }
 
-    return (spi_host_get_mutex(host) != NULL) ? ESP_OK : ESP_ERR_NO_MEM;
+    return (_spi_host_get_mutex(host) != NULL) ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
 /*
@@ -79,12 +71,12 @@ esp_err_t spi_bus_acquire(spi_host_device_t host, TickType_t timeout_ticks)
 {
     SemaphoreHandle_t mutex;
 
-    if (!spi_host_is_valid(host))
+    if (!_spi_host_is_valid(host))
     {
         return ESP_ERR_INVALID_ARG;
     }
 
-    mutex = spi_host_get_mutex(host);
+    mutex = _spi_host_get_mutex(host);
     if (mutex == NULL)
     {
         return ESP_ERR_NO_MEM;
@@ -107,7 +99,7 @@ esp_err_t spi_bus_release(spi_host_device_t host)
 {
     SemaphoreHandle_t mutex;
 
-    if (!spi_host_is_valid(host))
+    if (!_spi_host_is_valid(host))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -135,7 +127,7 @@ bool spi_bus_is_idle(spi_host_device_t host)
 {
     SemaphoreHandle_t mutex;
 
-    if (!spi_host_is_valid(host))
+    if (!_spi_host_is_valid(host))
     {
         return false;
     }
@@ -160,7 +152,7 @@ bool spi_bus_is_idle(spi_host_device_t host)
  * input: spi - pointer to initialized usr_spi_s configuration.
  * output: ESP_OK on success; otherwise ESP-IDF error code.
  */
-static esp_err_t spi_init_device(usr_spi_s *spi)
+static esp_err_t _spi_init_device(usr_spi_s *spi)
 {
     spi_device_interface_config_t dev_config = {0};
     esp_err_t ret = ESP_OK;
@@ -186,7 +178,7 @@ static esp_err_t spi_init_device(usr_spi_s *spi)
  * input: dma_buffers - array of DMA buffer pointers; count - number of slots.
  * output: none.
  */
-static void spi_free_dma_pool(uint8_t **dma_buffers, size_t count)
+static void _spi_free_dma_pool(uint8_t **dma_buffers, size_t count)
 {
     size_t i;
 
@@ -222,7 +214,7 @@ esp_err_t spi_create_device(usr_spi_s *spi,
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!spi_host_is_valid(host) || (speed_hz <= 0))
+    if (!_spi_host_is_valid(host) || (speed_hz <= 0))
     {
         return ESP_ERR_INVALID_ARG;
     }
@@ -243,7 +235,7 @@ esp_err_t spi_create_device(usr_spi_s *spi,
     spi->cs_pin = cs_pin;
     spi->clock_speed_hz = speed_hz;
 
-     return spi_init_device(spi);
+     return _spi_init_device(spi);
 }
 
 /*
@@ -431,7 +423,7 @@ cleanup:
         }
     }
 
-    spi_free_dma_pool(dma_buffers, depth);
+    _spi_free_dma_pool(dma_buffers, depth);
     if (transactions != NULL)
     {
         heap_caps_free(transactions);

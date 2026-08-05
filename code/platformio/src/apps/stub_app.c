@@ -4,7 +4,7 @@
 #define STUB_TOP_GAP 8
 #define STUB_BOTTOM_GAP 8
 
-static void stub_app_back_click_cb(lv_event_t *e)
+static void _stub_app_back_click_cb(lv_event_t *e)
 {
     const stub_app_cfg_t *cfg = (const stub_app_cfg_t *)lv_event_get_user_data(e);
 
@@ -14,7 +14,7 @@ static void stub_app_back_click_cb(lv_event_t *e)
     }
 }
 
-static void stub_app_screen_delete_cb(lv_event_t *e)
+static void _stub_app_screen_delete_cb(lv_event_t *e)
 {
     lv_obj_t **screen_holder = (lv_obj_t **)lv_event_get_user_data(e);
 
@@ -73,8 +73,8 @@ lv_obj_t *stub_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h, const stub_
     lv_obj_set_style_text_color(back_text, lv_color_white(), 0);
     lv_obj_center(back_text);
 
-    lv_obj_add_event_cb(back_btn, stub_app_back_click_cb, LV_EVENT_CLICKED, (void *)cfg);
-    lv_obj_add_event_cb(scr, stub_app_screen_delete_cb, LV_EVENT_DELETE, cfg->screen_holder);
+    lv_obj_add_event_cb(back_btn, _stub_app_back_click_cb, LV_EVENT_CLICKED, (void *)cfg);
+    lv_obj_add_event_cb(scr, _stub_app_screen_delete_cb, LV_EVENT_DELETE, cfg->screen_holder);
 
     *cfg->screen_holder = scr;
 

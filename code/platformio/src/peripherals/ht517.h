@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <limits.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,13 +18,14 @@
 #include "esp_log.h"
 #include "esp_opus_dec.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include "filesystem/usr_fs.h"
 #include "user_config.h"
 
 #define HT517_STEREO_CHANNELS 2U
 #define HT517_PCM_FRAME_BYTES (sizeof(int16_t) * HT517_STEREO_CHANNELS)
-#define HT517_COMMON_OGG_MAX_FILES 32U
-#define HT517_COMMON_OGG_NAME_MAX_LEN 64U
 
 #define HT517_SAMPLE_RATE_HZ USER_AUDIO_SAMPLE_RATE_HZ
 #define HT517_WRITE_TIMEOUT_MS 300U
@@ -31,7 +33,19 @@
 #define HT517_OPUS_MAX_PACKET_BYTES 8192U
 #define HT517_OPUS_MAX_MONO_SAMPLES 5760U
 
-struct ht517_ogg_parser_ctx
+#define HT517_PLAY_TASK_STACK_BYTES 12288U
+#define HT517_PLAY_TASK_PRIORITY 5U
+#define HT517_PLAY_TASK_IDLE_MS 20U
+#define HT517_DEFAULT_GAIN_PERCENT 100U
+#define HT517_GAIN_PERCENT_MAX 200U
+
+typedef struct ht517_play_item_s
+{
+    char *file_path;
+    struct ht517_play_item_s *next;
+} ht517_play_item_t;
+
+typedef struct
 {
     bool head_seen;
     bool tags_seen;
@@ -40,13 +54,21 @@ struct ht517_ogg_parser_ctx
     size_t packet_len;
     size_t packet_capacity;
     uint8_t *packet_buf;
-};
+} ht517_ogg_parser_ctx_t;
 
-/* Return true after I2S TX channel has been initialized and enabled. */
-bool ht517_is_ready(void);
-/* Configure I2S pins/format for HT517 stereo playback mode. */
-esp_err_t ht517_init_device(void);
-/* Scan /storage/common and play next .ogg file in sequence. */
-esp_err_t ht517_play_next_common_ogg(void);
-/* Play a prompt from assets storage (.pcm or .ogg/Opus). */
-esp_err_t ht517_play_prompt_from_storage(const char *locale, const char *prompt_name);
+typedef struct
+{
+    bool ready;
+    bool playing;
+    uint32_t queue_len;
+    uint8_t gain_percent;
+} ht517_info_s;
+
+/* Initialize HT517 playback backend and create playback task. */
+esp_err_t ht517_init(void);
+/* Append one audio path (.ogg/.pcm) into FIFO playback list. */
+esp_err_t ht517_load(const char *path);
+/* Read current HT517 runtime status (ready/playing/queue/gain). */
+ht517_info_s ht517_read_info(void);
+/* Configure playback gain in percentage (0~200). */
+esp_err_t ht517_config(uint8_t gain_percent);

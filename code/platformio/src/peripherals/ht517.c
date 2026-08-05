@@ -4,13 +4,20 @@
 
 static i2s_chan_handle_t s_tx_chan = NULL;
 static bool s_ready = false;
-static uint32_t s_common_ogg_count = 0U;
-static uint32_t s_common_ogg_index = 0U;
-static char s_common_ogg_names[HT517_COMMON_OGG_MAX_FILES][HT517_COMMON_OGG_NAME_MAX_LEN];
+static TaskHandle_t s_play_task = NULL;
+static volatile bool s_playing = false;
+static uint8_t s_gain_percent = HT517_DEFAULT_GAIN_PERCENT;
+static uint32_t s_play_queue_len = 0U;
+static portMUX_TYPE s_play_list_lock = portMUX_INITIALIZER_UNLOCKED;
+static ht517_play_item_t *s_play_head = NULL;
+static ht517_play_item_t *s_play_tail = NULL;
 
-static esp_err_t ht517_play_ogg_buffer(const uint8_t *ogg_data, size_t ogg_bytes);
-
-static void *ht517_audio_malloc(size_t bytes)
+/*
+ * brief: Allocate audio buffer from PSRAM first, then fallback to internal RAM.
+ * input: bytes - requested allocation size in bytes.
+ * output: Allocated buffer pointer on success; otherwise NULL.
+ */
+static void *_ht517_audio_malloc(size_t bytes)
 {
     void *ptr;
 
@@ -28,106 +35,117 @@ static void *ht517_audio_malloc(size_t bytes)
     return heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
 }
 
-static int ht517_common_ogg_name_compare(const void *lhs, const void *rhs)
+/*
+ * brief: Validate whether path suffix is supported by HT517 playback pipeline.
+ * input: file_path - full path string.
+ * output: true for .ogg/.pcm paths; otherwise false.
+ */
+static bool _ht517_path_is_supported(const char *file_path)
 {
-    const char *name_lhs = (const char *)lhs;
-    const char *name_rhs = (const char *)rhs;
+    if (file_path == NULL)
+    {
+        return false;
+    }
 
-    return strcmp(name_lhs, name_rhs);
+    return usr_fs_path_has_suffix(file_path, ".ogg") ||
+           usr_fs_path_has_suffix(file_path, ".pcm");
 }
 
-static esp_err_t ht517_scan_common_ogg_files(void)
+/*
+ * brief: Free one playback queue node and its owned path buffer.
+ * input: item - queue node pointer.
+ * output: None.
+ */
+static void _ht517_free_play_item(ht517_play_item_t *item)
 {
-    char common_dir[USER_FS_PATH_MAX_LEN];
-    size_t file_count;
-    esp_err_t ret;
-
-    ret = usr_fs_format_asset_path("common",
-                                   NULL,
-                                   NULL,
-                                   common_dir,
-                                   sizeof(common_dir));
-    if (ret != ESP_OK)
+    if (item == NULL)
     {
-        return ret;
+        return;
     }
 
-    ret = usr_fs_list_dir_files_with_suffix(common_dir,
-                                            ".ogg",
-                                            (char *)s_common_ogg_names,
-                                            HT517_COMMON_OGG_MAX_FILES,
-                                            HT517_COMMON_OGG_NAME_MAX_LEN,
-                                            &file_count);
-    if (ret != ESP_OK)
-    {
-        s_common_ogg_count = 0U;
-        s_common_ogg_index = 0U;
-        return ret;
-    }
-
-    s_common_ogg_count = (uint32_t)file_count;
-
-    qsort(s_common_ogg_names,
-          s_common_ogg_count,
-          sizeof(s_common_ogg_names[0]),
-          ht517_common_ogg_name_compare);
-
-    if (s_common_ogg_index >= s_common_ogg_count)
-    {
-        s_common_ogg_index = 0U;
-    }
-
-    ESP_LOGI(TAG,
-             "common .ogg indexed, count=%u",
-             (unsigned)s_common_ogg_count);
-
-    return ESP_OK;
+    free(item->file_path);
+    free(item);
 }
 
-static esp_err_t ht517_play_common_ogg_file(const char *file_name)
+/*
+ * brief: Pop one queued playback path from FIFO linked list.
+ * input: None.
+ * output: Queue node pointer when available; otherwise NULL.
+ */
+static ht517_play_item_t *_ht517_pop_play_item(void)
 {
-    char file_path[USER_FS_PATH_MAX_LEN];
-    uint8_t *ogg_data;
-    size_t ogg_size;
-    esp_err_t ret;
+    ht517_play_item_t *item;
 
-    if ((file_name == NULL) || !usr_fs_path_has_suffix(file_name, ".ogg"))
+    portENTER_CRITICAL(&s_play_list_lock);
+
+    item = s_play_head;
+    if (item != NULL)
     {
-        return ESP_ERR_INVALID_ARG;
+        s_play_head = item->next;
+        if (s_play_head == NULL)
+        {
+            s_play_tail = NULL;
+        }
+        item->next = NULL;
+        if (s_play_queue_len > 0U)
+        {
+            s_play_queue_len--;
+        }
     }
 
-    ret = usr_fs_format_asset_path("common",
-                                   NULL,
-                                   file_name,
-                                   file_path,
-                                   sizeof(file_path));
-    if (ret != ESP_OK)
-    {
-        return ret;
-    }
+    portEXIT_CRITICAL(&s_play_list_lock);
 
-    ogg_data = NULL;
-    ogg_size = 0U;
-    ret = usr_fs_read_file(file_path, &ogg_data, &ogg_size);
-    if (ret != ESP_OK)
-    {
-        return ret;
-    }
-
-    if (ogg_size == 0U)
-    {
-        free(ogg_data);
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    ret = ht517_play_ogg_buffer(ogg_data, ogg_size);
-    free(ogg_data);
-
-    return ret;
+    return item;
 }
 
-static esp_err_t ht517_write_pcm_bytes(const uint8_t *data, size_t size)
+/*
+ * brief: Apply configured gain scaling to signed 16-bit PCM samples in place.
+ * input: pcm16 - PCM sample buffer; sample_count - number of int16 samples.
+ * output: None.
+ */
+static void _ht517_apply_gain_pcm16(int16_t *pcm16, size_t sample_count)
 {
+    uint8_t gain_percent;
+    size_t i;
+
+    if ((pcm16 == NULL) || (sample_count == 0U))
+    {
+        return;
+    }
+
+    gain_percent = s_gain_percent;
+    if (gain_percent == HT517_DEFAULT_GAIN_PERCENT)
+    {
+        return;
+    }
+
+    for (i = 0U; i < sample_count; i++)
+    {
+        int32_t scaled;
+
+        scaled = ((int32_t)pcm16[i] * (int32_t)gain_percent) / 100;
+        if (scaled > INT16_MAX)
+        {
+            scaled = INT16_MAX;
+        }
+        else if (scaled < INT16_MIN)
+        {
+            scaled = INT16_MIN;
+        }
+
+        pcm16[i] = (int16_t)scaled;
+    }
+}
+
+/*
+ * brief: Write PCM bytes to I2S channel until all data is consumed.
+ * input: data - PCM byte buffer; size - byte count to send.
+ * output: ESP_OK on success; otherwise argument, timeout, or I2S write error.
+ */
+static esp_err_t _ht517_write_pcm_bytes(const uint8_t *data, size_t size)
+{
+    int16_t gain_chunk_buf[256];
+    size_t gain_chunk_bytes;
     size_t total_written;
 
     if ((data == NULL) || (size == 0U))
@@ -135,45 +153,78 @@ static esp_err_t ht517_write_pcm_bytes(const uint8_t *data, size_t size)
         return ESP_ERR_INVALID_ARG;
     }
 
+    if ((size % sizeof(int16_t)) != 0U)
+    {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    gain_chunk_bytes = sizeof(gain_chunk_buf);
+
     total_written = 0U;
     while (total_written < size)
     {
-        size_t bytes_written = 0U;
+        size_t bytes_written;
+        size_t src_chunk_bytes;
+        size_t chunk_written;
+        uint8_t *tx_ptr;
         esp_err_t ret;
 
-        ret = i2s_channel_write(s_tx_chan,
-                                data + total_written,
-                                size - total_written,
-                                &bytes_written,
-                                HT517_WRITE_TIMEOUT_MS);
-        if (ret != ESP_OK)
+        src_chunk_bytes = size - total_written;
+        if (src_chunk_bytes > gain_chunk_bytes)
         {
-            ESP_LOGE(TAG,
-                     "i2s_channel_write failed, err=%d total=%u remain=%u chunk=%u",
-                     (int)ret,
-                     (unsigned)total_written,
-                     (unsigned)(size - total_written),
-                     (unsigned)bytes_written);
-            return ret;
+            src_chunk_bytes = gain_chunk_bytes;
         }
 
-        if (bytes_written == 0U)
+        memcpy(gain_chunk_buf, data + total_written, src_chunk_bytes);
+        _ht517_apply_gain_pcm16(gain_chunk_buf, src_chunk_bytes / sizeof(int16_t));
+
+        tx_ptr = (uint8_t *)gain_chunk_buf;
+        chunk_written = 0U;
+
+        while (chunk_written < src_chunk_bytes)
         {
-            ESP_LOGE(TAG,
-                     "i2s_channel_write timeout, err=%d total=%u remain=%u",
-                     (int)ret,
-                     (unsigned)total_written,
-                     (unsigned)(size - total_written));
-            return ESP_ERR_TIMEOUT;
+            bytes_written = 0U;
+            ret = i2s_channel_write(s_tx_chan,
+                                    tx_ptr + chunk_written,
+                                    src_chunk_bytes - chunk_written,
+                                    &bytes_written,
+                                    HT517_WRITE_TIMEOUT_MS);
+            if (ret != ESP_OK)
+            {
+                ESP_LOGE(TAG,
+                         "i2s_channel_write failed, err=%d total=%u remain=%u chunk=%u",
+                         (int)ret,
+                         (unsigned)total_written,
+                         (unsigned)(size - total_written),
+                         (unsigned)bytes_written);
+                return ret;
+            }
+
+            if (bytes_written == 0U)
+            {
+                ESP_LOGE(TAG,
+                         "i2s_channel_write timeout, err=%d total=%u remain=%u",
+                         (int)ret,
+                         (unsigned)total_written,
+                         (unsigned)(size - total_written));
+                return ESP_ERR_TIMEOUT;
+            }
+
+            chunk_written += bytes_written;
         }
 
-        total_written += bytes_written;
+        total_written += src_chunk_bytes;
     }
 
     return ESP_OK;
 }
 
-static esp_err_t ht517_play_pcm_buffer(const uint8_t *pcm_data, size_t pcm_bytes)
+/*
+ * brief: Play interleaved stereo PCM buffer after frame-alignment validation.
+ * input: pcm_data - PCM byte buffer; pcm_bytes - byte length.
+ * output: ESP_OK on success; otherwise argument, size, or I2S write error.
+ */
+static esp_err_t _ht517_play_pcm_buffer(const uint8_t *pcm_data, size_t pcm_bytes)
 {
     size_t aligned_bytes;
 
@@ -195,10 +246,15 @@ static esp_err_t ht517_play_pcm_buffer(const uint8_t *pcm_data, size_t pcm_bytes
                  (unsigned)(pcm_bytes - aligned_bytes));
     }
 
-    return ht517_write_pcm_bytes(pcm_data, aligned_bytes);
+    return _ht517_write_pcm_bytes(pcm_data, aligned_bytes);
 }
 
-static esp_err_t ht517_play_mono_pcm_buffer(const int16_t *mono_data, size_t mono_samples)
+/*
+ * brief: Expand mono PCM samples to stereo and play through I2S.
+ * input: mono_data - mono PCM sample buffer; mono_samples - sample count.
+ * output: ESP_OK on success; otherwise argument, memory, or playback error.
+ */
+static esp_err_t _ht517_play_mono_pcm_buffer(const int16_t *mono_data, size_t mono_samples)
 {
     int16_t *stereo_data;
     size_t stereo_bytes;
@@ -211,7 +267,7 @@ static esp_err_t ht517_play_mono_pcm_buffer(const int16_t *mono_data, size_t mon
     }
 
     stereo_bytes = mono_samples * HT517_STEREO_CHANNELS * sizeof(int16_t);
-    stereo_data = (int16_t *)ht517_audio_malloc(stereo_bytes);
+    stereo_data = (int16_t *)_ht517_audio_malloc(stereo_bytes);
     if (stereo_data == NULL)
     {
         return ESP_ERR_NO_MEM;
@@ -226,12 +282,17 @@ static esp_err_t ht517_play_mono_pcm_buffer(const int16_t *mono_data, size_t mon
         stereo_data[idx + 1U] = mono_data[i];
     }
 
-    ret = ht517_play_pcm_buffer((const uint8_t *)stereo_data, stereo_bytes);
+    ret = _ht517_play_pcm_buffer((const uint8_t *)stereo_data, stereo_bytes);
     free(stereo_data);
     return ret;
 }
 
-static int ht517_parse_opus_sample_rate(const uint8_t *packet, size_t packet_len)
+/*
+ * brief: Parse OpusHead packet sample rate and fallback to configured rate when invalid.
+ * input: packet - Opus packet bytes; packet_len - packet size.
+ * output: Parsed sample rate in Hz.
+ */
+static int _ht517_parse_opus_sample_rate(const uint8_t *packet, size_t packet_len)
 {
     uint32_t rate;
 
@@ -252,7 +313,12 @@ static int ht517_parse_opus_sample_rate(const uint8_t *packet, size_t packet_len
     return (int)rate;
 }
 
-static esp_err_t ht517_open_opus_decoder(void **out_decoder, int hinted_sample_rate)
+/*
+ * brief: Open Opus decoder instance for playback pipeline.
+ * input: out_decoder - output decoder handle pointer; hinted_sample_rate - stream rate hint.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG or ESP_FAIL.
+ */
+static esp_err_t _ht517_open_opus_decoder(void **out_decoder, int hinted_sample_rate)
 {
     esp_opus_dec_cfg_t dec_cfg = {
         .sample_rate = HT517_SAMPLE_RATE_HZ,
@@ -286,7 +352,12 @@ static esp_err_t ht517_open_opus_decoder(void **out_decoder, int hinted_sample_r
     return ESP_OK;
 }
 
-static esp_err_t ht517_decode_opus_packet_and_play(void *decoder,
+/*
+ * brief: Decode one Opus packet into mono PCM and play it as stereo.
+ * input: decoder - opened Opus decoder; packet - Opus packet bytes; packet_len - packet size.
+ * output: ESP_OK on success; otherwise argument, memory, decode, or playback error.
+ */
+static esp_err_t _ht517_decode_opus_packet_and_play(void *decoder,
                                                    const uint8_t *packet,
                                                    size_t packet_len)
 {
@@ -305,7 +376,7 @@ static esp_err_t ht517_decode_opus_packet_and_play(void *decoder,
     }
 
     mono_buf_bytes = HT517_OPUS_MAX_MONO_SAMPLES * sizeof(int16_t);
-    mono_buf = (int16_t *)ht517_audio_malloc(mono_buf_bytes);
+    mono_buf = (int16_t *)_ht517_audio_malloc(mono_buf_bytes);
     if (mono_buf == NULL)
     {
         return ESP_ERR_NO_MEM;
@@ -341,14 +412,20 @@ static esp_err_t ht517_decode_opus_packet_and_play(void *decoder,
     ret = ESP_OK;
     if (mono_samples > 0U)
     {
-        ret = ht517_play_mono_pcm_buffer(mono_buf, mono_samples);
+        ret = _ht517_play_mono_pcm_buffer(mono_buf, mono_samples);
     }
 
     free(mono_buf);
     return ret;
 }
 
-static esp_err_t ht517_process_ogg_packet(struct ht517_ogg_parser_ctx *ctx,
+/*
+ * brief: Process one assembled OGG packet, handling Opus headers and audio frames.
+ * input: ctx - parser context; decoder - decoder handle pointer; packet - packet bytes;
+ *        packet_len - packet size.
+ * output: ESP_OK on success; otherwise argument or decode/playback error.
+ */
+static esp_err_t _ht517_process_ogg_packet(ht517_ogg_parser_ctx_t *ctx,
                                           void **decoder,
                                           const uint8_t *packet,
                                           size_t packet_len)
@@ -367,7 +444,7 @@ static esp_err_t ht517_process_ogg_packet(struct ht517_ogg_parser_ctx *ctx,
 
     if ((!ctx->head_seen) && (packet_len >= 8U) && (memcmp(packet, "OpusHead", 8U) == 0))
     {
-        ctx->sample_rate = ht517_parse_opus_sample_rate(packet, packet_len);
+        ctx->sample_rate = _ht517_parse_opus_sample_rate(packet, packet_len);
         ctx->head_seen = true;
         return ESP_OK;
     }
@@ -386,14 +463,14 @@ static esp_err_t ht517_process_ogg_packet(struct ht517_ogg_parser_ctx *ctx,
 
     if (*decoder == NULL)
     {
-        ret = ht517_open_opus_decoder(decoder, ctx->sample_rate);
+        ret = _ht517_open_opus_decoder(decoder, ctx->sample_rate);
         if (ret != ESP_OK)
         {
             return ret;
         }
     }
 
-    ret = ht517_decode_opus_packet_and_play(*decoder, packet, packet_len);
+    ret = _ht517_decode_opus_packet_and_play(*decoder, packet, packet_len);
     if (ret == ESP_OK)
     {
         ctx->audio_packet_count++;
@@ -402,10 +479,14 @@ static esp_err_t ht517_process_ogg_packet(struct ht517_ogg_parser_ctx *ctx,
     return ret;
 }
 
-/* Follow Xiaozhi path: demux OGG container into Opus packets, then decode to PCM for I2S playback. */
-static esp_err_t ht517_play_ogg_buffer(const uint8_t *ogg_data, size_t ogg_bytes)
+/*
+ * brief: Demux OGG container into Opus packets, then decode and stream to I2S.
+ * input: ogg_data - OGG container bytes; ogg_bytes - container size.
+ * output: ESP_OK on success; otherwise argument, memory, format, decode, or playback error.
+ */
+static esp_err_t _ht517_play_ogg_buffer(const uint8_t *ogg_data, size_t ogg_bytes)
 {
-    struct ht517_ogg_parser_ctx ctx;
+    ht517_ogg_parser_ctx_t ctx;
     size_t offset;
     void *decoder;
     esp_err_t ret;
@@ -422,7 +503,7 @@ static esp_err_t ht517_play_ogg_buffer(const uint8_t *ogg_data, size_t ogg_bytes
     ret = ESP_OK;
 
     ctx.packet_capacity = HT517_OPUS_MAX_PACKET_BYTES;
-    ctx.packet_buf = (uint8_t *)ht517_audio_malloc(ctx.packet_capacity);
+    ctx.packet_buf = (uint8_t *)_ht517_audio_malloc(ctx.packet_capacity);
     if (ctx.packet_buf == NULL)
     {
         return ESP_ERR_NO_MEM;
@@ -501,7 +582,7 @@ static esp_err_t ht517_play_ogg_buffer(const uint8_t *ogg_data, size_t ogg_bytes
 
             if (seg_len < 255U)
             {
-                ret = ht517_process_ogg_packet(&ctx, &decoder, ctx.packet_buf, ctx.packet_len);
+                ret = _ht517_process_ogg_packet(&ctx, &decoder, ctx.packet_buf, ctx.packet_len);
                 ctx.packet_len = 0U;
                 if (ret != ESP_OK)
                 {
@@ -534,15 +615,110 @@ static esp_err_t ht517_play_ogg_buffer(const uint8_t *ogg_data, size_t ogg_bytes
     return ret;
 }
 
-bool ht517_is_ready(void)
+/*
+ * brief: Load one audio file by full path and play based on file suffix.
+ * input: file_path - full path ending with .ogg or .pcm.
+ * output: ESP_OK on success; otherwise argument, filesystem, decode, or playback error.
+ */
+static esp_err_t _ht517_play_file_path(const char *file_path)
 {
-    return s_ready;
+    uint8_t *audio_data;
+    size_t audio_size;
+    esp_err_t ret;
+
+    if (!_ht517_path_is_supported(file_path))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    audio_data = NULL;
+    audio_size = 0U;
+    ret = usr_fs_read_file(file_path, &audio_data, &audio_size);
+    if (ret != ESP_OK)
+    {
+        return ret;
+    }
+
+    if (audio_size == 0U)
+    {
+        free(audio_data);
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (usr_fs_path_has_suffix(file_path, ".ogg"))
+    {
+        ret = _ht517_play_ogg_buffer(audio_data, audio_size);
+    }
+    else
+    {
+        ret = _ht517_play_pcm_buffer(audio_data, audio_size);
+    }
+
+    free(audio_data);
+
+    return ret;
 }
 
-esp_err_t ht517_init_device(void)
+/*
+ * brief: Playback worker task that consumes FIFO list and plays queued files in order.
+ * input: arg - unused task argument.
+ * output: None.
+ */
+static void _ht517_playback_task(void *arg)
+{
+    TickType_t idle_ticks;
+
+    (void)arg;
+    idle_ticks = pdMS_TO_TICKS(HT517_PLAY_TASK_IDLE_MS);
+    if (idle_ticks < 1)
+    {
+        idle_ticks = 1;
+    }
+
+    for (;;)
+    {
+        ht517_play_item_t *item;
+        esp_err_t ret;
+
+        if (s_playing)
+        {
+            vTaskDelay(idle_ticks);
+            continue;
+        }
+
+        item = _ht517_pop_play_item();
+        if (item == NULL)
+        {
+            vTaskDelay(idle_ticks);
+            continue;
+        }
+
+        s_playing = true;
+        ret = _ht517_play_file_path(item->file_path);
+        s_playing = false;
+
+        if (ret != ESP_OK)
+        {
+            ESP_LOGW(TAG,
+                     "play queue path failed, path=%s err=%d",
+                     item->file_path,
+                     (int)ret);
+        }
+
+        _ht517_free_play_item(item);
+    }
+}
+
+/*
+ * brief: Initialize HT517 playback backend and create playback task.
+ * input: None.
+ * output: ESP_OK on success; otherwise propagated initialization error.
+ */
+esp_err_t ht517_init(void)
 {
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM, I2S_ROLE_MASTER);
     i2s_chan_info_t chan_info = {0};
+    BaseType_t task_ret;
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(HT517_SAMPLE_RATE_HZ),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT,
@@ -606,6 +782,26 @@ esp_err_t ht517_init_device(void)
         dma_total = chan_info.total_dma_buf_size;
     }
 
+    task_ret = xTaskCreate(_ht517_playback_task,
+                           "ht517_play",
+                           HT517_PLAY_TASK_STACK_BYTES,
+                           NULL,
+                           HT517_PLAY_TASK_PRIORITY,
+                           &s_play_task);
+    if (task_ret != pdPASS)
+    {
+        (void)i2s_del_channel(s_tx_chan);
+        s_tx_chan = NULL;
+        s_play_task = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    s_play_head = NULL;
+    s_play_tail = NULL;
+    s_play_queue_len = 0U;
+    s_playing = false;
+    s_gain_percent = HT517_DEFAULT_GAIN_PERCENT;
+
     s_ready = true;
 
     ESP_LOGI(TAG, "HT517 I2S ready, fs=%u, bclk=%d ws=%d dout=%d, dma_total=%u",
@@ -618,119 +814,104 @@ esp_err_t ht517_init_device(void)
     return ESP_OK;
 }
 
-esp_err_t ht517_play_next_common_ogg(void)
+/*
+ * brief: Append one full path into FIFO playback list.
+ * input: path - full path ending with .ogg or .pcm.
+ * output: ESP_OK on success; otherwise state/argument/no-mem/not-found error.
+ */
+esp_err_t ht517_load(const char *path)
 {
-    esp_err_t ret;
-    uint32_t current_index;
+    ht517_play_item_t *item;
+    size_t path_len;
 
-    if (!s_ready || (s_tx_chan == NULL) || !usr_fs_is_ready())
+    if (!s_ready || (s_tx_chan == NULL) || !usr_fs_is_ready() || (s_play_task == NULL))
     {
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (s_common_ogg_count == 0U)
+    if (!_ht517_path_is_supported(path))
     {
-        ret = ht517_scan_common_ogg_files();
-        if (ret != ESP_OK)
-        {
-            return ret;
-        }
+        return ESP_ERR_INVALID_ARG;
     }
 
-    current_index = s_common_ogg_index;
-    ret = ht517_play_common_ogg_file(s_common_ogg_names[current_index]);
-    if (ret != ESP_OK)
+    if (!usr_fs_path_exists(path))
     {
-        if (ret == ESP_ERR_NOT_FOUND)
-        {
-            ret = ht517_scan_common_ogg_files();
-            if (ret == ESP_OK)
-            {
-                current_index = s_common_ogg_index;
-                ret = ht517_play_common_ogg_file(s_common_ogg_names[current_index]);
-            }
-        }
-
-        if (ret != ESP_OK)
-        {
-            ESP_LOGW(TAG,
-                     "play common .ogg failed, idx=%u err=%d",
-                     (unsigned)current_index,
-                     (int)ret);
-            return ret;
-        }
+        return ESP_ERR_NOT_FOUND;
     }
 
-    ESP_LOGI(TAG,
-             "played common .ogg [%u/%u]: %s",
-             (unsigned)(current_index + 1U),
-             (unsigned)s_common_ogg_count,
-             s_common_ogg_names[current_index]);
+    item = (ht517_play_item_t *)malloc(sizeof(ht517_play_item_t));
+    if (item == NULL)
+    {
+        return ESP_ERR_NO_MEM;
+    }
 
-    s_common_ogg_index = (current_index + 1U) % s_common_ogg_count;
+    path_len = strlen(path);
+    item->file_path = (char *)malloc(path_len + 1U);
+    if (item->file_path == NULL)
+    {
+        free(item);
+        return ESP_ERR_NO_MEM;
+    }
+
+    memcpy(item->file_path, path, path_len + 1U);
+    item->next = NULL;
+
+    portENTER_CRITICAL(&s_play_list_lock);
+    if (s_play_tail == NULL)
+    {
+        s_play_head = item;
+        s_play_tail = item;
+    }
+    else
+    {
+        s_play_tail->next = item;
+        s_play_tail = item;
+    }
+    s_play_queue_len++;
+    portEXIT_CRITICAL(&s_play_list_lock);
+
     return ESP_OK;
 }
 
-esp_err_t ht517_play_prompt_from_storage(const char *locale, const char *prompt_name)
+/*
+ * brief: Read current HT517 runtime status.
+ * input: None.
+ * output: Status snapshot containing ready/playing/queue/gain.
+ */
+ht517_info_s ht517_read_info(void)
 {
-    char prompt_path[USER_FS_PATH_MAX_LEN];
-    uint8_t *prompt_data;
-    size_t prompt_size;
-    bool is_pcm;
-    esp_err_t ret;
+    ht517_info_s info;
 
-    if (!s_ready || (s_tx_chan == NULL) || !usr_fs_is_ready())
+    info.ready = false;
+    info.playing = false;
+    info.queue_len = 0U;
+    info.gain_percent = HT517_DEFAULT_GAIN_PERCENT;
+
+    portENTER_CRITICAL(&s_play_list_lock);
+    info.ready = s_ready;
+    info.playing = s_playing;
+    info.queue_len = s_play_queue_len;
+    info.gain_percent = s_gain_percent;
+    portEXIT_CRITICAL(&s_play_list_lock);
+
+    return info;
+}
+
+/*
+ * brief: Configure software playback gain percentage.
+ * input: gain_percent - linear gain in percent (0~200).
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG.
+ */
+esp_err_t ht517_config(uint8_t gain_percent)
+{
+    if (gain_percent > HT517_GAIN_PERCENT_MAX)
     {
-        return ESP_ERR_INVALID_STATE;
+        return ESP_ERR_INVALID_ARG;
     }
 
-    prompt_data = NULL;
-    prompt_size = 0U;
-    is_pcm = false;
+    portENTER_CRITICAL(&s_play_list_lock);
+    s_gain_percent = gain_percent;
+    portEXIT_CRITICAL(&s_play_list_lock);
 
-    ret = usr_fs_resolve_prompt_path(locale,
-                                     prompt_name,
-                                     prompt_path,
-                                     sizeof(prompt_path));
-    if (ret != ESP_OK)
-    {
-        ESP_LOGW(TAG,
-                 "resolve prompt path failed, locale=%s name=%s err=%d",
-                 (locale != NULL) ? locale : "(null)",
-                 (prompt_name != NULL) ? prompt_name : "(null)",
-                 (int)ret);
-        return ret;
-    }
-
-    ret = usr_fs_read_file(prompt_path,
-                           &prompt_data,
-                           &prompt_size);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGW(TAG,
-                 "read prompt failed, path=%s err=%d",
-                 prompt_path,
-                 (int)ret);
-        return ret;
-    }
-
-    is_pcm = usr_fs_path_has_suffix(prompt_path, ".pcm");
-
-    if (prompt_size == 0U)
-    {
-        free(prompt_data);
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    if (!is_pcm)
-    {
-        ret = ht517_play_ogg_buffer(prompt_data, prompt_size);
-        free(prompt_data);
-        return ret;
-    }
-
-    ret = ht517_play_pcm_buffer(prompt_data, prompt_size);
-    free(prompt_data);
-
-    return ret;
+    return ESP_OK;
 }

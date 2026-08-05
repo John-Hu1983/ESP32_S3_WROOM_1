@@ -31,7 +31,7 @@ esp_err_t bsp_power_off(void)
  * input: None.
  * output: None.
  */
-static void print_heap_info(void)
+static void _print_heap_info(void)
 {
 #if CONFIG_SPIRAM
     size_t psram_chip_bytes = esp_psram_get_size();
@@ -74,7 +74,7 @@ esp_err_t bsp_init_whole(void)
     /*
     resource usage info
     */
-    print_heap_info();
+    _print_heap_info();
 
     /*
     filesystem
@@ -112,7 +112,7 @@ esp_err_t bsp_init_whole(void)
     /*
     amplifier
     */
-    USER_RETURN_ON_ERROR(ht517_init_device(), TAG, "ht517_init_device failed");
+    USER_RETURN_ON_ERROR(ht517_init(), TAG, "ht517_init failed");
 
     return ESP_OK;
 }

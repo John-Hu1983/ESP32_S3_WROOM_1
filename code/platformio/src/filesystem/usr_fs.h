@@ -49,6 +49,12 @@ esp_err_t usr_fs_resolve_prompt_path(const char *locale,
                                      const char *prompt_name,
                                      char *out_path,
                                      size_t out_path_size);
+/* Recursively search all regular files and return malloc-allocated full paths. */
+esp_err_t usr_fs_search_all_files(const char *root_dir,
+                                  char ***out_paths,
+                                  size_t *out_count);
+/* Free file path list returned by usr_fs_search_all_files. */
+void usr_fs_free_file_paths(char **paths, size_t count);
 
 /* Read full file into heap buffer; caller owns out_data and must free(). */
 esp_err_t usr_fs_read_file(const char *full_path,
