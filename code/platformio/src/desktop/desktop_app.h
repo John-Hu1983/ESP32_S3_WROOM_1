@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <time.h>
-#include <string.h>
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -14,6 +13,8 @@
 #include "freertos/task.h"
 
 #include "lvgl.h"
+
+#include "desktop_common.h"
 
 
 #include "bsp/bsp.h"
@@ -36,7 +37,7 @@
 #include "../apps/tools_app.h"
 #include "../apps/wifi_app.h"
 
-#define LVGL_TICK_PERIOD_MS 10U
+#define LVGL_TICK_PERIOD_MS (DESKTOP_COMMON_LVGL_TICK_PERIOD_MS)
 #define LVGL_TASK_PERIOD_MS 10U
 #define LVGL_DRAW_BUF_LINES 40U
 
@@ -98,9 +99,5 @@ typedef struct
 
 /* Initialize ST7365 panel, start LVGL task, and create desktop UI. */
 esp_err_t desktop_app_start(void);
-/* Destroy desktop main screen and enter child app by icon index. */
-esp_err_t desktop_app_open_by_index(uint32_t idx);
-/* Destroy desktop main screen and enter child app by icon name. */
-esp_err_t desktop_app_open_by_name(const char *name);
 /* Destroy current child app screen and return to desktop main screen. */
 void desktop_app_return_to_home(void);

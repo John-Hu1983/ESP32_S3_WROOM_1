@@ -172,7 +172,7 @@ static void _apps_idle_task(void *param)
 
         app_status_bar_submit_snapshot(&snapshot);
 
-        vTaskDelay(pdMS_TO_TICKS(APPS_IDLE_PERIOD_MS));
+        delay_ms(APPS_IDLE_PERIOD_MS);
     }
 }
 

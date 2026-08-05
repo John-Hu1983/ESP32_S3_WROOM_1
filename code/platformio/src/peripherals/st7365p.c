@@ -11,12 +11,7 @@ static st7365p_state_t s_st7365p = {0};
  */
 static void _st7365p_delay_ms(uint32_t ms)
 {
-    TickType_t ticks = pdMS_TO_TICKS(ms);
-    if (ticks == 0)
-    {
-        ticks = 1;
-    }
-    vTaskDelay(ticks);
+    delay_ms(ms);
 }
 
 /*
@@ -240,7 +235,7 @@ void st7365p_get_default_cfg(st7365p_cfg_t *cfg)
     cfg->y_offset = 0;
     cfg->madctl = LCD_DEFAULT_MADCTL;
     cfg->colmod = 0x55;
-    cfg->invert_color = false;
+    cfg->invert_color = true;
 }
 
 /*

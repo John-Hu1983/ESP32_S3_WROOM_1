@@ -84,12 +84,7 @@ esp_err_t bsp_init_whole(void)
     /*
     buttons
     */
-    USER_RETURN_ON_ERROR(gpba02b_pin_set_mode(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN,
-                                              GPBA02B_PIN_MODE_INPUT_PULLUP),
-                         TAG, "gpba02b_pin_set_mode BUTTON_UP failed");
-    USER_RETURN_ON_ERROR(gpba02b_pin_set_mode(BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN,
-                                              GPBA02B_PIN_MODE_INPUT_PULLUP),
-                         TAG, "gpba02b_pin_set_mode BUTTON_DOWN failed");
+    keyboard_init_obj();
 
     /*
     pdm enable

@@ -1,17 +1,121 @@
 #include "oscilloscope_app.h"
 
-#define SCOPE_MARGIN_X 12
-#define SCOPE_TOP_GAP 8
-#define SCOPE_BOTTOM_GAP 8
+#define TAG "SCOPE"
+
+#define SCOPE_MARGIN_X 2
 
 #define SCOPE_UPDATE_PERIOD_MS 40U
+#define SCOPE_INPUT_SCAN_PERIOD_MS 10U
+#define SCOPE_INPUT_TASK_STACK_SIZE 4096U
+#define SCOPE_INPUT_TASK_PRIORITY 4U
 #define SCOPE_AMPLITUDE 80.0f
 #define SCOPE_WAVE_FREQ_RAD 0.18f
 #define SCOPE_PHASE_STEP_RAD 0.30f
 #define SCOPE_TWO_PI 6.2831853f
 
 static scope_app_ctx_t *s_scope_ctx = NULL;
+static TaskHandle_t s_scope_input_task_handle = NULL;
+static volatile bool s_scope_input_task_stop = false;
 
+/*
+ * brief: Input task for scope app to own key scanning while app is active.
+ * input: param - unused task parameter.
+ * output: None.
+ */
+static void _scope_app_input_task(void *param)
+{
+    btn_scan_s btn;
+    bool home_requested;
+
+    (void)param;
+    lv_memset_00(&btn, sizeof(btn));
+    home_requested = false;
+
+    while (!s_scope_input_task_stop)
+    {
+        btn_status_e btn_val;
+
+        btn_val = keyboard_scan_event(&btn, SCOPE_INPUT_SCAN_PERIOD_MS);
+        if ((btn_val == Btn_Both_Click) && !home_requested)
+        {
+            home_requested = true;
+            app_home_nav_request_home();
+        }
+
+        delay_ms(SCOPE_INPUT_SCAN_PERIOD_MS);
+    }
+
+    s_scope_input_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+/*
+ * brief: Start scope input task that handles key events in sub-app mode.
+ * input: None.
+ * output: true on success; otherwise false.
+ */
+static bool _scope_app_start_input_task(void)
+{
+    BaseType_t task_ok;
+
+    s_scope_input_task_stop = false;
+    task_ok = xTaskCreate(_scope_app_input_task,
+                          "scope_input",
+                          SCOPE_INPUT_TASK_STACK_SIZE,
+                          NULL,
+                          SCOPE_INPUT_TASK_PRIORITY,
+                          &s_scope_input_task_handle);
+    if (task_ok != pdPASS)
+    {
+        ESP_LOGE(TAG, "xTaskCreate scope_input failed");
+        s_scope_input_task_stop = true;
+        s_scope_input_task_handle = NULL;
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * brief: Stop scope input task and force delete on timeout.
+ * input: None.
+ * output: None.
+ */
+static void _scope_app_stop_input_task(void)
+{
+    TaskHandle_t handle;
+    uint32_t wait_count;
+
+    handle = s_scope_input_task_handle;
+    if (handle == NULL)
+    {
+        return;
+    }
+
+    s_scope_input_task_stop = true;
+    for (wait_count = 0U; wait_count < 20U; wait_count++)
+    {
+        if (s_scope_input_task_handle == NULL)
+        {
+            return;
+        }
+
+        delay_ms(5U);
+    }
+
+    handle = s_scope_input_task_handle;
+    if (handle != NULL)
+    {
+        vTaskDelete(handle);
+        s_scope_input_task_handle = NULL;
+    }
+}
+
+/*
+ * brief: Fill scope waveform points based on current phase.
+ * input: ctx - scope context.
+ * output: None.
+ */
 static void _scope_app_fill_points(scope_app_ctx_t *ctx)
 {
     uint32_t i;
@@ -24,6 +128,11 @@ static void _scope_app_fill_points(scope_app_ctx_t *ctx)
     }
 }
 
+/*
+ * brief: Customize grid line style during chart draw-part event.
+ * input: e - LVGL draw-part event.
+ * output: None.
+ */
 static void _scope_chart_draw_part_cb(lv_event_t *e)
 {
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
@@ -35,7 +144,7 @@ static void _scope_chart_draw_part_cb(lv_event_t *e)
 
     if ((dsc->type == LV_CHART_DRAW_PART_DIV_LINE_HOR) || (dsc->type == LV_CHART_DRAW_PART_DIV_LINE_VER))
     {
-        dsc->line_dsc->color = lv_color_hex(0xFACC15);
+        dsc->line_dsc->color = lv_color_white();
         dsc->line_dsc->width = 1;
         dsc->line_dsc->opa = LV_OPA_80;
         dsc->line_dsc->dash_width = 2;
@@ -43,6 +152,11 @@ static void _scope_chart_draw_part_cb(lv_event_t *e)
     }
 }
 
+/*
+ * brief: Periodic LVGL timer callback to update scope waveform.
+ * input: timer - LVGL timer carrying scope context.
+ * output: None.
+ */
 static void _scope_app_timer_cb(lv_timer_t *timer)
 {
     scope_app_ctx_t *ctx = (scope_app_ctx_t *)timer->user_data;
@@ -62,12 +176,11 @@ static void _scope_app_timer_cb(lv_timer_t *timer)
     lv_chart_refresh(ctx->chart);
 }
 
-static void _scope_app_back_click_cb(lv_event_t *e)
-{
-    (void)e;
-    scope_app_destroy_and_return();
-}
-
+/*
+ * brief: Cleanup callback when scope screen object is deleted.
+ * input: e - LVGL delete event.
+ * output: None.
+ */
 static void _scope_app_delete_cb(lv_event_t *e)
 {
     lv_obj_t *target = lv_event_get_target(e);
@@ -76,6 +189,13 @@ static void _scope_app_delete_cb(lv_event_t *e)
     if (ctx == NULL)
     {
         return;
+    }
+
+    s_scope_input_task_stop = true;
+    if (s_scope_input_task_handle != NULL)
+    {
+        vTaskDelete(s_scope_input_task_handle);
+        s_scope_input_task_handle = NULL;
     }
 
     if (ctx->timer != NULL)
@@ -92,14 +212,16 @@ static void _scope_app_delete_cb(lv_event_t *e)
     lv_mem_free(ctx);
 }
 
+/*
+ * brief: Build scope screen and start app-local input task.
+ * input: lcd_w/lcd_h - active display resolution.
+ * output: Scope screen object on success; otherwise NULL.
+ */
 lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 {
     scope_app_ctx_t *ctx;
     lv_obj_t *scr;
-    lv_obj_t *title;
     lv_obj_t *chart;
-    lv_obj_t *back_btn;
-    lv_obj_t *back_text;
     lv_coord_t content_y;
     lv_coord_t content_h;
     lv_coord_t content_bottom;
@@ -126,48 +248,21 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     ctx->screen = scr;
 
-    title = lv_label_create(scr);
-    lv_label_set_text(title, "Scope");
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 10, app_status_bar_content_top() + 6);
-
-    back_btn = lv_btn_create(scr);
-    lv_obj_set_size(back_btn, 110, 42);
-    lv_obj_align(back_btn, LV_ALIGN_BOTTOM_RIGHT, -12, -12);
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x1D4ED8), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(back_btn, 10, LV_PART_MAIN);
-    lv_obj_add_event_cb(back_btn, _scope_app_back_click_cb, LV_EVENT_CLICKED, NULL);
-
-    back_text = lv_label_create(back_btn);
-    lv_label_set_text(back_text, LV_SYMBOL_LEFT " Home");
-    lv_obj_set_style_text_color(back_text, lv_color_white(), 0);
-    lv_obj_center(back_text);
-
-    content_y = app_status_bar_content_top() + SCOPE_TOP_GAP;
-    content_bottom = app_status_bar_content_bottom() - SCOPE_BOTTOM_GAP;
+    content_y = app_status_bar_content_top();
+    content_bottom = app_status_bar_content_bottom();
     content_h = content_bottom - content_y;
-    if (content_h < 90)
+    if (content_h < 40)
     {
-        content_h = 90;
-    }
-
-    wave_h = content_h / 3;
-    if (wave_h < 90)
-    {
-        wave_h = 90;
-    }
-    if (wave_h > content_h)
-    {
-        wave_h = content_h;
+        content_h = 40;
     }
 
     wave_w = lcd_w - (2 * SCOPE_MARGIN_X);
-    wave_y = content_y + ((content_h - wave_h) / 2);
+    wave_h = content_h;
+    wave_y = content_y;
 
     chart = lv_chart_create(scr);
     lv_obj_set_size(chart, wave_w, wave_h);
@@ -175,15 +270,15 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_bg_color(chart, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(chart, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(chart, lv_color_hex(0x334155), LV_PART_MAIN);
+    lv_obj_set_style_border_color(chart, lv_color_white(), LV_PART_MAIN);
     lv_obj_set_style_radius(chart, 6, LV_PART_MAIN);
     lv_obj_set_style_line_width(chart, 1, LV_PART_MAIN);
-    lv_obj_set_style_line_color(chart, lv_color_hex(0xFACC15), LV_PART_MAIN);
+    lv_obj_set_style_line_color(chart, lv_color_white(), LV_PART_MAIN);
     lv_obj_set_style_line_opa(chart, LV_OPA_80, LV_PART_MAIN);
     lv_obj_set_style_line_dash_width(chart, 2, LV_PART_MAIN);
     lv_obj_set_style_line_dash_gap(chart, 4, LV_PART_MAIN);
     lv_obj_set_style_line_width(chart, 2, LV_PART_ITEMS);
-    lv_obj_set_style_line_color(chart, lv_color_white(), LV_PART_ITEMS);
+    lv_obj_set_style_line_color(chart, lv_color_hex(0xFF2D20), LV_PART_ITEMS);
     lv_obj_set_style_size(chart, 0, LV_PART_INDICATOR);
     lv_obj_add_event_cb(chart, _scope_chart_draw_part_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
 
@@ -192,7 +287,7 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_chart_set_point_count(chart, SCOPE_POINT_COUNT);
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, -100, 100);
 
-    ctx->series = lv_chart_add_series(chart, lv_color_white(), LV_CHART_AXIS_PRIMARY_Y);
+    ctx->series = lv_chart_add_series(chart, lv_color_hex(0xFF2D20), LV_CHART_AXIS_PRIMARY_Y);
     if (ctx->series == NULL)
     {
         lv_obj_del(scr);
@@ -213,13 +308,29 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
+    if (!_scope_app_start_input_task())
+    {
+        lv_timer_del(ctx->timer);
+        ctx->timer = NULL;
+        lv_obj_del(scr);
+        lv_mem_free(ctx);
+        return NULL;
+    }
+
     lv_obj_add_event_cb(scr, _scope_app_delete_cb, LV_EVENT_DELETE, ctx);
     s_scope_ctx = ctx;
     return scr;
 }
 
+/*
+ * brief: Stop scope runtime resources before app is destroyed.
+ * input: None.
+ * output: None.
+ */
 void scope_app_release_resources(void)
 {
+    _scope_app_stop_input_task();
+
     if (s_scope_ctx == NULL)
     {
         return;
@@ -232,6 +343,11 @@ void scope_app_release_resources(void)
     }
 }
 
+/*
+ * brief: Request desktop return through shared home navigation callback.
+ * input: None.
+ * output: None.
+ */
 void scope_app_destroy_and_return(void)
 {
     app_home_nav_request_home();

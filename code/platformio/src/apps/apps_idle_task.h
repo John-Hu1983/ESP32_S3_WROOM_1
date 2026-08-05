@@ -15,6 +15,7 @@
 #include "esp_freertos_hooks.h"
 
 #include "app_status_bar.h"
+#include "bsp/delay.h"
 
 #if defined(portNUM_PROCESSORS)
 #define APPS_IDLE_CORE_COUNT portNUM_PROCESSORS

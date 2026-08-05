@@ -666,14 +666,7 @@ static esp_err_t _ht517_play_file_path(const char *file_path)
  */
 static void _ht517_playback_task(void *arg)
 {
-    TickType_t idle_ticks;
-
     (void)arg;
-    idle_ticks = pdMS_TO_TICKS(HT517_PLAY_TASK_IDLE_MS);
-    if (idle_ticks < 1)
-    {
-        idle_ticks = 1;
-    }
 
     for (;;)
     {
@@ -682,14 +675,14 @@ static void _ht517_playback_task(void *arg)
 
         if (s_playing)
         {
-            vTaskDelay(idle_ticks);
+            delay_ms(HT517_PLAY_TASK_IDLE_MS);
             continue;
         }
 
         item = _ht517_pop_play_item();
         if (item == NULL)
         {
-            vTaskDelay(idle_ticks);
+            delay_ms(HT517_PLAY_TASK_IDLE_MS);
             continue;
         }
 

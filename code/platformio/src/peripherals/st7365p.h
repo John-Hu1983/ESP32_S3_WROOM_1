@@ -12,6 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "bsp/delay.h"
 #include "hal/usr_spi.h"
 #include "peripherals/gpba02b.h"
 #include "user_config.h"

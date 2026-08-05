@@ -2,14 +2,6 @@
 
 #define TAG "DESKTOP"
 
-#ifndef USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
-#define USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START 0
-#endif
-
-#ifndef USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR
-#define USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR "/storage/common"
-#endif
-
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF), camera_app_create_screen, camera_app_release_resources},
     {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xEB, 0x4D, 0x8A), gallery_app_create_screen, gallery_app_release_resources},
@@ -40,6 +32,11 @@ static desktop_app_select_s s_app_select = {
     .app_switching = 0U,
 };
 
+/*
+ * brief: Apply or clear LVGL checked state on an object.
+ * input: obj - target LVGL object; checked - nonzero to set checked state.
+ * output: None.
+ */
 static void _desktop_set_checked_state(lv_obj_t *obj, uint8_t checked)
 {
     if (obj == NULL)
@@ -63,6 +60,11 @@ static void _desktop_set_checked_state(lv_obj_t *obj, uint8_t checked)
     }
 }
 
+/*
+ * brief: Update checked state for one icon and its child labels.
+ * input: idx - icon index; checked - nonzero for checked state.
+ * output: None.
+ */
 static void _desktop_set_icon_checked(uint32_t idx, uint8_t checked)
 {
     lv_obj_t *btn;
@@ -83,17 +85,11 @@ static void _desktop_set_icon_checked(uint32_t idx, uint8_t checked)
     _desktop_set_checked_state(s_app_select.icon_names[idx], checked);
 }
 
-static lv_color_t _desktop_invert_color(lv_color_t color)
-{
-    lv_color32_t color32;
-
-    color32.full = lv_color_to32(color);
-
-    return lv_color_make((uint8_t)(0xFFU - color32.ch.red),
-                         (uint8_t)(0xFFU - color32.ch.green),
-                         (uint8_t)(0xFFU - color32.ch.blue));
-}
-
+/*
+ * brief: Set current selected icon and refresh visual checked state.
+ * input: idx - target icon index.
+ * output: None.
+ */
 static void _desktop_select_icon(uint32_t idx)
 {
     uint32_t prev_idx;
@@ -118,59 +114,11 @@ static void _desktop_select_icon(uint32_t idx)
     s_app_select.icon_selected_idx = idx;
 }
 
-static uint32_t _desktop_find_icon_index(const desktop_icon_s *icon)
-{
-    uint32_t i;
-
-    for (i = 0; i < DESKTOP_ICON_COUNT; i++)
-    {
-        if (&s_desktop_icons[i] == icon)
-        {
-            return i;
-        }
-    }
-
-    return DESKTOP_ICON_COUNT;
-}
-
-static void _lvgl_tick_cb(void *arg)
-{
-    (void)arg;
-    lv_tick_inc(LVGL_TICK_PERIOD_MS);
-}
-
-static void _lvgl_flush_cb(lv_disp_drv_t *disp_drv, const lv_area_t *area, lv_color_t *color_p)
-{
-    esp_err_t ret;
-
-    ret = st7365p_lvgl_flush(area->x1, area->y1, area->x2, area->y2, color_p);
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "st7365p_lvgl_flush failed: %d", (int)ret);
-    }
-    lv_disp_flush_ready(disp_drv);
-}
-
-static void _desktop_icon_click_cb(lv_event_t *e)
-{
-    const desktop_icon_s *icon = (const desktop_icon_s *)lv_event_get_user_data(e);
-    uint32_t idx;
-
-    if (icon == NULL)
-    {
-        return;
-    }
-
-    idx = _desktop_find_icon_index(icon);
-    if (idx < DESKTOP_ICON_COUNT)
-    {
-        _desktop_select_icon(idx);
-        (void)desktop_app_open_by_index(idx);
-    }
-
-    ESP_LOGI(TAG, "%s opened", icon->name);
-}
-
+/*
+ * brief: Release resources of the currently active sub-app.
+ * input: None.
+ * output: None.
+ */
 static void _desktop_release_active_app_resources(void)
 {
     uint32_t app_idx;
@@ -187,6 +135,11 @@ static void _desktop_release_active_app_resources(void)
     }
 }
 
+/*
+ * brief: Clear icon object references after desktop screen is destroyed.
+ * input: None.
+ * output: None.
+ */
 static void _desktop_reset_icon_refs(void)
 {
     uint32_t i;
@@ -200,6 +153,11 @@ static void _desktop_reset_icon_refs(void)
     }
 }
 
+/*
+ * brief: Build desktop grid UI and load it as the active LVGL screen.
+ * input: None.
+ * output: None.
+ */
 static void _desktop_create_ui(void)
 {
     static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
@@ -218,6 +176,7 @@ static void _desktop_create_ui(void)
 
     s_app_select.active_app_screen = NULL;
     s_app_select.active_app_idx = DESKTOP_ICON_COUNT;
+    s_app_select.icon_selected_idx = DESKTOP_ICON_COUNT;
 
     scr = lv_obj_create(NULL);
     s_app_select.desktop_screen = scr;
@@ -258,7 +217,7 @@ static void _desktop_create_ui(void)
 
         btn = lv_btn_create(grid);
         lv_obj_remove_style_all(btn);
-        selected_color = _desktop_invert_color(s_desktop_icons[i].color);
+        selected_color = desktop_common_invert_color(s_desktop_icons[i].color);
 
         lv_obj_set_grid_cell(btn,
                              LV_GRID_ALIGN_STRETCH, col, 1,
@@ -285,7 +244,6 @@ static void _desktop_create_ui(void)
         lv_obj_set_style_transform_width(btn, 0, LV_PART_MAIN);
         lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(btn, 6, LV_PART_MAIN);
-        lv_obj_add_event_cb(btn, _desktop_icon_click_cb, LV_EVENT_CLICKED, (void *)&s_desktop_icons[i]);
         s_app_select.icon_btns[i] = btn;
 
         symbol = lv_label_create(btn);
@@ -305,11 +263,15 @@ static void _desktop_create_ui(void)
         lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -6);
         s_app_select.icon_names[i] = name;
     }
-    _desktop_reset_icon_refs();
     s_app_select.app_switching = 0U;
     lv_scr_load(scr);
 }
 
+/*
+ * brief: Execute asynchronous sub-app open request on LVGL context.
+ * input: user_data - unused async payload.
+ * output: None.
+ */
 static void _desktop_open_app_async(void *user_data)
 {
     lv_obj_t *app_screen;
@@ -374,6 +336,11 @@ static void _desktop_open_app_async(void *user_data)
     s_app_select.app_switching = 0U;
 }
 
+/*
+ * brief: Execute asynchronous return-home request on LVGL context.
+ * input: user_data - unused async payload.
+ * output: None.
+ */
 static void _desktop_return_home_async(void *user_data)
 {
     lv_obj_t *app_screen;
@@ -395,6 +362,11 @@ static void _desktop_return_home_async(void *user_data)
     s_app_select.app_switching = 0U;
 }
 
+/*
+ * brief: Queue a request to open one desktop app by icon index.
+ * input: idx - desktop icon index.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/STATE or ESP_FAIL.
+ */
 static esp_err_t _desktop_request_open_app(uint32_t idx)
 {
     if (idx >= DESKTOP_ICON_COUNT)
@@ -420,6 +392,11 @@ static esp_err_t _desktop_request_open_app(uint32_t idx)
     return ESP_OK;
 }
 
+/*
+ * brief: Queue a request to close current sub-app and return home.
+ * input: None.
+ * output: ESP_OK on success; otherwise ESP_ERR_INVALID_STATE or ESP_FAIL.
+ */
 static esp_err_t _desktop_request_return_home(void)
 {
     if (s_app_select.app_switching != 0U)
@@ -444,10 +421,131 @@ static esp_err_t _desktop_request_return_home(void)
     return ESP_OK;
 }
 
+/*
+ * brief: Resolve next icon index for DOWN navigation.
+ * input: None.
+ * output: Next icon index with wrap-around.
+ */
+static uint32_t _desktop_next_icon_idx(void)
+{
+    uint32_t idx;
+
+    idx = s_app_select.icon_selected_idx;
+    if (idx >= DESKTOP_ICON_COUNT)
+    {
+        return 0U;
+    }
+
+    return (idx + 1U) % DESKTOP_ICON_COUNT;
+}
+
+/*
+ * brief: Resolve previous icon index for UP navigation.
+ * input: None.
+ * output: Previous icon index with wrap-around.
+ */
+static uint32_t _desktop_prev_icon_idx(void)
+{
+    uint32_t idx;
+
+    idx = s_app_select.icon_selected_idx;
+    if (idx >= DESKTOP_ICON_COUNT)
+    {
+        return (DESKTOP_ICON_COUNT - 1U);
+    }
+
+    return (idx + DESKTOP_ICON_COUNT - 1U) % DESKTOP_ICON_COUNT;
+}
+
+/*
+ * brief: Check whether desktop keyboard navigation can be handled now.
+ * input: None.
+ * output: true when desktop screen is active and not switching apps.
+ */
+static bool _desktop_can_handle_key_nav(void)
+{
+    if (s_app_select.app_switching != 0U)
+    {
+        return false;
+    }
+
+    if (s_app_select.active_app_idx < DESKTOP_ICON_COUNT)
+    {
+        return false;
+    }
+
+    if ((s_app_select.desktop_screen == NULL) || !lv_obj_is_valid(s_app_select.desktop_screen))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * brief: Decide whether desktop task is allowed to scan keyboard right now.
+ * input: None.
+ * output: true only when desktop screen is active and no app switch is in progress.
+ */
+static bool _desktop_can_scan_keyboard(void)
+{
+    return _desktop_can_handle_key_nav();
+}
+
+/*
+ * brief: Handle one keyboard event for desktop navigation and app enter/exit.
+ * input: btn_val - decoded keyboard event status.
+ * output: None.
+ */
+static void _desktop_handle_key_event(btn_status_e btn_val)
+{
+    uint32_t target_idx;
+
+    if ((btn_val == Btn_Both_Click) &&
+        (s_app_select.app_switching == 0U) &&
+        (s_app_select.active_app_idx < DESKTOP_ICON_COUNT) &&
+        (s_app_select.active_app_screen != NULL) &&
+        lv_obj_is_valid(s_app_select.active_app_screen))
+    {
+        (void)_desktop_request_return_home();
+        return;
+    }
+
+    if (!_desktop_can_handle_key_nav())
+    {
+        return;
+    }
+
+    switch (btn_val)
+    {
+    case Btn_Up_Click:
+        target_idx = _desktop_prev_icon_idx();
+        _desktop_select_icon(target_idx);
+        break;
+    case Btn_Down_Click:
+        target_idx = _desktop_next_icon_idx();
+        _desktop_select_icon(target_idx);
+        break;
+    case Btn_Both_Click:
+        if (s_app_select.icon_selected_idx < DESKTOP_ICON_COUNT)
+        {
+            (void)_desktop_request_open_app(s_app_select.icon_selected_idx);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+/*
+ * brief: Initialize LVGL core, display driver, draw buffer, and tick timer.
+ * input: None.
+ * output: ESP_OK on success; otherwise ESP_ERR_NO_MEM or timer error code.
+ */
 static esp_err_t _desktop_lvgl_init(void)
 {
     esp_timer_create_args_t tick_timer_args = {
-        .callback = _lvgl_tick_cb,
+        .callback = desktop_common_lvgl_tick_cb,
         .arg = NULL,
         .dispatch_method = ESP_TIMER_TASK,
         .name = "lvgl_tick",
@@ -470,7 +568,7 @@ static esp_err_t _desktop_lvgl_init(void)
     lv_disp_drv_init(&s_lv_disp_drv);
     s_lv_disp_drv.hor_res = s_lcd_width;
     s_lv_disp_drv.ver_res = s_lcd_height;
-    s_lv_disp_drv.flush_cb = _lvgl_flush_cb;
+    s_lv_disp_drv.flush_cb = desktop_common_lvgl_flush_cb;
     s_lv_disp_drv.draw_buf = &s_lv_draw_buf;
     s_lv_disp_drv.full_refresh = 0;
     s_lv_disp_drv.antialiasing = 0;
@@ -491,6 +589,11 @@ static esp_err_t _desktop_lvgl_init(void)
     return ESP_OK;
 }
 
+/*
+ * brief: Initialize ST7365 panel and cache effective resolution values.
+ * input: None.
+ * output: ESP_OK on success; otherwise panel initialization/configuration error.
+ */
 static esp_err_t _desktop_prepare_monitor(void)
 {
     esp_err_t ret;
@@ -521,157 +624,46 @@ static esp_err_t _desktop_prepare_monitor(void)
 }
 
 /*
- * brief: Search one directory and enqueue all .ogg/.pcm files into HT517 FIFO task.
- * input: dir_path - absolute directory path under mounted filesystem.
- * output: ESP_OK on success; otherwise propagated search/enqueue error.
+ * brief: Public entry to request returning from current sub-app to desktop.
+ * input: None.
+ * output: None.
  */
-static esp_err_t _desktop_batch_enqueue_audio_dir(const char *dir_path)
-{
-    char **paths;
-    size_t count;
-    size_t i;
-    size_t queued;
-    esp_err_t ret;
-
-    if ((dir_path == NULL) || (dir_path[0] == '\0'))
-    {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    paths = NULL;
-    count = 0U;
-    ret = usr_fs_search_all_files(dir_path, &paths, &count);
-    if (ret != ESP_OK)
-    {
-        return ret;
-    }
-
-    queued = 0U;
-    for (i = 0U; i < count; i++)
-    {
-        if (!usr_fs_path_has_suffix(paths[i], ".ogg") &&
-            !usr_fs_path_has_suffix(paths[i], ".pcm"))
-        {
-            continue;
-        }
-
-        ret = ht517_load(paths[i]);
-        if (ret != ESP_OK)
-        {
-            ESP_LOGW(TAG,
-                     "enqueue failed, path=%s err=%d",
-                     paths[i],
-                     (int)ret);
-            continue;
-        }
-
-        queued++;
-    }
-
-    usr_fs_free_file_paths(paths, count);
-
-    if (queued == 0U)
-    {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    ESP_LOGI(TAG,
-             "batch enqueue done, dir=%s queued=%u",
-             dir_path,
-             (unsigned)queued);
-    return ESP_OK;
-}
-
-esp_err_t desktop_app_open_by_index(uint32_t idx)
-{
-    return _desktop_request_open_app(idx);
-}
-
-esp_err_t desktop_app_open_by_name(const char *name)
-{
-    uint32_t i;
-
-    if (name == NULL)
-    {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    for (i = 0; i < DESKTOP_ICON_COUNT; i++)
-    {
-        if (strcmp(s_desktop_icons[i].name, name) == 0)
-        {
-            return _desktop_request_open_app(i);
-        }
-    }
-
-    return ESP_ERR_NOT_FOUND;
-}
-
 void desktop_app_return_to_home(void)
 {
     (void)_desktop_request_return_home();
 }
 
+/*
+ * brief: Main desktop LVGL task loop handling rendering and keyboard events.
+ * input: param - unused task parameter.
+ * output: None.
+ */
 static void _desktop_lvgl_task(void *param)
 {
-    bool btn_up, btn_down;
-    esp_err_t ret;
-#if USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
-    bool enqueue_test_done;
-#endif
     (void)param;
-
-#if USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
-    enqueue_test_done = false;
-#endif
+    btn_scan_s btn = {0};
+    btn_status_e btn_val;
 
     while (1)
     {
         lv_timer_handler();
         delay_ms(LVGL_TASK_PERIOD_MS);
 
-#if USER_DESKTOP_BATCH_ENQUEUE_TEST_ON_START
-        if (!enqueue_test_done)
+        if (!_desktop_can_scan_keyboard())
         {
-            esp_err_t enqueue_ret;
+            continue;
+        }
 
-            enqueue_test_done = true;
-            enqueue_ret = _desktop_batch_enqueue_audio_dir(USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR);
-            if (enqueue_ret == ESP_OK)
-            {
-                ESP_LOGI(TAG,
-                         "audio queue test started from: %s",
-                         USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR);
-            }
-            else if (enqueue_ret == ESP_ERR_NOT_FOUND)
-            {
-                ESP_LOGW(TAG,
-                         "audio queue test found no .ogg/.pcm in: %s",
-                         USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR);
-            }
-            else
-            {
-                ESP_LOGW(TAG,
-                         "audio queue test failed, dir=%s err=%d",
-                         USER_DESKTOP_BATCH_ENQUEUE_TEST_DIR,
-                         (int)enqueue_ret);
-            }
-        }
-#endif
-
-        ret = gpba02b_pin_read(BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN, &btn_up);
-        if (ret == ESP_OK && btn_up == 0)
-        {
-            ESP_LOGI(TAG, "Button UP pressed");
-        }
-        ret = gpba02b_pin_read(BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN, &btn_down);
-        if (ret == ESP_OK && btn_down == 0)
-        {
-            ESP_LOGI(TAG, "Button DOWN pressed");
-        }
+        btn_val = keyboard_scan_event(&btn, LVGL_TASK_PERIOD_MS);
+        _desktop_handle_key_event(btn_val);
     }
 }
 
+/*
+ * brief: Start desktop subsystem including panel, LVGL, status bar, and task loop.
+ * input: None.
+ * output: ESP_OK on success; otherwise propagated startup error.
+ */
 esp_err_t desktop_app_start(void)
 {
     esp_err_t ret;

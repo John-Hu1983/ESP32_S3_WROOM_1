@@ -21,6 +21,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "bsp/delay.h"
 #include "filesystem/usr_fs.h"
 #include "user_config.h"
 
