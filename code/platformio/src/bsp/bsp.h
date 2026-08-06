@@ -19,6 +19,7 @@
 #include "peripherals/gpba02b.h"
 #include "peripherals/ht517.h"
 #include "peripherals/keyboard.h"
+#include "voice/voice_common.h"
  
 
 /* Enable board power output path (power lock high). */

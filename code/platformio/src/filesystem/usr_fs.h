@@ -28,7 +28,7 @@ const char *usr_fs_mount_point(void);
 
 /* Check if a path exists and is a regular file. */
 bool usr_fs_path_exists(const char *path);
-/* Check if path ends with suffix, e.g. .ogg. */
+/* Check if path ends with suffix, e.g. .ogg/.wav. */
 bool usr_fs_path_has_suffix(const char *path, const char *suffix);
 
 /* Build an absolute path under mount point. */

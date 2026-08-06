@@ -10,6 +10,9 @@
 
 #define USER_AUDIO_SAMPLE_RATE_HZ (16000U)
 
+/*
+    filesystem
+*/
 #define USER_ASSETS_PARTITION_LABEL ("storage")
 #define USER_ASSETS_MOUNT_POINT ("/storage")
 #define USER_ASSETS_DEFAULT_LOCALE ("en-US")

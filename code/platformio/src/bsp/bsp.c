@@ -108,6 +108,7 @@ esp_err_t bsp_init_whole(void)
     amplifier
     */
     USER_RETURN_ON_ERROR(ht517_init(), TAG, "ht517_init failed");
+    USER_RETURN_ON_ERROR(voice_init_player(), TAG, "voice_init_player failed");
 
     return ESP_OK;
 }

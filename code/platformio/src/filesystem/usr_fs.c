@@ -655,7 +655,7 @@ esp_err_t usr_fs_resolve_prompt_path(const char *locale,
                                      char *out_path,
                                      size_t out_path_size)
 {
-    static const char *kExtensions[] = {".pcm", ".ogg"};
+    static const char *kExtensions[] = {".pcm", ".ogg", ".wav"};
     char prompt_variant[USER_FS_PATH_MAX_LEN];
     bool has_extension;
     uint32_t i;
