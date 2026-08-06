@@ -40,6 +40,7 @@ static void _gallery_refresh_image(gallery_app_ctx_t *ctx)
     char status_text[64];
     size_t try_idx;
     size_t i;
+    size_t ready_count;
     bool loaded;
     int n;
 
@@ -61,15 +62,17 @@ static void _gallery_refresh_image(gallery_app_ctx_t *ctx)
     }
 
     loaded = false;
+    ready_count = 0U;
     for (i = 0U; i < ctx->item_count; i++)
     {
         esp_err_t load_ret;
 
         try_idx = (ctx->selected_idx + i) % ctx->item_count;
-        load_ret = pic_decode_item(ctx->items,
-                                   ctx->item_count,
-                                   try_idx,
-                                   &ctx->loaded_idx);
+        load_ret = pic_prepare_window(ctx->items,
+                                      ctx->item_count,
+                                      try_idx,
+                                      &ctx->loaded_idx,
+                                      &ready_count);
         if (load_ret == ESP_OK)
         {
             ctx->selected_idx = try_idx;
@@ -95,6 +98,12 @@ static void _gallery_refresh_image(gallery_app_ctx_t *ctx)
     lv_img_set_src(ctx->img, &ctx->items[ctx->selected_idx].img_dsc);
     lv_obj_center(ctx->img);
     lv_obj_invalidate(ctx->view);
+
+    ESP_LOGI(TAG,
+             "display idx=%u ready_window=%u/%u",
+             (unsigned)ctx->selected_idx,
+             (unsigned)ready_count,
+             (unsigned)pic_predecode_max_count());
 
     last_sep = strrchr(ctx->items[ctx->selected_idx].path, '/');
     if (last_sep == NULL)
@@ -401,9 +410,10 @@ lv_obj_t *gallery_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         ctx->selected_idx = 0U;
         _gallery_refresh_image(ctx);
         ESP_LOGI(TAG,
-                 "image list ready, count=%u, path_pool=%u",
+                 "image list ready, count=%u, path_pool=%u, predecode_max=%u",
                  (unsigned)ctx->item_count,
-                 (unsigned)ctx->path_pool_size);
+                 (unsigned)ctx->path_pool_size,
+                 (unsigned)pic_predecode_max_count());
     }
     else
     {

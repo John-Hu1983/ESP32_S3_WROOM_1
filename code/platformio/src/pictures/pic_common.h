@@ -33,6 +33,10 @@ typedef struct
     lv_img_dsc_t img_dsc;
 } pic_item_t;
 
+#ifndef PIC_PREDECODE_MAX_COUNT
+#define PIC_PREDECODE_MAX_COUNT 5U
+#endif
+
 /* Return true when one file path suffix matches any supported image format. */
 bool pic_path_is_supported(const char *path);
 /* Return short readable format name for logs/UI text. */
@@ -50,6 +54,14 @@ esp_err_t pic_decode_item(pic_item_t *items,
                           size_t item_count,
                           size_t idx,
                           size_t *loaded_idx);
+/* Return effective predecode window limit used at runtime. */
+size_t pic_predecode_max_count(void);
+/* Prepare selected image and keep a sliding predecode window in PSRAM. */
+esp_err_t pic_prepare_window(pic_item_t *items,
+                             size_t item_count,
+                             size_t selected_idx,
+                             size_t *loaded_idx,
+                             size_t *out_ready_count);
 
 /* Invalidate current loaded-source cache and reset loaded index. */
 void pic_release_loaded(pic_item_t *items, size_t item_count, size_t *loaded_idx);

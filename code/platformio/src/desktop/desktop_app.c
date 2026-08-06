@@ -21,7 +21,7 @@ static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0xB6, 0x5C, 0x2C),
      bt_app_create_screen, bt_app_release_resources},
 
-    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
+    {LV_SYMBOL_SD_CARD, "File", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
      sd_app_create_screen, sd_app_release_resources},
 
     {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x8F, 0x67, 0x45),
@@ -29,7 +29,7 @@ static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
 
     {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xC2, 0x3B, 0x4A),
      alerts_app_create_screen, alerts_app_release_resources},
-
+        
     {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x8A, 0x3D, 0x5D),
      tools_app_create_screen, tools_app_release_resources},
 
