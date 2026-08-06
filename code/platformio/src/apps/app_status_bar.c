@@ -110,7 +110,7 @@ esp_err_t app_status_bar_init(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_size(s_top_bar, s_lcd_w, APP_STATUS_BAR_HEIGHT);
     lv_obj_align(s_top_bar, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_clear_flag(s_top_bar, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(s_top_bar, lv_color_hex(0x1D4ED8), 0);
+    lv_obj_set_style_bg_color(s_top_bar, lv_color_hex(APP_THEME_BAR_HEX), 0);
     lv_obj_set_style_bg_opa(s_top_bar, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_top_bar, 0, 0);
     lv_obj_set_style_radius(s_top_bar, 0, 0);
@@ -120,18 +120,18 @@ esp_err_t app_status_bar_init(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_pad_bottom(s_top_bar, 0, 0);
 
     s_top_battery_label = lv_label_create(s_top_bar);
-    lv_obj_set_style_text_color(s_top_battery_label, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_text_color(s_top_battery_label, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), 0);
     lv_obj_align(s_top_battery_label, LV_ALIGN_LEFT_MID, 0, 0);
 
     s_top_network_label = lv_label_create(s_top_bar);
-    lv_obj_set_style_text_color(s_top_network_label, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_text_color(s_top_network_label, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), 0);
     lv_obj_align(s_top_network_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     s_bottom_bar = lv_obj_create(layer);
     lv_obj_set_size(s_bottom_bar, s_lcd_w, APP_STATUS_BAR_HEIGHT);
     lv_obj_align(s_bottom_bar, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_clear_flag(s_bottom_bar, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(s_bottom_bar, lv_color_hex(0x1D4ED8), 0);
+    lv_obj_set_style_bg_color(s_bottom_bar, lv_color_hex(APP_THEME_BAR_HEX), 0);
     lv_obj_set_style_bg_opa(s_bottom_bar, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_bottom_bar, 0, 0);
     lv_obj_set_style_radius(s_bottom_bar, 0, 0);
@@ -141,11 +141,11 @@ esp_err_t app_status_bar_init(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_pad_bottom(s_bottom_bar, 0, 0);
 
     s_bottom_metrics_label = lv_label_create(s_bottom_bar);
-    lv_obj_set_style_text_color(s_bottom_metrics_label, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_text_color(s_bottom_metrics_label, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), 0);
     lv_obj_align(s_bottom_metrics_label, LV_ALIGN_LEFT_MID, 0, 0);
 
     s_bottom_time_label = lv_label_create(s_bottom_bar);
-    lv_obj_set_style_text_color(s_bottom_time_label, lv_color_hex(0xF8FAFC), 0);
+    lv_obj_set_style_text_color(s_bottom_time_label, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), 0);
     lv_obj_align(s_bottom_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     if (s_ui_timer == NULL)

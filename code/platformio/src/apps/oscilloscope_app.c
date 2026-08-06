@@ -39,7 +39,7 @@ static void _scope_app_input_task(void *param)
         if ((btn_val == Btn_Both_Click) && !home_requested)
         {
             home_requested = true;
-            app_home_nav_request_home();
+            desktop_app_return_to_home();
         }
 
         delay_ms(SCOPE_INPUT_SCAN_PERIOD_MS);
@@ -344,11 +344,11 @@ void scope_app_release_resources(void)
 }
 
 /*
- * brief: Request desktop return through shared home navigation callback.
+ * brief: Request desktop return directly.
  * input: None.
  * output: None.
  */
 void scope_app_destroy_and_return(void)
 {
-    app_home_nav_request_home();
+    desktop_app_return_to_home();
 }

@@ -46,7 +46,7 @@ lv_obj_t *stub_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h, const stub_
         return NULL;
     }
 
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(APP_THEME_BG_HEX), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     content_top = app_status_bar_content_top() + STUB_TOP_GAP;
@@ -58,13 +58,13 @@ lv_obj_t *stub_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h, const stub_
 
     msg = lv_label_create(scr);
     lv_label_set_text(msg, "App stub: to be implemented");
-    lv_obj_set_style_text_color(msg, lv_color_hex(0xCBD5E1), 0);
+    lv_obj_set_style_text_color(msg, lv_color_hex(APP_THEME_TEXT_SECONDARY_HEX), 0);
     lv_obj_align(msg, LV_ALIGN_TOP_LEFT, STUB_MARGIN_X, content_top + 28);
 
     back_btn = lv_btn_create(scr);
     lv_obj_set_size(back_btn, 110, 42);
     lv_obj_align(back_btn, LV_ALIGN_BOTTOM_RIGHT, -STUB_MARGIN_X, -((lcd_h - content_bottom) + 4));
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x1D4ED8), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(back_btn, lv_color_hex(APP_THEME_ACCENT_HEX), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(back_btn, 10, LV_PART_MAIN);
 

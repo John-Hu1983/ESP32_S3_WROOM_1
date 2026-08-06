@@ -7,7 +7,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#include "app_home_nav.h"
+#include "desktop/desktop_app.h"
 #include "app_status_bar.h"
 #include "bsp/delay.h"
 #include "esp_heap_caps.h"

@@ -20,6 +20,6 @@ void alerts_app_release_resources(void)
 
 void alerts_app_destroy_and_return(void)
 {
-    app_home_nav_request_home();
+    desktop_app_return_to_home();
 }
 

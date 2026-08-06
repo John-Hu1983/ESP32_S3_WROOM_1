@@ -9,17 +9,16 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "app_home_nav.h"
+#include "desktop/desktop_app.h"
 #include "app_status_bar.h"
 #include "bsp/delay.h"
 #include "esp_err.h"
-#include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "filesystem/usr_fs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "peripherals/keyboard.h"
+#include "pictures/pic_common.h"
 
 #define GALLERY_MARGIN_X 2
 #define GALLERY_INPUT_SCAN_PERIOD_MS 10U
@@ -28,20 +27,11 @@
 
 typedef struct
 {
-    char *path;
-    size_t decoded_size;
-    uint8_t *decoded_data;
-    bool decoded_ready;
-    lv_img_dsc_t img_dsc;
-} gallery_png_item_t;
-
-typedef struct
-{
     lv_obj_t *screen;
     lv_obj_t *view;
     lv_obj_t *img;
     lv_obj_t *hint_label;
-    gallery_png_item_t *items;
+    pic_item_t *items;
     size_t item_count;
     size_t selected_idx;
     size_t loaded_idx;

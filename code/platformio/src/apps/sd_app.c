@@ -128,19 +128,19 @@ static void _sd_app_style_item(lv_obj_t *btn)
         return;
     }
 
-    lv_obj_set_style_bg_color(btn, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(APP_THEME_SURFACE_HEX), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(btn, 4, LV_PART_MAIN);
     lv_obj_set_style_pad_left(btn, 6, LV_PART_MAIN);
     lv_obj_set_style_pad_right(btn, 6, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btn, lv_color_hex(0xE2E8F0), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(btn, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x1D4ED8), LV_PART_MAIN | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(APP_THEME_ACCENT_HEX), LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0x1D4ED8), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(APP_THEME_ACCENT_ACTIVE_HEX), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_PRESSED);
 }
@@ -801,7 +801,7 @@ static void _sd_app_input_task(void *param)
         else if ((btn_val == Btn_Both_Click) && !s_sd_input_home_requested)
         {
             s_sd_input_home_requested = true;
-            app_home_nav_request_home();
+            desktop_app_return_to_home();
         }
 
         delay_ms(SD_APP_INPUT_SCAN_PERIOD_MS);
@@ -978,7 +978,7 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(APP_THEME_BG_HEX), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(scr, 0, 0);
     ctx->screen = scr;
@@ -1003,10 +1003,10 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 
     lv_obj_set_size(list, lcd_w - (2 * SD_APP_MARGIN_X), content_h);
     lv_obj_set_pos(list, SD_APP_MARGIN_X, content_top);
-    lv_obj_set_style_bg_color(list, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(list, lv_color_hex(APP_THEME_SURFACE_HEX), 0);
     lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(list, 1, 0);
-    lv_obj_set_style_border_color(list, lv_color_white(), 0);
+    lv_obj_set_style_border_color(list, lv_color_hex(APP_THEME_BORDER_HEX), 0);
     lv_obj_set_style_radius(list, 4, 0);
     lv_obj_set_style_pad_row(list, 2, 0);
     lv_obj_set_style_pad_all(list, 2, 0);
@@ -1058,11 +1058,11 @@ void sd_app_release_resources(void)
 }
 
 /*
- * brief: Request desktop return through shared home navigation callback.
+ * brief: Request desktop return directly.
  * input: None.
  * output: None.
  */
 void sd_app_destroy_and_return(void)
 {
-    app_home_nav_request_home();
+    desktop_app_return_to_home();
 }

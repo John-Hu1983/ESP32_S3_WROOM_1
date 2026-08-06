@@ -3,18 +3,41 @@
 #define TAG "DESKTOP"
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
-    {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0x2D, 0x5B, 0xFF), camera_app_create_screen, camera_app_release_resources},
-    {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xEB, 0x4D, 0x8A), gallery_app_create_screen, gallery_app_release_resources},
-    {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x6D, 0x5D, 0xF6), music_app_create_screen, music_app_release_resources},
-    {LV_SYMBOL_VIDEO, "Scope", LV_COLOR_MAKE(0x00, 0xA1, 0xD6), scope_app_create_screen, scope_app_release_resources},
-    {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0x22, 0xB0, 0x7D), wifi_app_create_screen, wifi_app_release_resources},
-    {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0x1E, 0x90, 0xFF), bt_app_create_screen, bt_app_release_resources},
-    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xFF, 0x8A, 0x00), sd_app_create_screen, sd_app_release_resources},
-    {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x5D, 0x66, 0x7A), battery_app_create_screen, battery_app_release_resources},
-    {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xD2, 0x4D, 0x57), alerts_app_create_screen, alerts_app_release_resources},
-    {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x7A, 0x4D, 0xD8), tools_app_create_screen, tools_app_release_resources},
-    {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0x00, 0xA8, 0x78), setting_app_create_screen, setting_app_release_resources},
-    {LV_SYMBOL_POWER, "Power", LV_COLOR_MAKE(0x1F, 0x29, 0x37), power_app_create_screen, power_app_release_resources},
+    {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0xE9, 0x54, 0x20),
+     camera_app_create_screen, camera_app_release_resources},
+
+    {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xD9, 0x4B, 0x3D),
+     gallery_app_create_screen, gallery_app_release_resources},
+
+    {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x77, 0x21, 0x6F),
+     music_app_create_screen, music_app_release_resources},
+
+    {LV_SYMBOL_VIDEO, "Scope", LV_COLOR_MAKE(0xF2, 0x7C, 0x38),
+     scope_app_create_screen, scope_app_release_resources},
+
+    {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0xC0, 0x56, 0x3F),
+     wifi_app_create_screen, wifi_app_release_resources},
+
+    {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0xB6, 0x5C, 0x2C),
+     bt_app_create_screen, bt_app_release_resources},
+
+    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
+     sd_app_create_screen, sd_app_release_resources},
+
+    {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x8F, 0x67, 0x45),
+     battery_app_create_screen, battery_app_release_resources},
+
+    {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xC2, 0x3B, 0x4A),
+     alerts_app_create_screen, alerts_app_release_resources},
+
+    {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x8A, 0x3D, 0x5D),
+     tools_app_create_screen, tools_app_release_resources},
+
+    {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0xA8, 0x70, 0x3A),
+     setting_app_create_screen, setting_app_release_resources},
+
+    {LV_SYMBOL_POWER, "Power", LV_COLOR_MAKE(0x6F, 0x4A, 0x34),
+     power_app_create_screen, power_app_release_resources},
 };
 
 static lv_disp_draw_buf_t s_lv_draw_buf;
@@ -44,19 +67,13 @@ static void _desktop_set_checked_state(lv_obj_t *obj, uint8_t checked)
         return;
     }
 
-    if (checked != 0U)
+    if (!lv_obj_has_state(obj, LV_STATE_CHECKED) && checked != 0U)
     {
-        if (!lv_obj_has_state(obj, LV_STATE_CHECKED))
-        {
-            lv_obj_add_state(obj, LV_STATE_CHECKED);
-        }
+        lv_obj_add_state(obj, LV_STATE_CHECKED);
     }
-    else
+    else if (lv_obj_has_state(obj, LV_STATE_CHECKED) && checked == 0U)
     {
-        if (lv_obj_has_state(obj, LV_STATE_CHECKED))
-        {
-            lv_obj_clear_state(obj, LV_STATE_CHECKED);
-        }
+        lv_obj_clear_state(obj, LV_STATE_CHECKED);
     }
 }
 
@@ -188,7 +205,7 @@ static void _desktop_create_ui(void)
         grid_h = 80;
     }
 
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x0F172A), 0);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(APP_THEME_BG_HEX), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     grid = lv_obj_create(scr);
@@ -217,7 +234,7 @@ static void _desktop_create_ui(void)
 
         btn = lv_btn_create(grid);
         lv_obj_remove_style_all(btn);
-        selected_color = desktop_common_invert_color(s_desktop_icons[i].color);
+        selected_color = lv_color_hex(APP_THEME_ACCENT_ACTIVE_HEX);
 
         lv_obj_set_grid_cell(btn,
                              LV_GRID_ALIGN_STRETCH, col, 1,
@@ -227,9 +244,9 @@ static void _desktop_create_ui(void)
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_bg_color(btn, s_desktop_icons[i].color, LV_PART_MAIN | LV_STATE_PRESSED);
         lv_obj_set_style_bg_color(btn, selected_color, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
-        lv_obj_set_style_text_color(btn, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(btn, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
-        lv_obj_set_style_text_color(btn, lv_color_black(), LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_set_style_text_color(btn, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), LV_PART_MAIN | LV_STATE_PRESSED);
         lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
         lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN);
         lv_obj_set_style_border_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
@@ -248,7 +265,7 @@ static void _desktop_create_ui(void)
 
         symbol = lv_label_create(btn);
         lv_label_set_text(symbol, s_desktop_icons[i].symbol);
-        lv_obj_set_style_text_color(symbol, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(symbol, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(symbol, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_text_font(symbol, DESKTOP_FONT_ICON, 0);
         lv_obj_align(symbol, LV_ALIGN_TOP_MID, 0, 4);
@@ -256,7 +273,7 @@ static void _desktop_create_ui(void)
 
         name = lv_label_create(btn);
         lv_label_set_text(name, s_desktop_icons[i].name);
-        lv_obj_set_style_text_color(name, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(name, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_color(name, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_text_font(name, DESKTOP_FONT_ICON_NAME, 0);
         lv_obj_set_style_text_letter_space(name, 1, 0);
@@ -700,8 +717,6 @@ esp_err_t desktop_app_start(void)
         ESP_LOGE(TAG, "apps_idle_task_start failed: %d", (int)ret);
         return ret;
     }
-
-    app_home_nav_set_callback(desktop_app_return_to_home);
 
     _desktop_create_ui();
 

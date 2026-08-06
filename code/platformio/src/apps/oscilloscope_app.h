@@ -7,7 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "app_home_nav.h"
+#include "desktop/desktop_app.h"
 #include "app_status_bar.h"
 #include "bsp/delay.h"
 #include "lvgl.h"
