@@ -65,15 +65,15 @@ btn_status_e keyboard_scan_event(btn_scan_s *scan, uint8_t ms)
                 scan->debounce = 0U;
                 if (scan->prev_level == Btn_Level_Up)
                 {
-                    status = Btn_Up_Hold;
+                    status = Btn_Up_Hold_Enter;
                 }
                 else if (scan->prev_level == Btn_Level_Down)
                 {
-                    status = Btn_Down_Hold;
+                    status = Btn_Down_Hold_Enter;
                 }
                 else if (scan->prev_level == Btn_Level_Both)
                 {
-                    status = Btn_Both_Hold;
+                    status = Btn_Both_Hold_Enter;
                 }
             }
         }
@@ -142,6 +142,23 @@ btn_status_e keyboard_scan_event(btn_scan_s *scan, uint8_t ms)
         else
         {
             scan->debounce = 0;
+            scan->hold_period += ms;
+            if (scan->hold_period >= KEYBOARD_HOLD_MS)
+            {
+                if (scan->prev_level == Btn_Level_Up)
+                {
+                    status = Btn_Up_Hold_Continue;
+                }
+                else if (scan->prev_level == Btn_Level_Down)
+                {
+                    status = Btn_Down_Hold_Continue;
+                }
+                else if (scan->prev_level == Btn_Level_Both)
+                {
+                    status = Btn_Both_Hold_Continue;
+                }
+                scan->hold_period = 0U;
+            }
         }
         break;
     }

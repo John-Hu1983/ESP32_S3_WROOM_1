@@ -22,15 +22,18 @@ typedef enum
     Btn_Idle = 0,
     Btn_Up_Click,
     Btn_Up_Double,
-    Btn_Up_Hold,
+    Btn_Up_Hold_Enter,
+    Btn_Up_Hold_Continue,
 
     Btn_Down_Click,
     Btn_Down_Double,
-    Btn_Down_Hold,
+    Btn_Down_Hold_Enter,
+    Btn_Down_Hold_Continue,
 
     Btn_Both_Click,
     Btn_Both_Double,
-    Btn_Both_Hold,
+    Btn_Both_Hold_Enter,
+    Btn_Both_Hold_Continue,
 
 } btn_status_e;
 
@@ -47,6 +50,7 @@ typedef struct
     btn_level_e prev_level;
     uint8_t step;
     uint16_t debounce;
+    uint16_t hold_period;
 } btn_scan_s;
 
 esp_err_t keyboard_init_obj(void);

@@ -792,9 +792,9 @@ static void _sd_app_input_task(void *param)
         {
             (void)lv_async_call(_sd_app_select_next_async, NULL);
         }
-        else if ((btn_val == Btn_Up_Hold) ||
-                 (btn_val == Btn_Down_Hold) ||
-                 (btn_val == Btn_Both_Hold))
+        else if ((btn_val == Btn_Up_Hold_Enter) ||
+                 (btn_val == Btn_Down_Hold_Enter) ||
+                 (btn_val == Btn_Both_Hold_Enter))
         {
             (void)lv_async_call(_sd_app_enter_selected_async, NULL);
         }

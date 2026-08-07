@@ -494,9 +494,9 @@ static void _desktop_handle_key_event(btn_status_e btn_val)
         _desktop_select_icon(target_idx);
         break;
 
-    case Btn_Up_Hold:
-    case Btn_Down_Hold:
-    case Btn_Both_Hold:
+    case Btn_Up_Hold_Enter:
+    case Btn_Down_Hold_Enter:
+    case Btn_Both_Hold_Enter:
         if (s_app_select.icon_selected_idx < DESKTOP_ICON_COUNT)
         {
             (void)_desktop_request_open_app(s_app_select.icon_selected_idx);

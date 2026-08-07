@@ -196,8 +196,10 @@ static void _gallery_input_task(void *param)
         btn_status_e btn_val;
 
         btn_val = keyboard_scan_event(&btn, GALLERY_INPUT_SCAN_PERIOD_MS);
-        if (btn_val == Btn_Up_Click)
+        switch (btn_val)
         {
+        case Btn_Up_Click:
+        case Btn_Up_Hold_Continue:
             if (!s_gallery_nav_pending)
             {
                 s_gallery_nav_pending = true;
@@ -206,9 +208,10 @@ static void _gallery_input_task(void *param)
                     s_gallery_nav_pending = false;
                 }
             }
-        }
-        else if (btn_val == Btn_Down_Click)
-        {
+            break;
+
+        case Btn_Down_Click:
+        case Btn_Down_Hold_Continue:
             if (!s_gallery_nav_pending)
             {
                 s_gallery_nav_pending = true;
@@ -217,13 +220,18 @@ static void _gallery_input_task(void *param)
                     s_gallery_nav_pending = false;
                 }
             }
-        }
-        else if ((btn_val == Btn_Both_Click) && !s_gallery_home_requested)
-        {
-            s_gallery_home_requested = true;
-            desktop_app_return_to_home();
-        }
+            break;
 
+        case Btn_Both_Click:
+            if (!s_gallery_home_requested)
+            {
+                s_gallery_home_requested = true;
+                desktop_app_return_to_home();
+            }
+            break;
+        default:
+            break;
+        }
         delay_ms(GALLERY_INPUT_SCAN_PERIOD_MS);
     }
 
