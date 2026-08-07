@@ -6,7 +6,6 @@
 
 #include "driver/gpio.h"
 
-#define CAMERA_APP_EN (true)
 
 #define USER_AUDIO_SAMPLE_RATE_HZ (16000U)
 

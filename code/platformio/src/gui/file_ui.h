@@ -46,6 +46,6 @@ typedef struct
 	uint16_t visible_count;
 } sd_app_ctx_t;
 
-lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
-void sd_app_release_resources(void);
-void sd_app_destroy_and_return(void);
+lv_obj_t *file_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
+void file_release_resources(void);
+void file_destroy_and_return(void);

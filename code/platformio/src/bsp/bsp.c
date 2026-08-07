@@ -2,6 +2,10 @@
 
 #define TAG "BSP"
 
+#ifdef CAMERA_OBJECT
+#include "peripherals/ov2640.h"
+#endif
+
 /*
  * brief: Drive the external power lock pin high to turn system power on.
  * input: None.
@@ -104,11 +108,37 @@ esp_err_t bsp_init_whole(void)
     USER_RETURN_ON_ERROR(gpba02b_pin_write(I2S_EN_PORT, I2S_EN_PIN, true),
                          TAG, "gpba02b_pin_write I2S_EN failed");
 
+#ifdef CAMERA_OBJECT
+    /*
+    camera (optional)
+    */
+    {
+        esp_err_t cam_ret = ov2640_init_device();
+        if (cam_ret != ESP_OK)
+        {
+            ESP_LOGW(TAG, "ov2640 init failed: %d, continue without camera", (int)cam_ret);
+        }
+    }
+#endif
+
     /*
     amplifier
     */
-    USER_RETURN_ON_ERROR(ht517_init(), TAG, "ht517_init failed");
-    USER_RETURN_ON_ERROR(voice_init_player(), TAG, "voice_init_player failed");
+    {
+        esp_err_t amp_ret = ht517_init();
+        if (amp_ret != ESP_OK)
+        {
+            ESP_LOGW(TAG, "ht517 init failed: %d, continue without amplifier", (int)amp_ret);
+        }
+        else
+        {
+            esp_err_t voice_ret = voice_init_player();
+            if (voice_ret != ESP_OK)
+            {
+                ESP_LOGW(TAG, "voice service init failed: %d, continue without voice", (int)voice_ret);
+            }
+        }
+    }
 
     return ESP_OK;
 }

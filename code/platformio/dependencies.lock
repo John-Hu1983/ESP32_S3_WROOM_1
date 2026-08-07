@@ -1,4 +1,18 @@
 dependencies:
+  espressif/esp32-camera:
+    component_hash: bc9c8a6b51df777a014fa295825b3de5069bc0300c317acff20c97cf4a10ac7d
+    dependencies:
+    - name: espressif/esp_jpeg
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.3.1
+    - name: idf
+      require: private
+      version: '>=5.1'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.1.7
   espressif/esp_audio_codec:
     component_hash: af4663830bc73eca58febcc34a976d003465e78ed57458aa00a14b231e392ca1
     dependencies:
@@ -9,6 +23,16 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 2.4.1
+  espressif/esp_jpeg:
+    component_hash: defb83669293cbf86d0fa86b475ba5517aceed04ed70db435388c151ab37b5d7
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.3.1
   idf:
     source:
       type: idf
@@ -21,8 +45,9 @@ dependencies:
       type: service
     version: 8.3.11
 direct_dependencies:
+- espressif/esp32-camera
 - espressif/esp_audio_codec
 - lvgl/lvgl
-manifest_hash: 45f70297058c307bfb4fea0ce2e8d1fddec2336ce398db3ddee6d5d04e29e01f
+manifest_hash: 30954e649ca4a8a48e2d23be09a139ecf8f36f6415a41669493d153a634d33d6
 target: esp32s3
 version: 2.0.0

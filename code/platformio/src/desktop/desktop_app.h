@@ -30,7 +30,7 @@
 #include "peripherals/st7365p.h"
 #include "../gui/oscilloscope_ui.h"
 #include "../gui/power_ui.h"
-#include "../gui/sd_ui.h"
+#include "../gui/file_ui.h"
 #include "../gui/setting_ui.h"
 #include "../gui/tools_ui.h"
 #include "../gui/wifi_ui.h"
@@ -70,16 +70,16 @@
 #define DESKTOP_FONT_TEXT LV_FONT_DEFAULT
 #endif
 
-typedef lv_obj_t *(*desktop_app_create_screen_cb_t)(lv_coord_t lcd_w, lv_coord_t lcd_h);
-typedef void (*desktop_app_release_cb_t)(void);
+typedef lv_obj_t *(*desktop_create_ui)(lv_coord_t lcd_w, lv_coord_t lcd_h);
+typedef void (*desktop_quit_ui)(void);
 
 typedef struct
 {
     const char *symbol;
     const char *name;
     lv_color_t color;
-    desktop_app_create_screen_cb_t create_screen_cb;
-    desktop_app_release_cb_t release_cb;
+    desktop_create_ui create_screen_cb;
+    desktop_quit_ui release_cb;
 } desktop_icon_s;
 
 typedef struct
@@ -98,4 +98,4 @@ typedef struct
 /* Initialize ST7365 panel, start LVGL task, and create desktop UI. */
 esp_err_t desktop_app_start(void);
 /* Destroy current child app screen and return to desktop main screen. */
-void desktop_app_return_to_home(void);
+void desktop_return_to_home(void);

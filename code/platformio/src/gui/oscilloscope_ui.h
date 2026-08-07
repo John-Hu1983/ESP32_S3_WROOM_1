@@ -26,8 +26,8 @@ typedef struct
 } scope_app_ctx_t;
 
 /* Create oscilloscope app screen and runtime resources. */
-lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
+lv_obj_t *scope_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
 /* Release oscilloscope runtime resources before returning home. */
-void scope_app_release_resources(void);
+void scope_release_resources(void);
 /* Request return-to-home navigation from oscilloscope app. */
-void scope_app_destroy_and_return(void);
+void scope_destroy_and_return(void);

@@ -1,18 +1,18 @@
-#include "sd_ui.h"
+#include "file_ui.h"
 
 #define TAG "SD_APP"
 
-static sd_app_ctx_t *s_sd_ctx = NULL;
-static TaskHandle_t s_sd_input_task_handle = NULL;
-static volatile bool s_sd_input_task_stop = false;
-static volatile bool s_sd_input_home_requested = false;
+static sd_app_ctx_t *s_file_ctx = NULL;
+static TaskHandle_t s_file_input_task_handle = NULL;
+static volatile bool s_file_input_task_stop = false;
+static volatile bool s_file_input_home_requested = false;
 
 /*
  * brief: Allocate SD app buffers from PSRAM first, then fallback to generic 8-bit heap.
  * input: bytes - requested byte count.
  * output: Allocated pointer on success; otherwise NULL.
  */
-static void *_sd_app_psram_alloc(size_t bytes)
+static void *_file_psram_alloc(size_t bytes)
 {
     void *ptr;
 
@@ -35,7 +35,7 @@ static void *_sd_app_psram_alloc(size_t bytes)
  * input: ctx - SD app context; idx - item index.
  * output: Slot pointer on success; otherwise NULL.
  */
-static char *_sd_app_item_path_slot(sd_app_ctx_t *ctx, uint16_t idx)
+static char *_file_item_path_slot(sd_app_ctx_t *ctx, uint16_t idx)
 {
     if ((ctx == NULL) || (ctx->item_paths == NULL) || (idx >= SD_APP_MAX_ITEMS))
     {
@@ -50,7 +50,7 @@ static char *_sd_app_item_path_slot(sd_app_ctx_t *ctx, uint16_t idx)
  * input: item_type - SD_APP_ITEM_FILE/SD_APP_ITEM_DIR/SD_APP_ITEM_PARENT.
  * output: Constant prefix text for UI rendering.
  */
-static const char *_sd_app_item_prefix(uint8_t item_type)
+static const char *_file_item_prefix(uint8_t item_type)
 {
     if (item_type == SD_APP_ITEM_DIR)
     {
@@ -70,7 +70,7 @@ static const char *_sd_app_item_prefix(uint8_t item_type)
  * input: obj - target list item object; checked - true to mark selected.
  * output: None.
  */
-static void _sd_app_set_checked_state(lv_obj_t *obj, bool checked)
+static void _file_set_checked_state(lv_obj_t *obj, bool checked)
 {
     if (obj == NULL)
     {
@@ -98,7 +98,7 @@ static void _sd_app_set_checked_state(lv_obj_t *obj, bool checked)
  * input: btn - LVGL list button; text - target text string.
  * output: None.
  */
-static void _sd_app_set_btn_text(lv_obj_t *btn, const char *text)
+static void _file_set_btn_text(lv_obj_t *btn, const char *text)
 {
     lv_obj_t *label;
 
@@ -121,7 +121,7 @@ static void _sd_app_set_btn_text(lv_obj_t *btn, const char *text)
  * input: btn - list item object.
  * output: None.
  */
-static void _sd_app_style_item(lv_obj_t *btn)
+static void _file_style_item(lv_obj_t *btn)
 {
     if (btn == NULL)
     {
@@ -150,7 +150,7 @@ static void _sd_app_style_item(lv_obj_t *btn)
  * input: ctx - SD app context.
  * output: None.
  */
-static void _sd_app_refresh_visible_items(sd_app_ctx_t *ctx)
+static void _file_refresh_visible_items(sd_app_ctx_t *ctx)
 {
     uint16_t row;
 
@@ -177,7 +177,7 @@ static void _sd_app_refresh_visible_items(sd_app_ctx_t *ctx)
             char line_text[USER_FS_PATH_MAX_LEN + 16U];
             int n;
 
-            name_slot = _sd_app_item_path_slot(ctx, item_idx);
+            name_slot = _file_item_path_slot(ctx, item_idx);
             if (name_slot == NULL)
             {
                 continue;
@@ -186,21 +186,21 @@ static void _sd_app_refresh_visible_items(sd_app_ctx_t *ctx)
             n = snprintf(line_text,
                          sizeof(line_text),
                          "%s %s",
-                         _sd_app_item_prefix(ctx->item_type[item_idx]),
+                         _file_item_prefix(ctx->item_type[item_idx]),
                          name_slot);
             if ((n <= 0) || ((size_t)n >= sizeof(line_text)))
             {
                 line_text[0] = '\0';
             }
 
-            _sd_app_set_btn_text(btn, line_text);
+            _file_set_btn_text(btn, line_text);
             lv_obj_clear_flag(btn, LV_OBJ_FLAG_HIDDEN);
-            _sd_app_set_checked_state(btn, (item_idx == ctx->selected_idx));
+            _file_set_checked_state(btn, (item_idx == ctx->selected_idx));
         }
         else
         {
-            _sd_app_set_btn_text(btn, "");
-            _sd_app_set_checked_state(btn, false);
+            _file_set_btn_text(btn, "");
+            _file_set_checked_state(btn, false);
             lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -211,7 +211,7 @@ static void _sd_app_refresh_visible_items(sd_app_ctx_t *ctx)
  * input: ctx - SD app context; idx - selected item index.
  * output: None.
  */
-static void _sd_app_select_item(sd_app_ctx_t *ctx, uint16_t idx)
+static void _file_select_item(sd_app_ctx_t *ctx, uint16_t idx)
 {
     uint16_t row_idx;
 
@@ -230,7 +230,7 @@ static void _sd_app_select_item(sd_app_ctx_t *ctx, uint16_t idx)
         ctx->view_start_idx = (uint16_t)(idx - ctx->visible_count + 1U);
     }
 
-    _sd_app_refresh_visible_items(ctx);
+    _file_refresh_visible_items(ctx);
 
     row_idx = (uint16_t)(ctx->selected_idx - ctx->view_start_idx);
     if ((row_idx < ctx->visible_count) && (ctx->item_btns[row_idx] != NULL))
@@ -244,27 +244,27 @@ static void _sd_app_select_item(sd_app_ctx_t *ctx, uint16_t idx)
  * input: user_data - unused.
  * output: None.
  */
-static void _sd_app_select_prev_async(void *user_data)
+static void _file_select_prev_async(void *user_data)
 {
     uint16_t next_idx;
 
     (void)user_data;
 
-    if ((s_sd_ctx == NULL) || (s_sd_ctx->item_count == 0U))
+    if ((s_file_ctx == NULL) || (s_file_ctx->item_count == 0U))
     {
         return;
     }
 
-    if (s_sd_ctx->selected_idx == 0U)
+    if (s_file_ctx->selected_idx == 0U)
     {
-        next_idx = (uint16_t)(s_sd_ctx->item_count - 1U);
+        next_idx = (uint16_t)(s_file_ctx->item_count - 1U);
     }
     else
     {
-        next_idx = (uint16_t)(s_sd_ctx->selected_idx - 1U);
+        next_idx = (uint16_t)(s_file_ctx->selected_idx - 1U);
     }
 
-    _sd_app_select_item(s_sd_ctx, next_idx);
+    _file_select_item(s_file_ctx, next_idx);
 }
 
 /*
@@ -272,19 +272,19 @@ static void _sd_app_select_prev_async(void *user_data)
  * input: user_data - unused.
  * output: None.
  */
-static void _sd_app_select_next_async(void *user_data)
+static void _file_select_next_async(void *user_data)
 {
     uint16_t next_idx;
 
     (void)user_data;
 
-    if ((s_sd_ctx == NULL) || (s_sd_ctx->item_count == 0U))
+    if ((s_file_ctx == NULL) || (s_file_ctx->item_count == 0U))
     {
         return;
     }
 
-    next_idx = (uint16_t)((s_sd_ctx->selected_idx + 1U) % s_sd_ctx->item_count);
-    _sd_app_select_item(s_sd_ctx, next_idx);
+    next_idx = (uint16_t)((s_file_ctx->selected_idx + 1U) % s_file_ctx->item_count);
+    _file_select_item(s_file_ctx, next_idx);
 }
 
 /*
@@ -292,7 +292,7 @@ static void _sd_app_select_next_async(void *user_data)
  * input: ctx - SD app context.
  * output: None.
  */
-static void _sd_app_reset_items(sd_app_ctx_t *ctx)
+static void _file_reset_items(sd_app_ctx_t *ctx)
 {
     if (ctx == NULL)
     {
@@ -309,7 +309,7 @@ static void _sd_app_reset_items(sd_app_ctx_t *ctx)
  * input: ctx - SD app context; item_type - file/dir/parent; name - entry name.
  * output: ESP_OK on success; otherwise error code.
  */
-static esp_err_t _sd_app_append_entry_data(sd_app_ctx_t *ctx, uint8_t item_type, const char *name)
+static esp_err_t _file_append_entry_data(sd_app_ctx_t *ctx, uint8_t item_type, const char *name)
 {
     char *path_slot;
     int n;
@@ -324,7 +324,7 @@ static esp_err_t _sd_app_append_entry_data(sd_app_ctx_t *ctx, uint8_t item_type,
         return ESP_ERR_NO_MEM;
     }
 
-    path_slot = _sd_app_item_path_slot(ctx, ctx->item_count);
+    path_slot = _file_item_path_slot(ctx, ctx->item_count);
     if (path_slot == NULL)
     {
         return ESP_ERR_INVALID_ARG;
@@ -352,7 +352,7 @@ static esp_err_t _sd_app_append_entry_data(sd_app_ctx_t *ctx, uint8_t item_type,
  * input: root_path - absolute directory path.
  * output: true when open succeeds; otherwise false.
  */
-static bool _sd_app_can_access_root(const char *root_path)
+static bool _file_can_access_root(const char *root_path)
 {
     DIR *dir;
 
@@ -376,7 +376,7 @@ static bool _sd_app_can_access_root(const char *root_path)
  * input: out_root - output root path buffer; out_root_size - output buffer size.
  * output: ESP_OK on success; otherwise ESP_ERR_NOT_FOUND/INVALID_ARG/INVALID_SIZE.
  */
-static esp_err_t _sd_app_select_root(char *out_root, size_t out_root_size)
+static esp_err_t _file_select_root(char *out_root, size_t out_root_size)
 {
     const char *storage_root;
     int n;
@@ -392,7 +392,7 @@ static esp_err_t _sd_app_select_root(char *out_root, size_t out_root_size)
     }
 
     storage_root = usr_fs_mount_point();
-    if ((storage_root == NULL) || (storage_root[0] == '\0') || !_sd_app_can_access_root(storage_root))
+    if ((storage_root == NULL) || (storage_root[0] == '\0') || !_file_can_access_root(storage_root))
     {
         return ESP_ERR_NOT_FOUND;
     }
@@ -411,7 +411,7 @@ static esp_err_t _sd_app_select_root(char *out_root, size_t out_root_size)
  * input: ctx - SD app context; out_path - output full path; out_path_size - output size.
  * output: ESP_OK on success; otherwise argument/size errors.
  */
-static esp_err_t _sd_app_build_current_dir_path(sd_app_ctx_t *ctx, char *out_path, size_t out_path_size)
+static esp_err_t _file_build_current_dir_path(sd_app_ctx_t *ctx, char *out_path, size_t out_path_size)
 {
     int n;
 
@@ -447,7 +447,7 @@ static esp_err_t _sd_app_build_current_dir_path(sd_app_ctx_t *ctx, char *out_pat
  * input: ctx - SD app context.
  * output: None.
  */
-static void _sd_app_enter_parent_dir(sd_app_ctx_t *ctx)
+static void _file_enter_parent_dir(sd_app_ctx_t *ctx)
 {
     char *slash;
 
@@ -471,7 +471,7 @@ static void _sd_app_enter_parent_dir(sd_app_ctx_t *ctx)
  * input: ctx - SD app context; out_path - output full path; out_path_size - output buffer size.
  * output: true when selected row is a file and full path is generated.
  */
-static bool _sd_app_get_selected_audio_path(sd_app_ctx_t *ctx, char *out_path, size_t out_path_size)
+static bool _file_get_selected_audio_path(sd_app_ctx_t *ctx, char *out_path, size_t out_path_size)
 {
     char *name_slot;
     int n;
@@ -491,7 +491,7 @@ static bool _sd_app_get_selected_audio_path(sd_app_ctx_t *ctx, char *out_path, s
         return false;
     }
 
-    name_slot = _sd_app_item_path_slot(ctx, ctx->selected_idx);
+    name_slot = _file_item_path_slot(ctx, ctx->selected_idx);
     if ((name_slot == NULL) || (name_slot[0] == '\0'))
     {
         return false;
@@ -529,17 +529,17 @@ static bool _sd_app_get_selected_audio_path(sd_app_ctx_t *ctx, char *out_path, s
  * input: None.
  * output: None.
  */
-static void _sd_app_play_selected_audio(void)
+static void _file_play_selected_audio(void)
 {
     char full_path[USER_FS_PATH_MAX_LEN * 2U];
     esp_err_t ret;
 
-    if (s_sd_ctx == NULL)
+    if (s_file_ctx == NULL)
     {
         return;
     }
 
-    if (!_sd_app_get_selected_audio_path(s_sd_ctx, full_path, sizeof(full_path)))
+    if (!_file_get_selected_audio_path(s_file_ctx, full_path, sizeof(full_path)))
     {
         return;
     }
@@ -556,7 +556,7 @@ static void _sd_app_play_selected_audio(void)
  * input: ctx - SD app context.
  * output: None.
  */
-static void _sd_app_build_current_dir_data(sd_app_ctx_t *ctx)
+static void _file_build_current_dir_data(sd_app_ctx_t *ctx)
 {
     DIR *dir;
     struct dirent *entry;
@@ -568,30 +568,30 @@ static void _sd_app_build_current_dir_data(sd_app_ctx_t *ctx)
         return;
     }
 
-    _sd_app_reset_items(ctx);
+    _file_reset_items(ctx);
 
     if (ctx->source_root[0] == '\0')
     {
-        (void)_sd_app_append_entry_data(ctx, SD_APP_ITEM_FILE, "storage not ready");
+        (void)_file_append_entry_data(ctx, SD_APP_ITEM_FILE, "storage not ready");
         return;
     }
 
     if (ctx->current_rel_dir[0] != '\0')
     {
-        (void)_sd_app_append_entry_data(ctx, SD_APP_ITEM_PARENT, "..");
+        (void)_file_append_entry_data(ctx, SD_APP_ITEM_PARENT, "..");
     }
 
-    ret = _sd_app_build_current_dir_path(ctx, full_dir, sizeof(full_dir));
+    ret = _file_build_current_dir_path(ctx, full_dir, sizeof(full_dir));
     if (ret != ESP_OK)
     {
-        (void)_sd_app_append_entry_data(ctx, SD_APP_ITEM_FILE, "path too long");
+        (void)_file_append_entry_data(ctx, SD_APP_ITEM_FILE, "path too long");
         return;
     }
 
     dir = opendir(full_dir);
     if (dir == NULL)
     {
-        (void)_sd_app_append_entry_data(ctx, SD_APP_ITEM_FILE, "open dir failed");
+        (void)_file_append_entry_data(ctx, SD_APP_ITEM_FILE, "open dir failed");
         return;
     }
 
@@ -621,11 +621,11 @@ static void _sd_app_build_current_dir_data(sd_app_ctx_t *ctx)
 
         if (S_ISDIR(st.st_mode))
         {
-            ret = _sd_app_append_entry_data(ctx, SD_APP_ITEM_DIR, entry->d_name);
+            ret = _file_append_entry_data(ctx, SD_APP_ITEM_DIR, entry->d_name);
         }
         else if (S_ISREG(st.st_mode))
         {
-            ret = _sd_app_append_entry_data(ctx, SD_APP_ITEM_FILE, entry->d_name);
+            ret = _file_append_entry_data(ctx, SD_APP_ITEM_FILE, entry->d_name);
         }
         else
         {
@@ -645,7 +645,7 @@ static void _sd_app_build_current_dir_data(sd_app_ctx_t *ctx)
         if (ctx->item_count > 0U)
         {
             char *last_slot;
-            last_slot = _sd_app_item_path_slot(ctx, (uint16_t)(ctx->item_count - 1U));
+            last_slot = _file_item_path_slot(ctx, (uint16_t)(ctx->item_count - 1U));
             if (last_slot != NULL)
             {
                 (void)snprintf(last_slot, USER_FS_PATH_MAX_LEN, "... list truncated");
@@ -657,7 +657,7 @@ static void _sd_app_build_current_dir_data(sd_app_ctx_t *ctx)
 
     if (ctx->item_count == 0U)
     {
-        (void)_sd_app_append_entry_data(ctx, SD_APP_ITEM_FILE, "(empty)");
+        (void)_file_append_entry_data(ctx, SD_APP_ITEM_FILE, "(empty)");
     }
 }
 
@@ -666,7 +666,7 @@ static void _sd_app_build_current_dir_data(sd_app_ctx_t *ctx)
  * input: user_data - unused.
  * output: None.
  */
-static void _sd_app_enter_selected_async(void *user_data)
+static void _file_enter_selected_async(void *user_data)
 {
     uint8_t type;
     char *name_slot;
@@ -675,31 +675,31 @@ static void _sd_app_enter_selected_async(void *user_data)
 
     (void)user_data;
 
-    if ((s_sd_ctx == NULL) || (s_sd_ctx->item_count == 0U) || (s_sd_ctx->selected_idx >= s_sd_ctx->item_count))
+    if ((s_file_ctx == NULL) || (s_file_ctx->item_count == 0U) || (s_file_ctx->selected_idx >= s_file_ctx->item_count))
     {
         return;
     }
 
-    type = s_sd_ctx->item_type[s_sd_ctx->selected_idx];
+    type = s_file_ctx->item_type[s_file_ctx->selected_idx];
     if (type == SD_APP_ITEM_FILE)
     {
-        _sd_app_play_selected_audio();
+        _file_play_selected_audio();
         return;
     }
 
     if (type == SD_APP_ITEM_PARENT)
     {
-        _sd_app_enter_parent_dir(s_sd_ctx);
+        _file_enter_parent_dir(s_file_ctx);
     }
     else if (type == SD_APP_ITEM_DIR)
     {
-        name_slot = _sd_app_item_path_slot(s_sd_ctx, s_sd_ctx->selected_idx);
+        name_slot = _file_item_path_slot(s_file_ctx, s_file_ctx->selected_idx);
         if ((name_slot == NULL) || (name_slot[0] == '\0'))
         {
             return;
         }
 
-        if (s_sd_ctx->current_rel_dir[0] == '\0')
+        if (s_file_ctx->current_rel_dir[0] == '\0')
         {
             n = snprintf(new_rel, sizeof(new_rel), "%s", name_slot);
         }
@@ -708,7 +708,7 @@ static void _sd_app_enter_selected_async(void *user_data)
             n = snprintf(new_rel,
                          sizeof(new_rel),
                          "%s/%s",
-                         s_sd_ctx->current_rel_dir,
+                         s_file_ctx->current_rel_dir,
                          name_slot);
         }
 
@@ -718,17 +718,17 @@ static void _sd_app_enter_selected_async(void *user_data)
             return;
         }
 
-        (void)snprintf(s_sd_ctx->current_rel_dir, sizeof(s_sd_ctx->current_rel_dir), "%s", new_rel);
+        (void)snprintf(s_file_ctx->current_rel_dir, sizeof(s_file_ctx->current_rel_dir), "%s", new_rel);
     }
 
-    _sd_app_build_current_dir_data(s_sd_ctx);
-    if (s_sd_ctx->item_count > 0U)
+    _file_build_current_dir_data(s_file_ctx);
+    if (s_file_ctx->item_count > 0U)
     {
-        _sd_app_select_item(s_sd_ctx, 0U);
+        _file_select_item(s_file_ctx, 0U);
     }
     else
     {
-        _sd_app_refresh_visible_items(s_sd_ctx);
+        _file_refresh_visible_items(s_file_ctx);
     }
 }
 
@@ -737,7 +737,7 @@ static void _sd_app_enter_selected_async(void *user_data)
  * input: ctx - SD app context.
  * output: ESP_OK on success; otherwise ESP_ERR_INVALID_ARG/NO_MEM.
  */
-static esp_err_t _sd_app_create_list_rows(sd_app_ctx_t *ctx)
+static esp_err_t _file_create_list_rows(sd_app_ctx_t *ctx)
 {
     uint16_t i;
 
@@ -758,7 +758,7 @@ static esp_err_t _sd_app_create_list_rows(sd_app_ctx_t *ctx)
             return ESP_ERR_NO_MEM;
         }
 
-        _sd_app_style_item(btn);
+        _file_style_item(btn);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_CLICKABLE);
         ctx->item_btns[i] = btn;
     }
@@ -771,43 +771,43 @@ static esp_err_t _sd_app_create_list_rows(sd_app_ctx_t *ctx)
  * input: param - unused task parameter.
  * output: None.
  */
-static void _sd_app_input_task(void *param)
+static void _file_input_task(void *param)
 {
     btn_scan_s btn;
 
     (void)param;
     lv_memset_00(&btn, sizeof(btn));
-    s_sd_input_home_requested = false;
+    s_file_input_home_requested = false;
 
-    while (!s_sd_input_task_stop)
+    while (!s_file_input_task_stop)
     {
         btn_status_e btn_val;
 
         btn_val = keyboard_scan_event(&btn, SD_APP_INPUT_SCAN_PERIOD_MS);
         if (btn_val == Btn_Up_Click)
         {
-            (void)lv_async_call(_sd_app_select_prev_async, NULL);
+            (void)lv_async_call(_file_select_prev_async, NULL);
         }
         else if (btn_val == Btn_Down_Click)
         {
-            (void)lv_async_call(_sd_app_select_next_async, NULL);
+            (void)lv_async_call(_file_select_next_async, NULL);
         }
         else if ((btn_val == Btn_Up_Hold_Enter) ||
                  (btn_val == Btn_Down_Hold_Enter) ||
                  (btn_val == Btn_Both_Hold_Enter))
         {
-            (void)lv_async_call(_sd_app_enter_selected_async, NULL);
+            (void)lv_async_call(_file_enter_selected_async, NULL);
         }
-        else if ((btn_val == Btn_Both_Click) && !s_sd_input_home_requested)
+        else if ((btn_val == Btn_Both_Click) && !s_file_input_home_requested)
         {
-            s_sd_input_home_requested = true;
-            desktop_app_return_to_home();
+            s_file_input_home_requested = true;
+            desktop_return_to_home();
         }
 
         delay_ms(SD_APP_INPUT_SCAN_PERIOD_MS);
     }
 
-    s_sd_input_task_handle = NULL;
+    s_file_input_task_handle = NULL;
     vTaskDelete(NULL);
 }
 
@@ -816,23 +816,23 @@ static void _sd_app_input_task(void *param)
  * input: None.
  * output: true on success; otherwise false.
  */
-static bool _sd_app_start_input_task(void)
+static bool _file_start_input_task(void)
 {
     BaseType_t task_ok;
 
-    s_sd_input_task_stop = false;
-    s_sd_input_home_requested = false;
-    task_ok = xTaskCreate(_sd_app_input_task,
+    s_file_input_task_stop = false;
+    s_file_input_home_requested = false;
+    task_ok = xTaskCreate(_file_input_task,
                           "sd_input",
                           SD_APP_INPUT_TASK_STACK_SIZE,
                           NULL,
                           SD_APP_INPUT_TASK_PRIORITY,
-                          &s_sd_input_task_handle);
+                          &s_file_input_task_handle);
     if (task_ok != pdPASS)
     {
         ESP_LOGE(TAG, "xTaskCreate sd_input failed");
-        s_sd_input_task_stop = true;
-        s_sd_input_task_handle = NULL;
+        s_file_input_task_stop = true;
+        s_file_input_task_handle = NULL;
         return false;
     }
 
@@ -844,21 +844,21 @@ static bool _sd_app_start_input_task(void)
  * input: None.
  * output: None.
  */
-static void _sd_app_stop_input_task(void)
+static void _file_stop_input_task(void)
 {
     TaskHandle_t handle;
     uint32_t wait_count;
 
-    handle = s_sd_input_task_handle;
+    handle = s_file_input_task_handle;
     if (handle == NULL)
     {
         return;
     }
 
-    s_sd_input_task_stop = true;
+    s_file_input_task_stop = true;
     for (wait_count = 0U; wait_count < 20U; wait_count++)
     {
-        if (s_sd_input_task_handle == NULL)
+        if (s_file_input_task_handle == NULL)
         {
             return;
         }
@@ -866,11 +866,11 @@ static void _sd_app_stop_input_task(void)
         delay_ms(5U);
     }
 
-    handle = s_sd_input_task_handle;
+    handle = s_file_input_task_handle;
     if (handle != NULL)
     {
         vTaskDelete(handle);
-        s_sd_input_task_handle = NULL;
+        s_file_input_task_handle = NULL;
     }
 }
 
@@ -879,7 +879,7 @@ static void _sd_app_stop_input_task(void)
  * input: e - LVGL delete event.
  * output: None.
  */
-static void _sd_app_delete_cb(lv_event_t *e)
+static void _file_delete_cb(lv_event_t *e)
 {
     lv_obj_t *target;
     sd_app_ctx_t *ctx;
@@ -891,16 +891,16 @@ static void _sd_app_delete_cb(lv_event_t *e)
         return;
     }
 
-    s_sd_input_task_stop = true;
-    if (s_sd_input_task_handle != NULL)
+    s_file_input_task_stop = true;
+    if (s_file_input_task_handle != NULL)
     {
-        vTaskDelete(s_sd_input_task_handle);
-        s_sd_input_task_handle = NULL;
+        vTaskDelete(s_file_input_task_handle);
+        s_file_input_task_handle = NULL;
     }
 
-    if ((target != NULL) && (s_sd_ctx == ctx) && (s_sd_ctx->screen == target))
+    if ((target != NULL) && (s_file_ctx == ctx) && (s_file_ctx->screen == target))
     {
-        s_sd_ctx = NULL;
+        s_file_ctx = NULL;
     }
 
     if (ctx->item_paths != NULL)
@@ -923,7 +923,7 @@ static void _sd_app_delete_cb(lv_event_t *e)
  * input: lcd_w/lcd_h - active display resolution.
  * output: SD app screen object on success; otherwise NULL.
  */
-lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
+lv_obj_t *file_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 {
     sd_app_ctx_t *ctx;
     lv_obj_t *scr;
@@ -944,7 +944,7 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     }
     lv_memset_00(ctx, sizeof(sd_app_ctx_t));
 
-    ctx->item_paths = (char *)_sd_app_psram_alloc((size_t)SD_APP_MAX_ITEMS * USER_FS_PATH_MAX_LEN);
+    ctx->item_paths = (char *)_file_psram_alloc((size_t)SD_APP_MAX_ITEMS * USER_FS_PATH_MAX_LEN);
     if (ctx->item_paths == NULL)
     {
         lv_mem_free(ctx);
@@ -952,7 +952,7 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    ctx->item_type = (uint8_t *)_sd_app_psram_alloc((size_t)SD_APP_MAX_ITEMS * sizeof(uint8_t));
+    ctx->item_type = (uint8_t *)_file_psram_alloc((size_t)SD_APP_MAX_ITEMS * sizeof(uint8_t));
     if (ctx->item_type == NULL)
     {
         heap_caps_free(ctx->item_paths);
@@ -964,7 +964,7 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_memset_00(ctx->item_type, (size_t)SD_APP_MAX_ITEMS * sizeof(uint8_t));
     ctx->current_rel_dir[0] = '\0';
 
-    if (_sd_app_select_root(ctx->source_root, sizeof(ctx->source_root)) != ESP_OK)
+    if (_file_select_root(ctx->source_root, sizeof(ctx->source_root)) != ESP_OK)
     {
         ctx->source_root[0] = '\0';
     }
@@ -1013,7 +1013,7 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
     ctx->list = list;
 
-    if (_sd_app_create_list_rows(ctx) != ESP_OK)
+    if (_file_create_list_rows(ctx) != ESP_OK)
     {
         lv_obj_del(scr);
         heap_caps_free(ctx->item_type);
@@ -1023,17 +1023,17 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    _sd_app_build_current_dir_data(ctx);
+    _file_build_current_dir_data(ctx);
     if (ctx->item_count > 0U)
     {
-        _sd_app_select_item(ctx, 0U);
+        _file_select_item(ctx, 0U);
     }
     else
     {
-        _sd_app_refresh_visible_items(ctx);
+        _file_refresh_visible_items(ctx);
     }
 
-    if (!_sd_app_start_input_task())
+    if (!_file_start_input_task())
     {
         lv_obj_del(scr);
         heap_caps_free(ctx->item_type);
@@ -1042,8 +1042,8 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    lv_obj_add_event_cb(scr, _sd_app_delete_cb, LV_EVENT_DELETE, ctx);
-    s_sd_ctx = ctx;
+    lv_obj_add_event_cb(scr, _file_delete_cb, LV_EVENT_DELETE, ctx);
+    s_file_ctx = ctx;
     return scr;
 }
 
@@ -1052,9 +1052,9 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
  * input: None.
  * output: None.
  */
-void sd_app_release_resources(void)
+void file_release_resources(void)
 {
-    _sd_app_stop_input_task();
+    _file_stop_input_task();
 }
 
 /*
@@ -1062,7 +1062,7 @@ void sd_app_release_resources(void)
  * input: None.
  * output: None.
  */
-void sd_app_destroy_and_return(void)
+void file_destroy_and_return(void)
 {
-    desktop_app_return_to_home();
+    desktop_return_to_home();
 }

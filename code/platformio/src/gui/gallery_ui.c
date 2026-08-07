@@ -226,7 +226,7 @@ static void _gallery_input_task(void *param)
             if (!s_gallery_home_requested)
             {
                 s_gallery_home_requested = true;
-                desktop_app_return_to_home();
+                desktop_return_to_home();
             }
             break;
         default:
@@ -341,7 +341,7 @@ static void _gallery_delete_cb(lv_event_t *e)
  * input: lcd_w/lcd_h - active display resolution.
  * output: Gallery screen object on success; otherwise NULL.
  */
-lv_obj_t *gallery_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
+lv_obj_t *gallery_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 {
     gallery_app_ctx_t *ctx;
     lv_obj_t *scr;
@@ -448,7 +448,7 @@ lv_obj_t *gallery_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
  * input: None.
  * output: None.
  */
-void gallery_app_release_resources(void)
+void gallery_release_resources(void)
 {
     _gallery_stop_input_task();
 }
@@ -458,7 +458,7 @@ void gallery_app_release_resources(void)
  * input: None.
  * output: None.
  */
-void gallery_app_destroy_and_return(void)
+void gallery_destroy_and_return(void)
 {
-    desktop_app_return_to_home();
+    desktop_return_to_home();
 }

@@ -22,7 +22,7 @@ static volatile bool s_scope_input_task_stop = false;
  * input: param - unused task parameter.
  * output: None.
  */
-static void _scope_app_input_task(void *param)
+static void _scope_input_task(void *param)
 {
     btn_scan_s btn;
     bool home_requested;
@@ -39,7 +39,7 @@ static void _scope_app_input_task(void *param)
         if ((btn_val == Btn_Both_Click) && !home_requested)
         {
             home_requested = true;
-            desktop_app_return_to_home();
+            desktop_return_to_home();
         }
 
         delay_ms(SCOPE_INPUT_SCAN_PERIOD_MS);
@@ -54,12 +54,12 @@ static void _scope_app_input_task(void *param)
  * input: None.
  * output: true on success; otherwise false.
  */
-static bool _scope_app_start_input_task(void)
+static bool _scope_start_input_task(void)
 {
     BaseType_t task_ok;
 
     s_scope_input_task_stop = false;
-    task_ok = xTaskCreate(_scope_app_input_task,
+    task_ok = xTaskCreate(_scope_input_task,
                           "scope_input",
                           SCOPE_INPUT_TASK_STACK_SIZE,
                           NULL,
@@ -81,7 +81,7 @@ static bool _scope_app_start_input_task(void)
  * input: None.
  * output: None.
  */
-static void _scope_app_stop_input_task(void)
+static void _scope_stop_input_task(void)
 {
     TaskHandle_t handle;
     uint32_t wait_count;
@@ -116,7 +116,7 @@ static void _scope_app_stop_input_task(void)
  * input: ctx - scope context.
  * output: None.
  */
-static void _scope_app_fill_points(scope_app_ctx_t *ctx)
+static void _scope_fill_points(scope_app_ctx_t *ctx)
 {
     uint32_t i;
 
@@ -157,7 +157,7 @@ static void _scope_chart_draw_part_cb(lv_event_t *e)
  * input: timer - LVGL timer carrying scope context.
  * output: None.
  */
-static void _scope_app_timer_cb(lv_timer_t *timer)
+static void _scope_timer_cb(lv_timer_t *timer)
 {
     scope_app_ctx_t *ctx = (scope_app_ctx_t *)timer->user_data;
 
@@ -172,7 +172,7 @@ static void _scope_app_timer_cb(lv_timer_t *timer)
         ctx->phase -= SCOPE_TWO_PI;
     }
 
-    _scope_app_fill_points(ctx);
+    _scope_fill_points(ctx);
     lv_chart_refresh(ctx->chart);
 }
 
@@ -181,7 +181,7 @@ static void _scope_app_timer_cb(lv_timer_t *timer)
  * input: e - LVGL delete event.
  * output: None.
  */
-static void _scope_app_delete_cb(lv_event_t *e)
+static void _scope_delete_cb(lv_event_t *e)
 {
     lv_obj_t *target = lv_event_get_target(e);
     scope_app_ctx_t *ctx = (scope_app_ctx_t *)lv_event_get_user_data(e);
@@ -217,7 +217,7 @@ static void _scope_app_delete_cb(lv_event_t *e)
  * input: lcd_w/lcd_h - active display resolution.
  * output: Scope screen object on success; otherwise NULL.
  */
-lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
+lv_obj_t *scope_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 {
     scope_app_ctx_t *ctx;
     lv_obj_t *scr;
@@ -296,11 +296,11 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     }
 
     ctx->chart = chart;
-    _scope_app_fill_points(ctx);
+    _scope_fill_points(ctx);
     lv_chart_set_ext_y_array(chart, ctx->series, ctx->points);
     lv_chart_refresh(chart);
 
-    ctx->timer = lv_timer_create(_scope_app_timer_cb, SCOPE_UPDATE_PERIOD_MS, ctx);
+    ctx->timer = lv_timer_create(_scope_timer_cb, SCOPE_UPDATE_PERIOD_MS, ctx);
     if (ctx->timer == NULL)
     {
         lv_obj_del(scr);
@@ -308,7 +308,7 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    if (!_scope_app_start_input_task())
+    if (!_scope_start_input_task())
     {
         lv_timer_del(ctx->timer);
         ctx->timer = NULL;
@@ -317,7 +317,7 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
         return NULL;
     }
 
-    lv_obj_add_event_cb(scr, _scope_app_delete_cb, LV_EVENT_DELETE, ctx);
+    lv_obj_add_event_cb(scr, _scope_delete_cb, LV_EVENT_DELETE, ctx);
     s_scope_ctx = ctx;
     return scr;
 }
@@ -327,9 +327,9 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
  * input: None.
  * output: None.
  */
-void scope_app_release_resources(void)
+void scope_release_resources(void)
 {
-    _scope_app_stop_input_task();
+    _scope_stop_input_task();
 
     if (s_scope_ctx == NULL)
     {
@@ -348,7 +348,7 @@ void scope_app_release_resources(void)
  * input: None.
  * output: None.
  */
-void scope_app_destroy_and_return(void)
+void scope_destroy_and_return(void)
 {
-    desktop_app_return_to_home();
+    desktop_return_to_home();
 }

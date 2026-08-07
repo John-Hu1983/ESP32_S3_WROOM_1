@@ -4,40 +4,40 @@
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0xE9, 0x54, 0x20),
-    camera_app_create_screen, NULL},
+    camera_create_screen, camera_release_resources},
 
     {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xD9, 0x4B, 0x3D),
-     gallery_app_create_screen, gallery_app_release_resources},
+     gallery_create_screen, gallery_release_resources},
 
     {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x77, 0x21, 0x6F),
-        music_app_create_screen, NULL},
+        music_create_screen, NULL},
 
     {LV_SYMBOL_VIDEO, "Scope", LV_COLOR_MAKE(0xF2, 0x7C, 0x38),
-     scope_app_create_screen, scope_app_release_resources},
+     scope_create_screen, scope_release_resources},
 
     {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0xC0, 0x56, 0x3F),
-        wifi_app_create_screen, NULL},
+        wifi_create_screen, NULL},
 
     {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0xB6, 0x5C, 0x2C),
-        bt_app_create_screen, NULL},
+        bt_create_screen, NULL},
 
-    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
-     sd_app_create_screen, sd_app_release_resources},
+    {LV_SYMBOL_SD_CARD, "File", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
+     file_create_screen, file_release_resources},
 
     {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x8F, 0x67, 0x45),
-        battery_app_create_screen, NULL},
+        battery_create_screen, NULL},
 
     {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xC2, 0x3B, 0x4A),
-        alerts_app_create_screen, NULL},
+        alerts_create_screen, NULL},
         
     {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x8A, 0x3D, 0x5D),
-        tools_app_create_screen, NULL},
+        tools_create_screen, NULL},
 
     {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0xA8, 0x70, 0x3A),
-        setting_app_create_screen, NULL},
+        setting_create_screen, NULL},
 
     {LV_SYMBOL_POWER, "Power", LV_COLOR_MAKE(0x6F, 0x4A, 0x34),
-        power_app_create_screen, NULL},
+        power_create_screen, NULL},
 };
 
 static lv_disp_draw_buf_t s_lv_draw_buf;
@@ -473,7 +473,7 @@ static void _desktop_handle_key_event(btn_status_e btn_val)
         (s_app_select.active_app_screen != NULL) &&
         lv_obj_is_valid(s_app_select.active_app_screen))
     {
-        desktop_app_return_to_home();
+        desktop_return_to_home();
         return;
     }
 
@@ -598,7 +598,7 @@ static esp_err_t _desktop_prepare_monitor(void)
  * input: None.
  * output: None.
  */
-void desktop_app_return_to_home(void)
+void desktop_return_to_home(void)
 {
     if (s_app_select.app_switching != 0U)
     {
