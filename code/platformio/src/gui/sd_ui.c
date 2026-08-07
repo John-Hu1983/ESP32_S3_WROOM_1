@@ -1,4 +1,4 @@
-#include "sd_app.h"
+#include "sd_ui.h"
 
 #define TAG "SD_APP"
 
@@ -983,8 +983,8 @@ lv_obj_t *sd_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_border_width(scr, 0, 0);
     ctx->screen = scr;
 
-    content_top = app_status_bar_content_top();
-    content_bottom = app_status_bar_content_bottom();
+    content_top = system_service_content_top();
+    content_bottom = system_service_content_bottom();
     content_h = content_bottom - content_top;
     if (content_h < 40)
     {

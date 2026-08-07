@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 
 #include "desktop/desktop_app.h"
-#include "app_status_bar.h"
+#include "service/system_service.h"
 #include "bsp/delay.h"
 #include "esp_err.h"
 #include "esp_log.h"

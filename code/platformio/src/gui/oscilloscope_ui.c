@@ -1,4 +1,4 @@
-#include "oscilloscope_app.h"
+#include "oscilloscope_ui.h"
 
 #define TAG "SCOPE"
 
@@ -252,8 +252,8 @@ lv_obj_t *scope_app_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     ctx->screen = scr;
 
-    content_y = app_status_bar_content_top();
-    content_bottom = app_status_bar_content_bottom();
+    content_y = system_service_content_top();
+    content_bottom = system_service_content_bottom();
     content_h = content_bottom - content_y;
     if (content_h < 40)
     {

@@ -4,40 +4,40 @@
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0xE9, 0x54, 0x20),
-     camera_app_create_screen, camera_app_release_resources},
+    camera_app_create_screen, NULL},
 
     {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xD9, 0x4B, 0x3D),
      gallery_app_create_screen, gallery_app_release_resources},
 
     {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x77, 0x21, 0x6F),
-     music_app_create_screen, music_app_release_resources},
+        music_app_create_screen, NULL},
 
     {LV_SYMBOL_VIDEO, "Scope", LV_COLOR_MAKE(0xF2, 0x7C, 0x38),
      scope_app_create_screen, scope_app_release_resources},
 
     {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0xC0, 0x56, 0x3F),
-     wifi_app_create_screen, wifi_app_release_resources},
+        wifi_app_create_screen, NULL},
 
     {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0xB6, 0x5C, 0x2C),
-     bt_app_create_screen, bt_app_release_resources},
+        bt_app_create_screen, NULL},
 
-    {LV_SYMBOL_SD_CARD, "File", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
+    {LV_SYMBOL_SD_CARD, "SD", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
      sd_app_create_screen, sd_app_release_resources},
 
     {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x8F, 0x67, 0x45),
-     battery_app_create_screen, battery_app_release_resources},
+        battery_app_create_screen, NULL},
 
     {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xC2, 0x3B, 0x4A),
-     alerts_app_create_screen, alerts_app_release_resources},
+        alerts_app_create_screen, NULL},
         
     {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x8A, 0x3D, 0x5D),
-     tools_app_create_screen, tools_app_release_resources},
+        tools_app_create_screen, NULL},
 
     {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0xA8, 0x70, 0x3A),
-     setting_app_create_screen, setting_app_release_resources},
+        setting_app_create_screen, NULL},
 
     {LV_SYMBOL_POWER, "Power", LV_COLOR_MAKE(0x6F, 0x4A, 0x34),
-     power_app_create_screen, power_app_release_resources},
+        power_app_create_screen, NULL},
 };
 
 static lv_disp_draw_buf_t s_lv_draw_buf;
@@ -198,8 +198,8 @@ static void _desktop_create_ui(void)
     scr = lv_obj_create(NULL);
     s_app_select.desktop_screen = scr;
 
-    grid_y = app_status_bar_content_top() + DESKTOP_GRID_TOP_GAP;
-    grid_h = app_status_bar_content_bottom() - grid_y - DESKTOP_GRID_BOTTOM_GAP;
+    grid_y = system_service_content_top() + DESKTOP_GRID_TOP_GAP;
+    grid_h = system_service_content_bottom() - grid_y - DESKTOP_GRID_BOTTOM_GAP;
     if (grid_h < 80)
     {
         grid_h = 80;
@@ -410,35 +410,6 @@ static esp_err_t _desktop_request_open_app(uint32_t idx)
 }
 
 /*
- * brief: Queue a request to close current sub-app and return home.
- * input: None.
- * output: ESP_OK on success; otherwise ESP_ERR_INVALID_STATE or ESP_FAIL.
- */
-static esp_err_t _desktop_request_return_home(void)
-{
-    if (s_app_select.app_switching != 0U)
-    {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    if ((s_app_select.active_app_screen == NULL) ||
-        (s_app_select.active_app_idx >= DESKTOP_ICON_COUNT))
-    {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    s_app_select.app_switching = 1U;
-    if (lv_async_call(_desktop_return_home_async, NULL) != LV_RES_OK)
-    {
-        s_app_select.app_switching = 0U;
-        ESP_LOGE(TAG, "lv_async_call _desktop_return_home_async failed");
-        return ESP_FAIL;
-    }
-
-    return ESP_OK;
-}
-
-/*
  * brief: Resolve next icon index for DOWN navigation.
  * input: None.
  * output: Next icon index with wrap-around.
@@ -481,32 +452,10 @@ static uint32_t _desktop_prev_icon_idx(void)
  */
 static bool _desktop_can_handle_key_nav(void)
 {
-    if (s_app_select.app_switching != 0U)
-    {
-        return false;
-    }
-
-    if (s_app_select.active_app_idx < DESKTOP_ICON_COUNT)
-    {
-        return false;
-    }
-
-    if ((s_app_select.desktop_screen == NULL) || !lv_obj_is_valid(s_app_select.desktop_screen))
-    {
-        return false;
-    }
-
-    return true;
-}
-
-/*
- * brief: Decide whether desktop task is allowed to scan keyboard right now.
- * input: None.
- * output: true only when desktop screen is active and no app switch is in progress.
- */
-static bool _desktop_can_scan_keyboard(void)
-{
-    return _desktop_can_handle_key_nav();
+    return (s_app_select.app_switching == 0U) &&
+           (s_app_select.active_app_idx >= DESKTOP_ICON_COUNT) &&
+           (s_app_select.desktop_screen != NULL) &&
+           lv_obj_is_valid(s_app_select.desktop_screen);
 }
 
 /*
@@ -524,7 +473,7 @@ static void _desktop_handle_key_event(btn_status_e btn_val)
         (s_app_select.active_app_screen != NULL) &&
         lv_obj_is_valid(s_app_select.active_app_screen))
     {
-        (void)_desktop_request_return_home();
+        desktop_app_return_to_home();
         return;
     }
 
@@ -651,7 +600,23 @@ static esp_err_t _desktop_prepare_monitor(void)
  */
 void desktop_app_return_to_home(void)
 {
-    (void)_desktop_request_return_home();
+    if (s_app_select.app_switching != 0U)
+    {
+        return;
+    }
+
+    if ((s_app_select.active_app_screen == NULL) ||
+        (s_app_select.active_app_idx >= DESKTOP_ICON_COUNT))
+    {
+        return;
+    }
+
+    s_app_select.app_switching = 1U;
+    if (lv_async_call(_desktop_return_home_async, NULL) != LV_RES_OK)
+    {
+        s_app_select.app_switching = 0U;
+        ESP_LOGE(TAG, "lv_async_call _desktop_return_home_async failed");
+    }
 }
 
 /*
@@ -670,7 +635,7 @@ static void _desktop_lvgl_task(void *param)
         lv_timer_handler();
         delay_ms(LVGL_TASK_PERIOD_MS);
 
-        if (!_desktop_can_scan_keyboard())
+        if (!_desktop_can_handle_key_nav())
         {
             continue;
         }
@@ -681,7 +646,7 @@ static void _desktop_lvgl_task(void *param)
 }
 
 /*
- * brief: Start desktop subsystem including panel, LVGL, status bar, and task loop.
+ * brief: Start desktop subsystem including panel, LVGL, system service, and task loop.
  * input: None.
  * output: ESP_OK on success; otherwise propagated startup error.
  */
@@ -704,17 +669,10 @@ esp_err_t desktop_app_start(void)
         return ret;
     }
 
-    ret = app_status_bar_init((lv_coord_t)s_lcd_width, (lv_coord_t)s_lcd_height);
+    ret = system_service_start((lv_coord_t)s_lcd_width, (lv_coord_t)s_lcd_height);
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "app_status_bar_init failed: %d", (int)ret);
-        return ret;
-    }
-
-    ret = apps_idle_task_start();
-    if (ret != ESP_OK)
-    {
-        ESP_LOGE(TAG, "apps_idle_task_start failed: %d", (int)ret);
+        ESP_LOGE(TAG, "system_service_start failed: %d", (int)ret);
         return ret;
     }
 
