@@ -1,6 +1,10 @@
 #include "camera_ui.h"
 
 #define TAG "CAMERA"
+#define CAMERA_PREINIT_WARMUP_MS 30U
+#define CAMERA_PREINIT_RETRY_MAX 3U
+#define CAMERA_INIT_RETRY_MAX 3U
+#define CAMERA_INIT_RETRY_DELAY_MS 30U
 
 static camera_app_ctx_t *s_camera_ctx = NULL;
 static TaskHandle_t s_camera_input_task_handle = NULL;
@@ -100,30 +104,75 @@ static esp_err_t _camera_prepare_control_pins(void)
                                            true),
                          TAG,
                          "set CAM PWDN high failed");
-    delay_ms(2U);
+    delay_ms(5U);
 
     USER_RETURN_ON_ERROR(gpba02b_pin_write(CAM_IO_PWDN_PORT,
                                            CAM_IO_PWDN_PIN,
                                            false),
                          TAG,
                          "set CAM PWDN low failed");
-    delay_ms(2U);
+    delay_ms(5U);
 
     USER_RETURN_ON_ERROR(gpba02b_pin_write(CAM_IO_RESET_PORT,
                                            CAM_IO_RESET_PIN,
                                            false),
                          TAG,
                          "set CAM RESET low failed");
-    delay_ms(2U);
+    delay_ms(5U);
 
     USER_RETURN_ON_ERROR(gpba02b_pin_write(CAM_IO_RESET_PORT,
                                            CAM_IO_RESET_PIN,
                                            true),
                          TAG,
                          "set CAM RESET high failed");
-    delay_ms(20U);
+    delay_ms(30U);
 
     return ESP_OK;
+}
+
+/*
+ * brief: Warm up OV2640 low-level path before esp_camera_init takes SCCB ownership.
+ * input: none.
+ * output: ESP_OK on success; otherwise last preinit error code.
+ */
+static esp_err_t _camera_preinit_sensor(void)
+{
+    esp_err_t ret;
+    uint32_t attempt;
+
+    ret = ESP_FAIL;
+    for (attempt = 0U; attempt < CAMERA_PREINIT_RETRY_MAX; attempt++)
+    {
+        ret = ov2640_init_device();
+        if (ret == ESP_OK)
+        {
+            delay_ms(CAMERA_PREINIT_WARMUP_MS);
+            ret = ov2640_prepare_preview_start();
+            if ((ret == ESP_OK) || (ret == ESP_ERR_NOT_SUPPORTED))
+            {
+                return ESP_OK;
+            }
+
+            ESP_LOGW(TAG,
+                     "preinit release failed (attempt %u/%u): %d",
+                     (unsigned)(attempt + 1U),
+                     (unsigned)CAMERA_PREINIT_RETRY_MAX,
+                     (int)ret);
+        }
+        else
+        {
+            ESP_LOGW(TAG,
+                     "ov2640 preinit failed (attempt %u/%u): %d",
+                     (unsigned)(attempt + 1U),
+                     (unsigned)CAMERA_PREINIT_RETRY_MAX,
+                     (int)ret);
+        }
+
+        (void)ov2640_deinit_device();
+        delay_ms(CAMERA_INIT_RETRY_DELAY_MS);
+    }
+
+    return ret;
 }
 #endif
 
@@ -140,6 +189,7 @@ static esp_err_t _camera_start_driver(camera_app_ctx_t *ctx)
 #else
     camera_config_t cfg = {0};
     esp_err_t ret;
+    uint32_t attempt;
 
     if ((ctx != NULL) && ctx->camera_started)
     {
@@ -189,10 +239,26 @@ static esp_err_t _camera_start_driver(camera_app_ctx_t *ctx)
     cfg.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
     cfg.sccb_i2c_port = CAM_SCCB_I2C_PORT;
 
-    ret = esp_camera_init(&cfg);
+    ret = ESP_FAIL;
+    for (attempt = 0U; attempt < CAMERA_INIT_RETRY_MAX; attempt++)
+    {
+        ret = esp_camera_init(&cfg);
+        if (ret == ESP_OK)
+        {
+            break;
+        }
+
+        ESP_LOGW(TAG,
+                 "esp_camera_init failed (attempt %u/%u): %d",
+                 (unsigned)(attempt + 1U),
+                 (unsigned)CAMERA_INIT_RETRY_MAX,
+                 (int)ret);
+        (void)esp_camera_deinit();
+        delay_ms(CAMERA_INIT_RETRY_DELAY_MS);
+    }
+
     if (ret != ESP_OK)
     {
-        ESP_LOGW(TAG, "esp_camera_init failed: %d", (int)ret);
         return ret;
     }
 
@@ -454,6 +520,9 @@ lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_coord_t content_bottom;
     lv_coord_t content_h;
     esp_err_t cam_ret;
+#ifdef CAMERA_OBJECT
+    esp_err_t preinit_ret;
+#endif
 
     if ((lcd_w <= (2 * CAMERA_MARGIN_X)) || (lcd_h <= (2 * APP_STATUS_BAR_HEIGHT + 20)))
     {
@@ -510,6 +579,14 @@ lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_label_set_text(hint, "starting camera...");
     ctx->hint_label = hint;
 
+#ifdef CAMERA_OBJECT
+    preinit_ret = _camera_preinit_sensor();
+    if (preinit_ret != ESP_OK)
+    {
+        ESP_LOGW(TAG, "camera preinit failed: %d", (int)preinit_ret);
+    }
+#endif
+
     cam_ret = _camera_start_driver(ctx);
     if (cam_ret == ESP_OK)
     {
@@ -526,7 +603,14 @@ lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     }
     else
     {
+#ifdef CAMERA_OBJECT
+        lv_label_set_text_fmt(hint,
+                              "camera init failed (%d/%d)",
+                              (int)preinit_ret,
+                              (int)cam_ret);
+#else
         lv_label_set_text_fmt(hint, "camera init failed (%d)", (int)cam_ret);
+#endif
     }
 
     if (!_camera_start_input_task())

@@ -363,7 +363,6 @@ esp_err_t ov2640_init_device(void)
         return ESP_OK;
     }
 
-    USER_RETURN_ON_ERROR(gpba02b_init_device(), TAG, "gpba02b_init_device failed");
     USER_RETURN_ON_ERROR(_ov2640_config_control_pins(), TAG, "_ov2640_config_control_pins failed");
     USER_RETURN_ON_ERROR(_ov2640_config_dvp_input_pins(), TAG, "_ov2640_config_dvp_input_pins failed");
     USER_RETURN_ON_ERROR(ov2640_set_light(false), TAG, "ov2640_set_light failed");
