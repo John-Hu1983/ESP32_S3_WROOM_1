@@ -41,7 +41,5 @@ typedef struct
 
 /* Create gallery app screen and runtime resources. */
 lv_obj_t *gallery_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
-/* Release gallery runtime resources before returning home. */
-void gallery_release_resources(void);
 /* Request return-to-home navigation from gallery app. */
 void gallery_destroy_and_return(void);

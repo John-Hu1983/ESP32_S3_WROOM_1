@@ -891,12 +891,7 @@ static void _file_delete_cb(lv_event_t *e)
         return;
     }
 
-    s_file_input_task_stop = true;
-    if (s_file_input_task_handle != NULL)
-    {
-        vTaskDelete(s_file_input_task_handle);
-        s_file_input_task_handle = NULL;
-    }
+    _file_stop_input_task();
 
     if ((target != NULL) && (s_file_ctx == ctx) && (s_file_ctx->screen == target))
     {
@@ -1045,16 +1040,6 @@ lv_obj_t *file_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_add_event_cb(scr, _file_delete_cb, LV_EVENT_DELETE, ctx);
     s_file_ctx = ctx;
     return scr;
-}
-
-/*
- * brief: Stop SD app runtime resources before app is destroyed.
- * input: None.
- * output: None.
- */
-void file_release_resources(void)
-{
-    _file_stop_input_task();
 }
 
 /*

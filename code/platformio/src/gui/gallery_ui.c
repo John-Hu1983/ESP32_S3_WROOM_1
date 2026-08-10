@@ -320,12 +320,7 @@ static void _gallery_delete_cb(lv_event_t *e)
         return;
     }
 
-    s_gallery_input_task_stop = true;
-    if (s_gallery_input_task_handle != NULL)
-    {
-        vTaskDelete(s_gallery_input_task_handle);
-        s_gallery_input_task_handle = NULL;
-    }
+    _gallery_stop_input_task();
 
     if ((target != NULL) && (s_gallery_ctx == ctx) && (s_gallery_ctx->screen == target))
     {
@@ -441,16 +436,6 @@ lv_obj_t *gallery_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_add_event_cb(scr, _gallery_delete_cb, LV_EVENT_DELETE, ctx);
     s_gallery_ctx = ctx;
     return scr;
-}
-
-/*
- * brief: Stop gallery runtime resources before app is destroyed.
- * input: None.
- * output: None.
- */
-void gallery_release_resources(void)
-{
-    _gallery_stop_input_task();
 }
 
 /*

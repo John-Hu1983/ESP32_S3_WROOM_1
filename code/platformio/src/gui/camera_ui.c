@@ -474,12 +474,7 @@ static void _camera_delete_cb(lv_event_t *e)
         return;
     }
 
-    s_camera_input_task_stop = true;
-    if (s_camera_input_task_handle != NULL)
-    {
-        vTaskDelete(s_camera_input_task_handle);
-        s_camera_input_task_handle = NULL;
-    }
+    _camera_stop_input_task();
 
     if (ctx->preview_timer != NULL)
     {
@@ -630,21 +625,6 @@ lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_add_event_cb(scr, _camera_delete_cb, LV_EVENT_DELETE, ctx);
     s_camera_ctx = ctx;
     return scr;
-}
-
-/*
- * brief: Stop camera runtime resources before app is destroyed.
- * input: None.
- * output: None.
- */
-void camera_release_resources(void)
-{
-    _camera_stop_input_task();
-
-    if ((s_camera_ctx != NULL) && (s_camera_ctx->preview_timer != NULL))
-    {
-        lv_timer_pause(s_camera_ctx->preview_timer);
-    }
 }
 
 /*

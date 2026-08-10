@@ -47,5 +47,4 @@ typedef struct
 } sd_app_ctx_t;
 
 lv_obj_t *file_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
-void file_release_resources(void);
 void file_destroy_and_return(void);

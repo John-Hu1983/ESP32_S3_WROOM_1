@@ -191,12 +191,7 @@ static void _scope_delete_cb(lv_event_t *e)
         return;
     }
 
-    s_scope_input_task_stop = true;
-    if (s_scope_input_task_handle != NULL)
-    {
-        vTaskDelete(s_scope_input_task_handle);
-        s_scope_input_task_handle = NULL;
-    }
+    _scope_stop_input_task();
 
     if (ctx->timer != NULL)
     {
@@ -320,27 +315,6 @@ lv_obj_t *scope_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_obj_add_event_cb(scr, _scope_delete_cb, LV_EVENT_DELETE, ctx);
     s_scope_ctx = ctx;
     return scr;
-}
-
-/*
- * brief: Stop scope runtime resources before app is destroyed.
- * input: None.
- * output: None.
- */
-void scope_release_resources(void)
-{
-    _scope_stop_input_task();
-
-    if (s_scope_ctx == NULL)
-    {
-        return;
-    }
-
-    if (s_scope_ctx->timer != NULL)
-    {
-        lv_timer_del(s_scope_ctx->timer);
-        s_scope_ctx->timer = NULL;
-    }
 }
 
 /*

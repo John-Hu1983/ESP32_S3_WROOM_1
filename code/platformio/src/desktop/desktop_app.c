@@ -3,41 +3,18 @@
 #define TAG "DESKTOP"
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
-    {LV_SYMBOL_VOLUME_MID, "Camera", LV_COLOR_MAKE(0xE9, 0x54, 0x20),
-    camera_create_screen, camera_release_resources},
-
-    {LV_SYMBOL_IMAGE, "Gallery", LV_COLOR_MAKE(0xD9, 0x4B, 0x3D),
-     gallery_create_screen, gallery_release_resources},
-
-    {LV_SYMBOL_AUDIO, "Music", LV_COLOR_MAKE(0x77, 0x21, 0x6F),
-        music_create_screen, NULL},
-
-    {LV_SYMBOL_VIDEO, "Scope", LV_COLOR_MAKE(0xF2, 0x7C, 0x38),
-     scope_create_screen, scope_release_resources},
-
-    {LV_SYMBOL_WIFI, "WiFi", LV_COLOR_MAKE(0xC0, 0x56, 0x3F),
-        wifi_create_screen, NULL},
-
-    {LV_SYMBOL_BLUETOOTH, "BT", LV_COLOR_MAKE(0xB6, 0x5C, 0x2C),
-        bt_create_screen, NULL},
-
-    {LV_SYMBOL_SD_CARD, "File", LV_COLOR_MAKE(0xE1, 0x9A, 0x35),
-     file_create_screen, file_release_resources},
-
-    {LV_SYMBOL_BATTERY_FULL, "Battery", LV_COLOR_MAKE(0x8F, 0x67, 0x45),
-        battery_create_screen, NULL},
-
-    {LV_SYMBOL_BELL, "Alerts", LV_COLOR_MAKE(0xC2, 0x3B, 0x4A),
-        alerts_create_screen, NULL},
-        
-    {LV_SYMBOL_REFRESH, "Tools", LV_COLOR_MAKE(0x8A, 0x3D, 0x5D),
-        tools_create_screen, NULL},
-
-    {LV_SYMBOL_SETTINGS, "Setting", LV_COLOR_MAKE(0xA8, 0x70, 0x3A),
-        setting_create_screen, NULL},
-
-    {LV_SYMBOL_POWER, "Power", LV_COLOR_MAKE(0x6F, 0x4A, 0x34),
-        power_create_screen, NULL},
+    {LV_SYMBOL_VOLUME_MID, "Camera", IC_CAM, camera_create_screen},
+    {LV_SYMBOL_IMAGE, "Gallery", IC_GAL, gallery_create_screen},
+    {LV_SYMBOL_AUDIO, "Music", IC_MUS, music_create_screen},
+    {LV_SYMBOL_VIDEO, "Scope", IC_SCP, scope_create_screen},
+    {LV_SYMBOL_WIFI, "WiFi", IC_WIF, wifi_create_screen},
+    {LV_SYMBOL_BLUETOOTH, "BT", IC_BT, bt_create_screen},
+    {LV_SYMBOL_SD_CARD, "File", IC_FIL, file_create_screen},
+    {LV_SYMBOL_BATTERY_FULL, "Battery", IC_BAT, battery_create_screen},
+    {LV_SYMBOL_BELL, "PIDM", IC_PIDM, pidm_create_screen},
+    {LV_SYMBOL_REFRESH, "Tools", IC_TLS, tools_create_screen},
+    {LV_SYMBOL_SETTINGS, "Setting", IC_SET, setting_create_screen},
+    {LV_SYMBOL_POWER, "Power", IC_PWR, power_create_screen},
 };
 
 static lv_disp_draw_buf_t s_lv_draw_buf;
@@ -129,27 +106,6 @@ static void _desktop_select_icon(uint32_t idx)
 
     _desktop_set_icon_checked(idx, 1U);
     s_app_select.icon_selected_idx = idx;
-}
-
-/*
- * brief: Release resources of the currently active sub-app.
- * input: None.
- * output: None.
- */
-static void _desktop_release_active_app_resources(void)
-{
-    uint32_t app_idx;
-
-    app_idx = s_app_select.active_app_idx;
-    if (app_idx >= DESKTOP_ICON_COUNT)
-    {
-        return;
-    }
-
-    if (s_desktop_icons[app_idx].release_cb != NULL)
-    {
-        s_desktop_icons[app_idx].release_cb();
-    }
 }
 
 /*
@@ -317,7 +273,6 @@ static void _desktop_open_app_async(void *user_data)
     old_app_screen = s_app_select.active_app_screen;
     if ((old_app_screen != NULL) && lv_obj_is_valid(old_app_screen))
     {
-        _desktop_release_active_app_resources();
         lv_obj_del_async(old_app_screen);
     }
     s_app_select.active_app_screen = NULL;
@@ -365,7 +320,6 @@ static void _desktop_return_home_async(void *user_data)
     (void)user_data;
 
     app_screen = s_app_select.active_app_screen;
-    _desktop_release_active_app_resources();
 
     if ((app_screen != NULL) && lv_obj_is_valid(app_screen))
     {

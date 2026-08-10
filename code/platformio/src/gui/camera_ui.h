@@ -48,7 +48,5 @@ typedef struct
 void desktop_return_to_home(void);
 
 lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
-/* Release camera runtime resources before app is destroyed. */
-void camera_release_resources(void);
 /* Request return-to-home navigation from camera app. */
 void camera_destroy_and_return(void);
