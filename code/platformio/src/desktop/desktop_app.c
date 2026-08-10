@@ -581,13 +581,53 @@ void desktop_return_to_home(void)
 static void _desktop_lvgl_task(void *param)
 {
     (void)param;
+
     btn_scan_s btn = {0};
     btn_status_e btn_val;
+    pidm_det_feature_cfg_s pidm_cfg;
+    esp_err_t pidm_cfg_ret;
+
+    int pidm_period = 0;
+    pidm_det_feature_s pidm_feature = {0};
+
+    pidm_det_feature_cfg_load_default(&pidm_cfg);
+    pidm_cfg_ret = pidm_det_feature_cfg_set(&pidm_cfg);
+    if (pidm_cfg_ret != ESP_OK)
+    {
+        ESP_LOGW(TAG, "pidm_det_feature_cfg_set failed: %d", (int)pidm_cfg_ret);
+    }
 
     while (1)
     {
         lv_timer_handler();
         delay_ms(LVGL_TASK_PERIOD_MS);
+
+        pidm_period += LVGL_TASK_PERIOD_MS;
+        if (pidm_period >= 300)
+        {
+            esp_err_t pidm_ret;
+
+            pidm_period = 0;
+            pidm_ret = pidm_det_probe_feature(100U, &pidm_feature);
+            if (pidm_ret != ESP_OK)
+            {
+                ESP_LOGW(TAG, "pidm_det_probe_feature failed: %d", (int)pidm_ret);
+            }
+            else
+            {
+                ESP_LOGI(TAG,
+                         "pidm metal=%d hit=%d ref=%d peak=%d dpk=%d slope=%u dsl=%u hold=%uus area=%u",
+                         pidm_feature.metal_present ? 1 : 0,
+                         pidm_feature.pulse_hit ? 1 : 0,
+                         pidm_feature.ref_ready ? 1 : 0,
+                         pidm_feature.peak_raw,
+                         pidm_feature.peak_delta_raw,
+                         (unsigned)pidm_feature.rise_slope_adc_per_ms,
+                         (unsigned)pidm_feature.slope_delta_adc_per_ms,
+                         (unsigned)pidm_feature.high_hold_us,
+                         (unsigned)pidm_feature.area_adc_us);
+            }
+        }
 
         if (!_desktop_can_handle_key_nav())
         {

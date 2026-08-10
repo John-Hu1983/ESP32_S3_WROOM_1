@@ -19,6 +19,7 @@
 #include "peripherals/gpba02b.h"
 #include "peripherals/ht517.h"
 #include "peripherals/keyboard.h"
+#include "peripherals/pidm_det.h"
 #include "voice/voice_common.h"
  
 

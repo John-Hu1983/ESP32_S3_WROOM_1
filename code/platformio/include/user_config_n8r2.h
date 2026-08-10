@@ -78,3 +78,12 @@ I2S
 #define I2S_DI_IO (GPIO_NUM_NC)
 #define I2S_EN_PORT (GPBA02B_PORT_B)
 #define I2S_EN_PIN (1)
+
+/*
+PIDM
+*/
+#define PIDM_IO_PULSE (GPIO_NUM_2)
+#define PIDM_IO_ADC  (GPIO_NUM_1)
+#define PIDM_ADC_CHANNEL (ADC_CHANNEL_0)
+#define PIDM_EN_PORT (GPBA02B_PORT_B)
+#define PIDM_EN_PIN (2)

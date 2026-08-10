@@ -121,6 +121,8 @@ esp_err_t bsp_init_whole(void)
     }
 #endif
 
+    USER_RETURN_ON_ERROR(pidm_det_init(), TAG, "pidm_det_init failed");
+
     /*
     amplifier
     */
