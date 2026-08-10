@@ -6,23 +6,10 @@
 
 #include "driver/i2c_master.h"
 #include "esp_err.h"
-#include "esp_camera.h"
-#include "sensor.h"
 
 #include "bsp/delay.h"
 #include "peripherals/gpba02b.h"
 #include "user_config.h"
-
-#define CAM_ZOOM_STEP_MAX (20U)
-#define CAM_ZOOM_TOTAL_X_BASE (400)
-#define CAM_ZOOM_TOTAL_Y_BASE (296)
-#define CAM_ZOOM_TOTAL_X_MIN (160)
-#define CAM_ZOOM_TOTAL_Y_MIN (120)
-#define CAM_ZOOM_OUTPUT_X (320)
-#define CAM_ZOOM_OUTPUT_Y (240)
-#define CAM_ZOOM_STABLE_PERCENT_MAX (130U)
-
-#define OV2640_SENSOR_MODE_CIF (2)
 
 #define USER_OV2640_SCCB_ADDR (0x30U)
 
@@ -60,8 +47,6 @@ struct ov2640_state
     i2c_master_dev_handle_t sccb_dev;
     bool sccb_ready;
     bool ready;
-    uint16_t zoom_step;
-    bool zoom_step_valid;
 };
 
 /* Initialize OV2640 low-level hardware path: SCCB, power/reset pins, and sensor probe. */
@@ -95,14 +80,3 @@ esp_err_t ov2640_read_id(ov2640_id_t *id);
 esp_err_t ov2640_verify_id(void);
 /* Release OV2640 private SCCB ownership before esp_camera_init path starts. */
 esp_err_t ov2640_prepare_preview_start(void);
-
-/* Return true when runtime camera sensor supports OV2640 zoom window control. */
-bool ov2640_zoom_is_supported(void);
-/* Reset OV2640 zoom window to baseline (100%). */
-esp_err_t ov2640_zoom_reset(uint32_t *zoom_percent);
-/* Increase OV2640 sensor-side zoom by one step. */
-esp_err_t ov2640_zoom_in(uint32_t *zoom_percent);
-/* Decrease OV2640 sensor-side zoom by one step. */
-esp_err_t ov2640_zoom_out(uint32_t *zoom_percent);
-/* Get current OV2640 zoom percentage derived from current step state. */
-esp_err_t ov2640_zoom_get_percent(uint32_t *zoom_percent);

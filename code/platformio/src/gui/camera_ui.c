@@ -5,7 +5,6 @@
 static camera_app_ctx_t *s_camera_ctx = NULL;
 static TaskHandle_t s_camera_input_task_handle = NULL;
 static volatile bool s_camera_input_task_stop = false;
-static volatile bool s_camera_zoom_pending = false;
 
 /*
  * brief: Ensure preview frame buffer has enough bytes for one RGB565 frame copy.
@@ -208,75 +207,6 @@ static esp_err_t _camera_start_driver(camera_app_ctx_t *ctx)
 }
 
 /*
- * brief: Refresh preview hint label with current zoom percentage.
- * input: ctx - camera app context pointer; zoom_pct - zoom percentage.
- * output: None.
- */
-static void _camera_update_zoom_label(camera_app_ctx_t *ctx, uint32_t zoom_pct)
-{
-    if ((ctx == NULL) || (ctx->hint_label == NULL) || !ctx->preview_started)
-    {
-        return;
-    }
-
-    lv_label_set_text_fmt(ctx->hint_label, "LIVE %u%%", (unsigned)zoom_pct);
-}
-
-/*
- * brief: Asynchronously increase zoom level from keyboard input.
- * input: user_data - unused.
- * output: None.
- */
-static void _camera_zoom_in_async(void *user_data)
-{
-    camera_app_ctx_t *ctx;
-    uint32_t zoom_pct;
-
-    (void)user_data;
-    ctx = s_camera_ctx;
-    if (ctx == NULL)
-    {
-        s_camera_zoom_pending = false;
-        return;
-    }
-
-    zoom_pct = 0U;
-    if (ov2640_zoom_in(&zoom_pct) == ESP_OK)
-    {
-        _camera_update_zoom_label(ctx, zoom_pct);
-    }
-
-    s_camera_zoom_pending = false;
-}
-
-/*
- * brief: Asynchronously decrease zoom level from keyboard input.
- * input: user_data - unused.
- * output: None.
- */
-static void _camera_zoom_out_async(void *user_data)
-{
-    camera_app_ctx_t *ctx;
-    uint32_t zoom_pct;
-
-    (void)user_data;
-    ctx = s_camera_ctx;
-    if (ctx == NULL)
-    {
-        s_camera_zoom_pending = false;
-        return;
-    }
-
-    zoom_pct = 0U;
-    if (ov2640_zoom_out(&zoom_pct) == ESP_OK)
-    {
-        _camera_update_zoom_label(ctx, zoom_pct);
-    }
-
-    s_camera_zoom_pending = false;
-}
-
-/*
  * brief: Input task for camera app to own key scanning while app is active.
  * input: param - unused task parameter.
  * output: None.
@@ -297,29 +227,6 @@ static void _camera_input_task(void *param)
         btn_val = keyboard_scan_event(&btn, CAMERA_INPUT_SCAN_PERIOD_MS);
         switch (btn_val)
         {
-        case Btn_Up_Click:
-        case Btn_Up_Hold_Continue:
-            if (!s_camera_zoom_pending)
-            {
-                s_camera_zoom_pending = true;
-                if (lv_async_call(_camera_zoom_in_async, NULL) != LV_RES_OK)
-                {
-                    s_camera_zoom_pending = false;
-                }
-            }
-            break;
-
-        case Btn_Down_Click:
-        case Btn_Down_Hold_Continue:
-            if (!s_camera_zoom_pending)
-            {
-                s_camera_zoom_pending = true;
-                if (lv_async_call(_camera_zoom_out_async, NULL) != LV_RES_OK)
-                {
-                    s_camera_zoom_pending = false;
-                }
-            }
-            break;
 
         case Btn_Both_Click:
             if (!home_requested)
@@ -349,7 +256,6 @@ static bool _camera_start_input_task(void)
     BaseType_t task_ok;
 
     s_camera_input_task_stop = false;
-    s_camera_zoom_pending = false;
     task_ok = xTaskCreate(_camera_input_task,
                           "camera_input",
                           CAMERA_INPUT_TASK_STACK_SIZE,
@@ -400,8 +306,6 @@ static void _camera_stop_input_task(void)
         vTaskDelete(handle);
         s_camera_input_task_handle = NULL;
     }
-
-    s_camera_zoom_pending = false;
 }
 
 /*
@@ -469,23 +373,13 @@ static void _camera_preview_timer_cb(lv_timer_t *timer)
 
         if (!ctx->preview_started)
         {
-            uint32_t zoom_pct;
-
             lv_img_set_src(ctx->img, &ctx->frame_dsc);
             lv_obj_center(ctx->img);
             lv_img_set_pivot(ctx->img,
                              (lv_coord_t)(fb->width / 2U),
                              (lv_coord_t)(fb->height / 2U));
             ctx->preview_started = true;
-            zoom_pct = 100U;
-            if (ov2640_zoom_reset(&zoom_pct) == ESP_OK)
-            {
-                _camera_update_zoom_label(ctx, zoom_pct);
-            }
-            else
-            {
-                lv_label_set_text(ctx->hint_label, "LIVE");
-            }
+            lv_label_set_text(ctx->hint_label, "LIVE");
         }
         else
         {
@@ -515,7 +409,6 @@ static void _camera_delete_cb(lv_event_t *e)
     }
 
     s_camera_input_task_stop = true;
-    s_camera_zoom_pending = false;
     if (s_camera_input_task_handle != NULL)
     {
         vTaskDelete(s_camera_input_task_handle);
@@ -679,4 +572,3 @@ void camera_destroy_and_return(void)
 {
     desktop_return_to_home();
 }
-

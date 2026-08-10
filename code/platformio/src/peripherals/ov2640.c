@@ -7,155 +7,6 @@
 static struct ov2640_state s_ov2640 = {0};
 
 /*
- * brief: Clamp requested zoom step so reported zoom percent never exceeds stable limit.
- * input: step - requested zoom step.
- * output: clamped zoom step.
- */
-static uint16_t _ov2640_limit_zoom_step(uint16_t step)
-{
-    uint16_t limited;
-
-    limited = step;
-    if (limited > CAM_ZOOM_STEP_MAX)
-    {
-        limited = CAM_ZOOM_STEP_MAX;
-    }
-
-    while (limited > 0U)
-    {
-        int total_x;
-        uint32_t zoom_percent;
-
-        total_x = CAM_ZOOM_TOTAL_X_BASE -
-                  (int)((limited * (uint16_t)(CAM_ZOOM_TOTAL_X_BASE - CAM_ZOOM_TOTAL_X_MIN)) /
-                        CAM_ZOOM_STEP_MAX);
-        if (total_x < CAM_ZOOM_TOTAL_X_MIN)
-        {
-            total_x = CAM_ZOOM_TOTAL_X_MIN;
-        }
-
-        zoom_percent = (uint32_t)(((uint32_t)CAM_ZOOM_TOTAL_X_BASE * 100U) / (uint32_t)total_x);
-        if (zoom_percent <= CAM_ZOOM_STABLE_PERCENT_MAX)
-        {
-            break;
-        }
-
-        limited--;
-    }
-
-    return limited;
-}
-
-/*
- * brief: Resolve active camera sensor and verify OV2640 zoom API availability.
- * input: out_sensor - resolved sensor pointer output.
- * output: ESP_OK on success; otherwise invalid state / unsupported error.
- */
-static esp_err_t _ov2640_get_active_sensor(sensor_t **out_sensor)
-{
-    sensor_t *sensor;
-
-    if (out_sensor == NULL)
-    {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    sensor = esp_camera_sensor_get();
-    if (sensor == NULL)
-    {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    if (((uint16_t)sensor->id.PID != OV2640_PID) || (sensor->set_res_raw == NULL))
-    {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
-
-    *out_sensor = sensor;
-    return ESP_OK;
-}
-
-/*
- * brief: Convert zoom step into active sensor window and apply it through SCCB.
- * input: step - zoom step value; zoom_percent - optional output zoom percentage.
- * output: ESP_OK on success; otherwise propagated sensor operation error.
- */
-static esp_err_t _ov2640_apply_zoom_step(uint16_t step, uint32_t *zoom_percent)
-{
-    sensor_t *sensor;
-    int total_x;
-    int total_y;
-    int offset_x;
-    int offset_y;
-    int set_ret;
-    esp_err_t ret;
-
-    step = _ov2640_limit_zoom_step(step);
-
-    ret = _ov2640_get_active_sensor(&sensor);
-    if (ret != ESP_OK)
-    {
-        return ret;
-    }
-
-    total_x = CAM_ZOOM_TOTAL_X_BASE -
-              (int)((step * (uint16_t)(CAM_ZOOM_TOTAL_X_BASE - CAM_ZOOM_TOTAL_X_MIN)) /
-                    CAM_ZOOM_STEP_MAX);
-    total_y = CAM_ZOOM_TOTAL_Y_BASE -
-              (int)((step * (uint16_t)(CAM_ZOOM_TOTAL_Y_BASE - CAM_ZOOM_TOTAL_Y_MIN)) /
-                    CAM_ZOOM_STEP_MAX);
-
-    if (total_x < CAM_ZOOM_TOTAL_X_MIN)
-    {
-        total_x = CAM_ZOOM_TOTAL_X_MIN;
-    }
-
-    if (total_y < CAM_ZOOM_TOTAL_Y_MIN)
-    {
-        total_y = CAM_ZOOM_TOTAL_Y_MIN;
-    }
-
-    offset_x = (CAM_ZOOM_TOTAL_X_BASE - total_x) / 2;
-    offset_y = (CAM_ZOOM_TOTAL_Y_BASE - total_y) / 2;
-
-    set_ret = sensor->set_res_raw(sensor,
-                                  OV2640_SENSOR_MODE_CIF,
-                                  0,
-                                  0,
-                                  0,
-                                  offset_x,
-                                  offset_y,
-                                  total_x,
-                                  total_y,
-                                  CAM_ZOOM_OUTPUT_X,
-                                  CAM_ZOOM_OUTPUT_Y,
-                                  true,
-                                  true);
-    if (set_ret != 0)
-    {
-        ESP_LOGW(TAG,
-                 "set_res_raw failed: %d (step=%u, off=%d,%d total=%d,%d)",
-                 set_ret,
-                 (unsigned)step,
-                 offset_x,
-                 offset_y,
-                 total_x,
-                 total_y);
-        return ESP_FAIL;
-    }
-
-    s_ov2640.zoom_step = step;
-    s_ov2640.zoom_step_valid = true;
-
-    if (zoom_percent != NULL)
-    {
-        *zoom_percent = (uint32_t)(((uint32_t)CAM_ZOOM_TOTAL_X_BASE * 100U) / (uint32_t)total_x);
-    }
-
-    return ESP_OK;
-}
-
-/*
  * brief: Set OV2640 reset pin logic level through GPBA expander.
  * input: high_level - true to release reset, false to hold reset.
  * output: ESP_OK on success; otherwise GPBA write error.
@@ -296,107 +147,6 @@ static esp_err_t _ov2640_init_sccb(void)
 bool ov2640_is_ready(void)
 {
     return s_ov2640.ready;
-}
-
-/*
- * brief: Return true when active runtime sensor supports OV2640 zoom window control.
- * input: none.
- * output: true when supported; otherwise false.
- */
-bool ov2640_zoom_is_supported(void)
-{
-    sensor_t *sensor;
-    return (_ov2640_get_active_sensor(&sensor) == ESP_OK);
-}
-
-/*
- * brief: Reset OV2640 zoom step to baseline and apply sensor window.
- * input: zoom_percent - optional output zoom percentage.
- * output: ESP_OK on success; otherwise propagated sensor operation error.
- */
-esp_err_t ov2640_zoom_reset(uint32_t *zoom_percent)
-{
-    return _ov2640_apply_zoom_step(0U, zoom_percent);
-}
-
-/*
- * brief: Increase OV2640 sensor-side zoom by one step.
- * input: zoom_percent - optional output zoom percentage.
- * output: ESP_OK on success; otherwise propagated sensor operation error.
- */
-esp_err_t ov2640_zoom_in(uint32_t *zoom_percent)
-{
-    uint16_t next_step;
-
-    if (!s_ov2640.zoom_step_valid)
-    {
-        next_step = 1U;
-    }
-    else
-    {
-        next_step = s_ov2640.zoom_step;
-        if (next_step < CAM_ZOOM_STEP_MAX)
-        {
-            next_step++;
-        }
-    }
-
-    return _ov2640_apply_zoom_step(next_step, zoom_percent);
-}
-
-/*
- * brief: Decrease OV2640 sensor-side zoom by one step.
- * input: zoom_percent - optional output zoom percentage.
- * output: ESP_OK on success; otherwise propagated sensor operation error.
- */
-esp_err_t ov2640_zoom_out(uint32_t *zoom_percent)
-{
-    uint16_t next_step;
-
-    if (!s_ov2640.zoom_step_valid)
-    {
-        next_step = 0U;
-    }
-    else
-    {
-        next_step = s_ov2640.zoom_step;
-        if (next_step > 0U)
-        {
-            next_step--;
-        }
-    }
-
-    return _ov2640_apply_zoom_step(next_step, zoom_percent);
-}
-
-/*
- * brief: Query current cached OV2640 zoom percentage from step state.
- * input: zoom_percent - output percentage pointer.
- * output: ESP_OK on success; otherwise invalid argument.
- */
-esp_err_t ov2640_zoom_get_percent(uint32_t *zoom_percent)
-{
-    uint16_t step;
-    int total_x;
-
-    if (zoom_percent == NULL)
-    {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    step = s_ov2640.zoom_step_valid ? s_ov2640.zoom_step : 0U;
-    step = _ov2640_limit_zoom_step(step);
-
-    total_x = CAM_ZOOM_TOTAL_X_BASE -
-              (int)((step * (uint16_t)(CAM_ZOOM_TOTAL_X_BASE - CAM_ZOOM_TOTAL_X_MIN)) /
-                    CAM_ZOOM_STEP_MAX);
-    if (total_x < CAM_ZOOM_TOTAL_X_MIN)
-    {
-        total_x = CAM_ZOOM_TOTAL_X_MIN;
-    }
-
-    *zoom_percent = (uint32_t)(((uint32_t)CAM_ZOOM_TOTAL_X_BASE * 100U) / (uint32_t)total_x);
-    return ESP_OK;
 }
 
 /*
@@ -633,8 +383,6 @@ esp_err_t ov2640_init_device(void)
     USER_RETURN_ON_ERROR(ov2640_soft_reset(), TAG, "ov2640_soft_reset failed");
     USER_RETURN_ON_ERROR(ov2640_verify_id(), TAG, "ov2640_verify_id failed");
 
-    s_ov2640.zoom_step = 0U;
-    s_ov2640.zoom_step_valid = false;
     s_ov2640.ready = true;
     return ESP_OK;
 }
@@ -650,8 +398,6 @@ esp_err_t ov2640_deinit_device(void)
 
     if (!s_ov2640.sccb_ready)
     {
-        s_ov2640.zoom_step = 0U;
-        s_ov2640.zoom_step_valid = false;
         s_ov2640.ready = false;
         return ESP_OK;
     }
@@ -671,8 +417,6 @@ esp_err_t ov2640_deinit_device(void)
     s_ov2640.sccb_dev = NULL;
     s_ov2640.sccb_bus = NULL;
     s_ov2640.sccb_ready = false;
-    s_ov2640.zoom_step = 0U;
-    s_ov2640.zoom_step_valid = false;
     s_ov2640.ready = false;
     return ESP_OK;
 }
@@ -682,35 +426,6 @@ esp_err_t ov2640_deinit_device(void)
 bool ov2640_is_ready(void)
 {
     return false;
-}
-
-bool ov2640_zoom_is_supported(void)
-{
-    return false;
-}
-
-esp_err_t ov2640_zoom_reset(uint32_t *zoom_percent)
-{
-    (void)zoom_percent;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-
-esp_err_t ov2640_zoom_in(uint32_t *zoom_percent)
-{
-    (void)zoom_percent;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-
-esp_err_t ov2640_zoom_out(uint32_t *zoom_percent)
-{
-    (void)zoom_percent;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-
-esp_err_t ov2640_zoom_get_percent(uint32_t *zoom_percent)
-{
-    (void)zoom_percent;
-    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t ov2640_prepare_preview_start(void)
