@@ -44,6 +44,21 @@
 				"."
 			],
 			"isBackground": false
+		},
+		{
+			"label": "PIO Upload NoBuild",
+			"type": "shell",
+			"command": "C:\\Users\\hujia\\.platformio\\penv\\Scripts\\pio.exe",
+			"args": [
+				"run",
+				"-d",
+				".",
+				"-t",
+				"nobuild",
+				"-t",
+				"upload"
+			],
+			"isBackground": false
 		}
 	]
 }

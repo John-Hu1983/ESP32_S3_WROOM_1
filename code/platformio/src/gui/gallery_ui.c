@@ -437,13 +437,3 @@ lv_obj_t *gallery_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     s_gallery_ctx = ctx;
     return scr;
 }
-
-/*
- * brief: Request desktop return directly.
- * input: None.
- * output: None.
- */
-void gallery_destroy_and_return(void)
-{
-    desktop_return_to_home();
-}

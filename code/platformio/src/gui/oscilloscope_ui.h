@@ -27,5 +27,3 @@ typedef struct
 
 /* Create oscilloscope app screen and runtime resources. */
 lv_obj_t *scope_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
-/* Request return-to-home navigation from oscilloscope app. */
-void scope_destroy_and_return(void);

@@ -316,13 +316,3 @@ lv_obj_t *scope_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     s_scope_ctx = ctx;
     return scr;
 }
-
-/*
- * brief: Request desktop return directly.
- * input: None.
- * output: None.
- */
-void scope_destroy_and_return(void)
-{
-    desktop_return_to_home();
-}

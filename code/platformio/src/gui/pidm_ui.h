@@ -57,5 +57,3 @@ typedef struct
 
 /* Create PIDM monitor app screen and runtime resources. */
 lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
-/* Request return-to-home navigation from PIDM app. */
-void pidm_destroy_and_return(void);

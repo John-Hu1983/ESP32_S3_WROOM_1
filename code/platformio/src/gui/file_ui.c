@@ -1041,13 +1041,3 @@ lv_obj_t *file_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     s_file_ctx = ctx;
     return scr;
 }
-
-/*
- * brief: Request desktop return directly.
- * input: None.
- * output: None.
- */
-void file_destroy_and_return(void)
-{
-    desktop_return_to_home();
-}
