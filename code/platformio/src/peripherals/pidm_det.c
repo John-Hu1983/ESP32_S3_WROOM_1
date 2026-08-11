@@ -25,97 +25,34 @@ static pidm_det_feature_cfg_s s_pidm_feature_cfg = {
     .assert_count = PIDM_DET_ASSERT_COUNT_DEFAULT,
     .release_count = PIDM_DET_RELEASE_COUNT_DEFAULT,
 };
-static bool s_pidm_metal_present = false;
-static uint8_t s_pidm_assert_streak = 0U;
-static uint8_t s_pidm_release_streak = 0U;
-static bool s_pidm_ref_ready = false;
-static uint16_t s_pidm_ref_count = 0U;
-static int32_t s_pidm_ref_peak_excess_q8 = 0;
-static int32_t s_pidm_ref_slope_q8 = 0;
+static signal_event_algo_ctx_s s_pidm_algo_ctx = {0};
 
 /*
- * brief: Return absolute value for signed 32-bit integer.
- * input: value - source value.
- * output: Absolute value of source.
- */
-static int32_t _pidm_abs_i32(int32_t value)
-{
-    return (value >= 0) ? value : -value;
-}
-
-/*
- * brief: Reset reference-learning state used by relative peak/slope detection.
- * input: None.
+ * brief: Map detector feature config into reusable CFAR feature-detector config.
+ * input: src - detector config; dst - algorithm config output.
  * output: None.
  */
-static void _pidm_ref_reset(void)
+static void _pidm_fill_algo_cfg(const pidm_det_feature_cfg_s *src,
+                                signal_event_algo_cfg_s *dst)
 {
-    s_pidm_ref_ready = false;
-    s_pidm_ref_count = 0U;
-    s_pidm_ref_peak_excess_q8 = 0;
-    s_pidm_ref_slope_q8 = 0;
-}
-
-/*
- * brief: Learn initial no-metal reference from first N pulses.
- * input: peak_excess - current pulse peak above baseline; slope - current pulse max rise slope.
- * output: None.
- */
-static void _pidm_ref_learn(uint32_t peak_excess, uint32_t slope)
-{
-    int32_t peak_q8;
-    int32_t slope_q8;
-
-    peak_q8 = (int32_t)(peak_excess << 8);
-    slope_q8 = (int32_t)(slope << 8);
-
-    if (s_pidm_ref_count == 0U)
+    if ((src == NULL) || (dst == NULL))
     {
-        s_pidm_ref_peak_excess_q8 = peak_q8;
-        s_pidm_ref_slope_q8 = slope_q8;
-    }
-    else
-    {
-        int32_t den;
-
-        den = (int32_t)s_pidm_ref_count + 1;
-        s_pidm_ref_peak_excess_q8 += (peak_q8 - s_pidm_ref_peak_excess_q8) / den;
-        s_pidm_ref_slope_q8 += (slope_q8 - s_pidm_ref_slope_q8) / den;
+        return;
     }
 
-    if (s_pidm_ref_count < 0xFFFFU)
-    {
-        s_pidm_ref_count++;
-    }
-
-    if (s_pidm_ref_count >= s_pidm_feature_cfg.ref_learn_pulses)
-    {
-        s_pidm_ref_ready = true;
-    }
-}
-
-/*
- * brief: Update no-metal reference by EMA to track slow drift.
- * input: peak_excess - current pulse peak above baseline; slope - current pulse max rise slope.
- * output: None.
- */
-static void _pidm_ref_ema_update(uint32_t peak_excess, uint32_t slope)
-{
-    uint8_t shift;
-    int32_t peak_q8;
-    int32_t slope_q8;
-
-    shift = s_pidm_feature_cfg.ref_ema_shift;
-    if (shift == 0U)
-    {
-        shift = 1U;
-    }
-
-    peak_q8 = (int32_t)(peak_excess << 8);
-    slope_q8 = (int32_t)(slope << 8);
-
-    s_pidm_ref_peak_excess_q8 += (peak_q8 - s_pidm_ref_peak_excess_q8) >> shift;
-    s_pidm_ref_slope_q8 += (slope_q8 - s_pidm_ref_slope_q8) >> shift;
+    dst->baseline_samples = src->baseline_samples;
+    dst->wave_samples = src->wave_samples;
+    dst->wave_interval_us = src->wave_interval_us;
+    dst->threshold_min_rise = src->threshold_min_rise;
+    dst->threshold_noise_gain_q4 = src->threshold_noise_gain_q4;
+    dst->high_hold_min_us = src->high_hold_min_us;
+    dst->area_min_adc_us = src->area_min_adc_us;
+    dst->peak_delta_min = src->peak_delta_min;
+    dst->slope_delta_min_adc_per_ms = src->slope_delta_min_adc_per_ms;
+    dst->ref_learn_frames = src->ref_learn_pulses;
+    dst->ref_ema_shift = src->ref_ema_shift;
+    dst->assert_count = src->assert_count;
+    dst->release_count = src->release_count;
 }
 
 /*
@@ -125,6 +62,8 @@ static void _pidm_ref_ema_update(uint32_t peak_excess, uint32_t slope)
  */
 static bool _pidm_cfg_is_valid(const pidm_det_feature_cfg_s *cfg)
 {
+    signal_event_algo_cfg_s algo_cfg;
+
     if (cfg == NULL)
     {
         return false;
@@ -147,52 +86,8 @@ static bool _pidm_cfg_is_valid(const pidm_det_feature_cfg_s *cfg)
         return false;
     }
 
-    if ((cfg->assert_count == 0U) || (cfg->release_count == 0U))
-    {
-        return false;
-    }
-
-    if ((cfg->ref_learn_pulses == 0U) || (cfg->ref_ema_shift == 0U) ||
-        (cfg->ref_ema_shift > 7U))
-    {
-        return false;
-    }
-
-    return true;
-}
-
-/*
- * brief: Update debounced metal-present state based on current pulse-level match.
- * input: pulse_hit - true if current pulse matches detector pattern.
- * output: None.
- */
-static void _pidm_update_metal_state(bool pulse_hit)
-{
-    if (pulse_hit)
-    {
-        if (s_pidm_assert_streak < 0xFFU)
-        {
-            s_pidm_assert_streak++;
-        }
-
-        s_pidm_release_streak = 0U;
-        if (s_pidm_assert_streak >= s_pidm_feature_cfg.assert_count)
-        {
-            s_pidm_metal_present = true;
-        }
-        return;
-    }
-
-    if (s_pidm_release_streak < 0xFFU)
-    {
-        s_pidm_release_streak++;
-    }
-
-    s_pidm_assert_streak = 0U;
-    if (s_pidm_release_streak >= s_pidm_feature_cfg.release_count)
-    {
-        s_pidm_metal_present = false;
-    }
+    _pidm_fill_algo_cfg(cfg, &algo_cfg);
+    return signal_event_algo_cfg_is_valid(&algo_cfg);
 }
 
 /*
@@ -273,6 +168,7 @@ esp_err_t pidm_det_init(void)
 {
     adc_oneshot_unit_init_cfg_t unit_cfg = {0};
     adc_oneshot_chan_cfg_t chan_cfg = {0};
+    signal_event_algo_cfg_s algo_cfg;
     adc_unit_t io_unit;
     adc_channel_t io_channel;
     esp_err_t ret;
@@ -324,10 +220,18 @@ esp_err_t pidm_det_init(void)
     s_pidm_adc_unit = io_unit;
     s_pidm_adc_channel = io_channel;
     s_pidm_ready = true;
-    s_pidm_metal_present = false;
-    s_pidm_assert_streak = 0U;
-    s_pidm_release_streak = 0U;
-    _pidm_ref_reset();
+
+    _pidm_fill_algo_cfg(&s_pidm_feature_cfg, &algo_cfg);
+    ret = signal_event_algo_init(&s_pidm_algo_ctx, &algo_cfg);
+    if (ret != ESP_OK)
+    {
+        (void)adc_oneshot_del_unit(s_pidm_adc_handle);
+        s_pidm_adc_handle = NULL;
+        s_pidm_ready = false;
+        s_pidm_enabled = false;
+        ESP_LOGE(TAG, "signal_event_algo_init failed: %d", (int)ret);
+        return ret;
+    }
 
     ESP_LOGI(TAG,
              "pidm_det ready en=%d pulse_io=%d adc_io=%d unit=%d ch=%d",
@@ -371,10 +275,7 @@ esp_err_t pidm_det_deinit(void)
     s_pidm_enabled = false;
     s_pidm_adc_unit = ADC_UNIT_1;
     s_pidm_adc_channel = PIDM_ADC_CHANNEL;
-    s_pidm_metal_present = false;
-    s_pidm_assert_streak = 0U;
-    s_pidm_release_streak = 0U;
-    _pidm_ref_reset();
+    (void)signal_event_algo_reset_state(&s_pidm_algo_ctx);
     return ESP_OK;
 }
 
@@ -465,46 +366,6 @@ esp_err_t pidm_det_read_raw(int *raw_value)
 }
 
 /*
- * brief: Read averaged raw ADC value over N samples with optional inter-sample delay.
- * input: sample_count - number of samples to average; sample_interval_ms - delay between samples; raw_avg - output average.
- * output: ESP_OK on success; otherwise invalid argument/state or ADC read error.
- */
-esp_err_t pidm_det_read_average(uint8_t sample_count,
-                                uint16_t sample_interval_ms,
-                                int *raw_avg)
-{
-    uint32_t i;
-    int32_t sum;
-
-    if ((raw_avg == NULL) || (sample_count == 0U))
-    {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (!s_pidm_ready)
-    {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    sum = 0;
-    for (i = 0U; i < sample_count; i++)
-    {
-        int raw;
-
-        USER_RETURN_ON_ERROR(pidm_det_read_raw(&raw), TAG, "pidm_det_read_raw failed");
-        sum += raw;
-
-        if ((sample_interval_ms > 0U) && (i + 1U < sample_count))
-        {
-            delay_ms(sample_interval_ms);
-        }
-    }
-
-    *raw_avg = (int)(sum / (int32_t)sample_count);
-    return ESP_OK;
-}
-
-/*
  * brief: Fill one feature extraction configuration with project default values.
  * input: cfg - output config pointer.
  * output: None.
@@ -541,17 +402,27 @@ void pidm_det_feature_cfg_load_default(pidm_det_feature_cfg_s *cfg)
  */
 esp_err_t pidm_det_feature_cfg_set(const pidm_det_feature_cfg_s *cfg)
 {
+    signal_event_algo_cfg_s algo_cfg;
+
     if (!_pidm_cfg_is_valid(cfg))
     {
         return ESP_ERR_INVALID_ARG;
     }
 
     s_pidm_feature_cfg = *cfg;
-    s_pidm_metal_present = false;
-    s_pidm_assert_streak = 0U;
-    s_pidm_release_streak = 0U;
-    _pidm_ref_reset();
-    return ESP_OK;
+
+    _pidm_fill_algo_cfg(&s_pidm_feature_cfg, &algo_cfg);
+    if (!signal_event_algo_cfg_is_valid(&algo_cfg))
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (signal_event_algo_cfg_is_valid(&s_pidm_algo_ctx.cfg))
+    {
+        return signal_event_algo_set_cfg(&s_pidm_algo_ctx, &algo_cfg);
+    }
+
+    return signal_event_algo_init(&s_pidm_algo_ctx, &algo_cfg);
 }
 
 /*
@@ -572,33 +443,12 @@ pidm_det_feature_cfg_s pidm_det_feature_cfg_get(void)
 esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s *feature)
 {
     pidm_det_feature_cfg_s cfg;
+    signal_event_algo_frame_s frame;
+    signal_event_algo_result_s algo_result;
     int baseline_buf[PIDM_DET_BASELINE_SAMPLE_MAX];
-    int32_t baseline_sum;
-    int32_t noise_sum;
-    int32_t wave_sum;
-    uint64_t area_acc;
+    int wave_buf[PIDM_DET_WAVE_SAMPLE_MAX];
     uint32_t i;
-    int baseline_raw;
-    int baseline_noise;
-    uint32_t threshold_rise_noise;
-    uint32_t threshold_rise;
-    int threshold_raw;
-    int prev_raw;
-    int peak_raw;
-    int peak_excess_raw;
-    int peak_ref_raw;
-    int peak_delta_raw;
-    uint32_t peak_idx;
-    uint32_t rise_slope_adc_per_ms;
-    uint32_t slope_ref_adc_per_ms;
-    uint32_t slope_delta_adc_per_ms;
-    uint32_t high_hold_us;
-    uint32_t cur_hold_us;
-    bool peak_hit;
-    bool slope_hit;
-    bool hold_hit;
-    bool area_hit;
-    bool pulse_hit;
+    esp_err_t ret;
 
     if ((feature == NULL) || (pulse_us == 0U))
     {
@@ -616,38 +466,18 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s *feature)
         return ESP_ERR_INVALID_STATE;
     }
 
-    baseline_sum = 0;
     for (i = 0U; i < cfg.baseline_samples; i++)
     {
         int raw;
 
         USER_RETURN_ON_ERROR(pidm_det_read_raw(&raw), TAG, "baseline sample failed");
         baseline_buf[i] = raw;
-        baseline_sum += raw;
 
         if ((i + 1U < cfg.baseline_samples) && (cfg.baseline_interval_us > 0U))
         {
             esp_rom_delay_us(cfg.baseline_interval_us);
         }
     }
-
-    baseline_raw = (int)(baseline_sum / (int32_t)cfg.baseline_samples);
-
-    noise_sum = 0;
-    for (i = 0U; i < cfg.baseline_samples; i++)
-    {
-        noise_sum += _pidm_abs_i32((int32_t)baseline_buf[i] - (int32_t)baseline_raw);
-    }
-    baseline_noise = (int)(noise_sum / (int32_t)cfg.baseline_samples);
-
-    threshold_rise_noise = ((uint32_t)baseline_noise * (uint32_t)cfg.threshold_noise_gain_q4 + 8U) / 16U;
-    threshold_rise = threshold_rise_noise;
-    if (threshold_rise < (uint32_t)cfg.threshold_min_rise)
-    {
-        threshold_rise = (uint32_t)cfg.threshold_min_rise;
-    }
-
-    threshold_raw = baseline_raw + (int)threshold_rise;
 
     USER_RETURN_ON_ERROR(pidm_det_pulse_us(pulse_us), TAG, "pidm_det_pulse_us failed");
 
@@ -656,159 +486,51 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s *feature)
         esp_rom_delay_us(cfg.settle_us);
     }
 
-    wave_sum = 0;
-    area_acc = 0U;
-    prev_raw = baseline_raw;
-    peak_raw = baseline_raw;
-    peak_idx = 0U;
-    rise_slope_adc_per_ms = 0U;
-    high_hold_us = 0U;
-    cur_hold_us = 0U;
-
     for (i = 0U; i < cfg.wave_samples; i++)
     {
         int raw;
-        int delta;
 
         USER_RETURN_ON_ERROR(pidm_det_read_raw(&raw), TAG, "wave sample failed");
-        wave_sum += raw;
-
-        if (raw > peak_raw)
-        {
-            peak_raw = raw;
-            peak_idx = i;
-        }
-
-        delta = raw - prev_raw;
-        if (delta > 0)
-        {
-            uint32_t slope;
-
-            slope = ((uint32_t)delta * 1000U) / (uint32_t)cfg.wave_interval_us;
-            if (slope > rise_slope_adc_per_ms)
-            {
-                rise_slope_adc_per_ms = slope;
-            }
-        }
-
-        if (raw > threshold_raw)
-        {
-            uint32_t above;
-
-            above = (uint32_t)(raw - threshold_raw);
-            area_acc += ((uint64_t)above * (uint64_t)cfg.wave_interval_us);
-            if (area_acc > 0xFFFFFFFFULL)
-            {
-                area_acc = 0xFFFFFFFFULL;
-            }
-
-            cur_hold_us += (uint32_t)cfg.wave_interval_us;
-            if (cur_hold_us > high_hold_us)
-            {
-                high_hold_us = cur_hold_us;
-            }
-        }
-        else
-        {
-            cur_hold_us = 0U;
-        }
-
-        prev_raw = raw;
+        wave_buf[i] = raw;
         if ((i + 1U < cfg.wave_samples) && (cfg.wave_interval_us > 0U))
         {
             esp_rom_delay_us(cfg.wave_interval_us);
         }
     }
 
-    hold_hit = (high_hold_us >= (uint32_t)cfg.high_hold_min_us);
-    area_hit = ((uint32_t)area_acc >= cfg.area_min_adc_us);
+    frame.baseline_data = baseline_buf;
+    frame.baseline_count = cfg.baseline_samples;
+    frame.wave_data = wave_buf;
+    frame.wave_count = cfg.wave_samples;
+    frame.wave_interval_us = cfg.wave_interval_us;
 
-    peak_excess_raw = peak_raw - baseline_raw;
-    if (peak_excess_raw < 0)
+    ret = signal_event_algo_process(&s_pidm_algo_ctx, &frame, &algo_result);
+    if (ret != ESP_OK)
     {
-        peak_excess_raw = 0;
+        return ret;
     }
 
-    if (!s_pidm_ref_ready)
-    {
-        _pidm_ref_learn((uint32_t)peak_excess_raw, rise_slope_adc_per_ms);
-        peak_ref_raw = (int)(s_pidm_ref_peak_excess_q8 >> 8);
-        if (peak_ref_raw < 0)
-        {
-            peak_ref_raw = 0;
-        }
-
-        slope_ref_adc_per_ms = (uint32_t)((s_pidm_ref_slope_q8 > 0) ?
-                                          (s_pidm_ref_slope_q8 >> 8) :
-                                          0);
-        peak_delta_raw = 0;
-        slope_delta_adc_per_ms = 0U;
-        peak_hit = false;
-        slope_hit = false;
-        pulse_hit = false;
-    }
-    else
-    {
-        peak_ref_raw = (int)(s_pidm_ref_peak_excess_q8 >> 8);
-        if (peak_ref_raw < 0)
-        {
-            peak_ref_raw = 0;
-        }
-
-        slope_ref_adc_per_ms = (uint32_t)((s_pidm_ref_slope_q8 > 0) ?
-                                          (s_pidm_ref_slope_q8 >> 8) :
-                                          0);
-
-        peak_delta_raw = peak_excess_raw - peak_ref_raw;
-        if (peak_delta_raw < 0)
-        {
-            peak_delta_raw = 0;
-        }
-
-        if (rise_slope_adc_per_ms > slope_ref_adc_per_ms)
-        {
-            slope_delta_adc_per_ms = rise_slope_adc_per_ms - slope_ref_adc_per_ms;
-        }
-        else
-        {
-            slope_delta_adc_per_ms = 0U;
-        }
-
-        peak_hit = ((uint32_t)peak_delta_raw >= (uint32_t)cfg.peak_delta_min);
-        slope_hit = (slope_delta_adc_per_ms >= (uint32_t)cfg.slope_delta_min_adc_per_ms);
-
-        /* For this board, relative peak+slope separation is much cleaner than hold/area. */
-        pulse_hit = peak_hit && slope_hit;
-
-        if (!s_pidm_metal_present && !pulse_hit)
-        {
-            _pidm_ref_ema_update((uint32_t)peak_excess_raw, rise_slope_adc_per_ms);
-        }
-    }
-
-    _pidm_update_metal_state(pulse_hit);
-
-    feature->baseline_raw = baseline_raw;
-    feature->baseline_noise = baseline_noise;
-    feature->threshold_raw = threshold_raw;
-    feature->wave_avg_raw = (int)(wave_sum / (int32_t)cfg.wave_samples);
-    feature->peak_raw = peak_raw;
-    feature->peak_excess_raw = peak_excess_raw;
-    feature->peak_ref_raw = peak_ref_raw;
-    feature->peak_delta_raw = peak_delta_raw;
-    feature->peak_time_us = peak_idx * (uint32_t)cfg.wave_interval_us;
-    feature->rise_slope_adc_per_ms = rise_slope_adc_per_ms;
-    feature->slope_ref_adc_per_ms = slope_ref_adc_per_ms;
-    feature->slope_delta_adc_per_ms = slope_delta_adc_per_ms;
-    feature->high_hold_us = high_hold_us;
-    feature->area_adc_us = (uint32_t)area_acc;
-    feature->ref_ready = s_pidm_ref_ready;
-    feature->peak_hit = peak_hit;
-    feature->slope_hit = slope_hit;
-    feature->hold_hit = hold_hit;
-    feature->area_hit = area_hit;
-    feature->pulse_hit = pulse_hit;
-    feature->metal_present = s_pidm_metal_present;
+    feature->baseline_raw = algo_result.baseline_raw;
+    feature->baseline_noise = algo_result.baseline_noise;
+    feature->threshold_raw = algo_result.threshold_raw;
+    feature->wave_avg_raw = algo_result.wave_avg_raw;
+    feature->peak_raw = algo_result.peak_raw;
+    feature->peak_excess_raw = algo_result.peak_excess_raw;
+    feature->peak_ref_raw = algo_result.peak_ref_raw;
+    feature->peak_delta_raw = algo_result.peak_delta_raw;
+    feature->peak_time_us = algo_result.peak_time_us;
+    feature->rise_slope_adc_per_ms = algo_result.rise_slope_adc_per_ms;
+    feature->slope_ref_adc_per_ms = algo_result.slope_ref_adc_per_ms;
+    feature->slope_delta_adc_per_ms = algo_result.slope_delta_adc_per_ms;
+    feature->high_hold_us = algo_result.high_hold_us;
+    feature->area_adc_us = algo_result.area_adc_us;
+    feature->ref_ready = algo_result.ref_ready;
+    feature->peak_hit = algo_result.peak_hit;
+    feature->slope_hit = algo_result.slope_hit;
+    feature->hold_hit = algo_result.hold_hit;
+    feature->area_hit = algo_result.area_hit;
+    feature->pulse_hit = algo_result.pulse_hit;
+    feature->metal_present = algo_result.event_present;
 
     return ESP_OK;
 }
@@ -820,41 +542,5 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s *feature)
  */
 bool pidm_det_is_metal_present(void)
 {
-    return s_pidm_metal_present;
-}
-
-/*
- * brief: Generate one pulse, wait settle time, then read averaged detector value.
- * input: pulse_us - pulse width in microseconds; settle_us - delay after pulse in microseconds; sample_count - ADC average sample count; raw_avg - output average.
- * output: ESP_OK on success; otherwise propagated pulse/read errors.
- */
-esp_err_t pidm_det_probe_once(uint32_t pulse_us,
-                              uint32_t settle_us,
-                              uint8_t sample_count,
-                              int *raw_avg)
-{
-    USER_RETURN_ON_ERROR(pidm_det_pulse_us(pulse_us), TAG, "pidm_det_pulse_us failed");
-
-    if (settle_us > 0U)
-    {
-        esp_rom_delay_us(settle_us);
-    }
-
-    return pidm_det_read_average(sample_count, 0U, raw_avg);
-}
-
-/*
- * brief: Read current PIDM detector runtime status snapshot.
- * input: None.
- * output: Status snapshot containing ready/enabled/ADC unit/channel.
- */
-pidm_det_info_s pidm_det_read_info(void)
-{
-    pidm_det_info_s info;
-
-    info.ready = s_pidm_ready;
-    info.enabled = s_pidm_enabled;
-    info.adc_unit = s_pidm_adc_unit;
-    info.adc_channel = s_pidm_adc_channel;
-    return info;
+    return signal_event_algo_is_event_present(&s_pidm_algo_ctx);
 }

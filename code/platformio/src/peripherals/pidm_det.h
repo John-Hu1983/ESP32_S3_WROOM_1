@@ -11,6 +11,7 @@
 #include "esp_rom_sys.h"
 
 #include "bsp/delay.h"
+#include "algorithm/cfar_feature_detector.h"
 #include "peripherals/gpba02b.h"
 #include "user_config.h"
 
@@ -104,10 +105,6 @@ esp_err_t pidm_det_set_pulse_level(bool high);
 esp_err_t pidm_det_pulse_us(uint32_t pulse_us);
 /* Read one raw ADC sample from PIDM detector output node. */
 esp_err_t pidm_det_read_raw(int *raw_value);
-/* Read averaged raw ADC value over N samples with optional inter-sample delay. */
-esp_err_t pidm_det_read_average(uint8_t sample_count,
-                                uint16_t sample_interval_ms,
-                                int *raw_avg);
 /* Fill one feature-configuration object with default values. */
 void pidm_det_feature_cfg_load_default(pidm_det_feature_cfg_s *cfg);
 /* Apply feature extraction and detection configuration. */
@@ -118,10 +115,3 @@ pidm_det_feature_cfg_s pidm_det_feature_cfg_get(void);
 esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s *feature);
 /* Read current debounced metal-present state from detector state machine. */
 bool pidm_det_is_metal_present(void);
-/* Generate one pulse, wait settle time (microseconds), then read averaged detector value. */
-esp_err_t pidm_det_probe_once(uint32_t pulse_us,
-                              uint32_t settle_us,
-                              uint8_t sample_count,
-                              int *raw_avg);
-/* Read current PIDM detector runtime status snapshot. */
-pidm_det_info_s pidm_det_read_info(void);
