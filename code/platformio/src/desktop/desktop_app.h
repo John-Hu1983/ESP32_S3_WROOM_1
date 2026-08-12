@@ -20,7 +20,7 @@
 #include "bsp/bsp.h"
  
 #include "../gui/pidm_ui.h"
-#include "../gui/battery_ui.h"
+#include "../gui/mic_ui.h"
 #include "../gui/bt_ui.h"
 #include "../gui/camera_ui.h"
 #include "../gui/gallery_ui.h"
@@ -37,7 +37,7 @@
 
 #define LVGL_TICK_PERIOD_MS (DESKTOP_COMMON_LVGL_TICK_PERIOD_MS)
 #define LVGL_TASK_PERIOD_MS 10U
-#define LVGL_DRAW_BUF_LINES 40U
+#define LVGL_DRAW_BUF_LINES 72U
 
 #define DESKTOP_ICON_COLS 3U
 #define DESKTOP_ICON_ROWS 4U
@@ -58,7 +58,7 @@
 #define IC_WIF LV_COLOR_MAKE(0xC0, 0x56, 0x3F)
 #define IC_BT LV_COLOR_MAKE(0xB6, 0x5C, 0x2C)
 #define IC_FIL LV_COLOR_MAKE(0xE1, 0x9A, 0x35)
-#define IC_BAT LV_COLOR_MAKE(0x8F, 0x67, 0x45)
+#define IC_MIC LV_COLOR_MAKE(0x8F, 0x67, 0x45)
 #define IC_PIDM LV_COLOR_MAKE(0xC2, 0x3B, 0x4A)
 #define IC_TLS LV_COLOR_MAKE(0x8A, 0x3D, 0x5D)
 #define IC_SET LV_COLOR_MAKE(0xA8, 0x70, 0x3A)

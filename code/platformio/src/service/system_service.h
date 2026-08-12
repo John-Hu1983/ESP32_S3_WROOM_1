@@ -39,6 +39,8 @@ typedef struct
 esp_err_t system_service_start(lv_coord_t lcd_w, lv_coord_t lcd_h);
 /* Update network state shared by periodic runtime snapshot reporting. */
 void system_service_set_network_state(bool connected, int8_t rssi_dbm);
+/* Read current network state snapshot. */
+esp_err_t system_service_get_network_state(system_network_status_t *status);
 /* Return y-offset where GUI content should start below top bar. */
 lv_coord_t system_service_content_top(void);
 /* Return y-offset limit where GUI content should end above bottom bar. */

@@ -55,6 +55,10 @@ static lv_coord_t s_lcd_w = 0;
 static lv_coord_t s_lcd_h = 0;
 
 static TaskHandle_t s_idle_task_handle = NULL;
+#if CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY
+static StaticTask_t s_idle_task_tcb;
+static StackType_t *s_idle_task_stack = NULL;
+#endif
 static volatile uint32_t s_idle_hits[SYSTEM_SERVICE_CORE_COUNT] = {0};
 static uint32_t s_prev_idle_hits[SYSTEM_SERVICE_CORE_COUNT] = {0};
 static uint64_t s_idle_hits_peak = 0;
@@ -420,17 +424,39 @@ static esp_err_t _system_service_idle_task_start(void)
     }
 #endif
 
-    task_ok = xTaskCreate(_system_service_idle_task,
-                          "sys_service_idle",
-                          SYSTEM_SERVICE_IDLE_TASK_STACK_SIZE,
-                          NULL,
-                          SYSTEM_SERVICE_IDLE_TASK_PRIORITY,
-                          &s_idle_task_handle);
-    if (task_ok != pdPASS)
+#if CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY
+    if (s_idle_task_stack == NULL)
     {
-        s_idle_task_handle = NULL;
-        ESP_LOGE(TAG, "xTaskCreate system service idle task failed");
-        return ESP_FAIL;
+        s_idle_task_stack = (StackType_t *)heap_caps_malloc(SYSTEM_SERVICE_IDLE_TASK_STACK_SIZE,
+                                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+
+    if (s_idle_task_stack != NULL)
+    {
+        s_idle_task_handle = xTaskCreateStatic(_system_service_idle_task,
+                                               "sys_service_idle",
+                                               SYSTEM_SERVICE_IDLE_TASK_STACK_SIZE / sizeof(StackType_t),
+                                               NULL,
+                                               SYSTEM_SERVICE_IDLE_TASK_PRIORITY,
+                                               s_idle_task_stack,
+                                               &s_idle_task_tcb);
+    }
+#endif
+
+    if (s_idle_task_handle == NULL)
+    {
+        task_ok = xTaskCreate(_system_service_idle_task,
+                              "sys_service_idle",
+                              SYSTEM_SERVICE_IDLE_TASK_STACK_SIZE,
+                              NULL,
+                              SYSTEM_SERVICE_IDLE_TASK_PRIORITY,
+                              &s_idle_task_handle);
+        if (task_ok != pdPASS)
+        {
+            s_idle_task_handle = NULL;
+            ESP_LOGE(TAG, "xTaskCreate system service idle task failed");
+            return ESP_FAIL;
+        }
     }
 
     return ESP_OK;
@@ -468,6 +494,19 @@ void system_service_set_network_state(bool connected, int8_t rssi_dbm)
         s_snapshot_version = 1U;
     }
     portEXIT_CRITICAL(&s_lock);
+}
+
+esp_err_t system_service_get_network_state(system_network_status_t *status)
+{
+    if (status == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    portENTER_CRITICAL(&s_lock);
+    *status = s_network;
+    portEXIT_CRITICAL(&s_lock);
+    return ESP_OK;
 }
 
 lv_coord_t system_service_content_top(void)

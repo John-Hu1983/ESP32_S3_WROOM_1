@@ -10,7 +10,7 @@ static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_WIFI, "WiFi", IC_WIF, wifi_create_screen},
     {LV_SYMBOL_BLUETOOTH, "BT", IC_BT, bt_create_screen},
     {LV_SYMBOL_SD_CARD, "File", IC_FIL, file_create_screen},
-    {LV_SYMBOL_BATTERY_FULL, "Battery", IC_BAT, battery_create_screen},
+    {LV_SYMBOL_VOLUME_MAX, "Mic", IC_MIC, mic_create_screen},
     {LV_SYMBOL_BELL, "PIDM", IC_PIDM, pidm_create_screen},
     {LV_SYMBOL_REFRESH, "Tools", IC_TLS, tools_create_screen},
     {LV_SYMBOL_SETTINGS, "Setting", IC_SET, setting_create_screen},
@@ -20,6 +20,7 @@ static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
 static lv_disp_draw_buf_t s_lv_draw_buf;
 static lv_disp_drv_t s_lv_disp_drv;
 static lv_color_t *s_lv_buf_1 = NULL;
+static lv_color_t *s_lv_buf_2 = NULL;
 static esp_timer_handle_t s_lv_tick_timer = NULL;
 static uint16_t s_lcd_width = 0;
 static uint16_t s_lcd_height = 0;
@@ -487,7 +488,16 @@ static esp_err_t _desktop_lvgl_init(void)
         return ESP_ERR_NO_MEM;
     }
 
-    lv_disp_draw_buf_init(&s_lv_draw_buf, s_lv_buf_1, NULL, draw_buf_pixels);
+    s_lv_buf_2 = (lv_color_t *)heap_caps_malloc(draw_buf_pixels * sizeof(lv_color_t),
+                                                MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (s_lv_buf_2 == NULL)
+    {
+        heap_caps_free(s_lv_buf_1);
+        s_lv_buf_1 = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    lv_disp_draw_buf_init(&s_lv_draw_buf, s_lv_buf_1, s_lv_buf_2, draw_buf_pixels);
 
     lv_disp_drv_init(&s_lv_disp_drv);
     s_lv_disp_drv.hor_res = s_lcd_width;
@@ -501,12 +511,20 @@ static esp_err_t _desktop_lvgl_init(void)
     ret = esp_timer_create(&tick_timer_args, &s_lv_tick_timer);
     if (ret != ESP_OK)
     {
+        heap_caps_free(s_lv_buf_2);
+        heap_caps_free(s_lv_buf_1);
+        s_lv_buf_2 = NULL;
+        s_lv_buf_1 = NULL;
         return ret;
     }
 
     ret = esp_timer_start_periodic(s_lv_tick_timer, LVGL_TICK_PERIOD_MS * 1000U);
     if (ret != ESP_OK)
     {
+        heap_caps_free(s_lv_buf_2);
+        heap_caps_free(s_lv_buf_1);
+        s_lv_buf_2 = NULL;
+        s_lv_buf_1 = NULL;
         return ret;
     }
 

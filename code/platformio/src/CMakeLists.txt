@@ -13,7 +13,7 @@ LIST(FILTER app_sources EXCLUDE REGEX ".*/src/desktop/lvgl_launcher/.*")
 set(assets_root_dir ${CMAKE_SOURCE_DIR}/lib/assets)
 
 idf_component_register(SRCS ${app_sources}
-				   REQUIRES lvgl spiffs esp_audio_codec esp32-camera)
+				   REQUIRES lvgl spiffs esp_audio_codec esp32-camera esp_http_client esp_wifi)
 
 if(COMMAND spiffs_create_partition_image)
 	if(EXISTS ${assets_root_dir})

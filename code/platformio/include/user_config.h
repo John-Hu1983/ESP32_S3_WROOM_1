@@ -17,6 +17,22 @@
 	} while (0)
 #endif
 
+#ifndef USER_ASR_CLOUD_ENDPOINT
+#define USER_ASR_CLOUD_ENDPOINT ("")
+#endif
+
+#ifndef USER_ASR_CLOUD_API_KEY
+#define USER_ASR_CLOUD_API_KEY ("")
+#endif
+
+#ifndef USER_ASR_CLOUD_TIMEOUT_MS
+#define USER_ASR_CLOUD_TIMEOUT_MS (5000)
+#endif
+
+#ifndef USER_ASR_MODEL_PARTITION_LABEL
+#define USER_ASR_MODEL_PARTITION_LABEL ("model")
+#endif
+
 
 
 #if defined(USER_CONFIG_BOARD_N8R2)

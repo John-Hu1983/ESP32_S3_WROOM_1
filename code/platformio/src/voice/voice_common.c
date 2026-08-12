@@ -1,9 +1,15 @@
 #include "voice_common.h"
 
+#include "esp_heap_caps.h"
+
 #define TAG "VOICE_COMMON"
 
 static bool s_ready = false;
 static TaskHandle_t s_play_task = NULL;
+#if CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY
+static StaticTask_t s_play_task_tcb;
+static StackType_t *s_play_task_stack = NULL;
+#endif
 static volatile bool s_playing = false;
 static uint32_t s_play_queue_len = 0U;
 static portMUX_TYPE s_play_list_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -279,16 +285,38 @@ esp_err_t voice_init_player(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    task_ret = xTaskCreate(_voice_playback_task,
-                           "voice_play",
-                           VOICE_PLAY_TASK_STACK_BYTES,
-                           NULL,
-                           VOICE_PLAY_TASK_PRIORITY,
-                           &s_play_task);
-    if (task_ret != pdPASS)
+#if CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY
+    if (s_play_task_stack == NULL)
     {
-        s_play_task = NULL;
-        return ESP_ERR_NO_MEM;
+        s_play_task_stack = (StackType_t *)heap_caps_malloc(VOICE_PLAY_TASK_STACK_BYTES,
+                                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+
+    if (s_play_task_stack != NULL)
+    {
+        s_play_task = xTaskCreateStatic(_voice_playback_task,
+                                        "voice_play",
+                                        VOICE_PLAY_TASK_STACK_BYTES / sizeof(StackType_t),
+                                        NULL,
+                                        VOICE_PLAY_TASK_PRIORITY,
+                                        s_play_task_stack,
+                                        &s_play_task_tcb);
+    }
+#endif
+
+    if (s_play_task == NULL)
+    {
+        task_ret = xTaskCreate(_voice_playback_task,
+                               "voice_play",
+                               VOICE_PLAY_TASK_STACK_BYTES,
+                               NULL,
+                               VOICE_PLAY_TASK_PRIORITY,
+                               &s_play_task);
+        if (task_ret != pdPASS)
+        {
+            s_play_task = NULL;
+            return ESP_ERR_NO_MEM;
+        }
     }
 
     portENTER_CRITICAL(&s_play_list_lock);

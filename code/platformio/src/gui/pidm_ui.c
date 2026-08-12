@@ -10,6 +10,8 @@
 #define PIDM_BEEP_DPK_NORM_MAX 800.0f
 #define PIDM_BEEP_SLOPE_NORM_MAX 5000.0f
 #define PIDM_BEEP_LEVEL_COUNT 5U
+#define PIDM_TASK_STOP_WAIT_RETRY 20U
+#define PIDM_TASK_STOP_WAIT_DELAY_MS 5U
 
 static pidm_app_ctx_t *s_pidm_ctx = NULL;
 static TaskHandle_t s_pidm_input_task_handle = NULL;
@@ -17,6 +19,46 @@ static TaskHandle_t s_pidm_probe_task_handle = NULL;
 static volatile bool s_pidm_input_task_stop = false;
 static volatile bool s_pidm_probe_task_stop = false;
 static portMUX_TYPE s_pidm_feature_lock = portMUX_INITIALIZER_UNLOCKED;
+
+/*
+ * brief: Stop one task cooperatively first, then force delete when it does not exit.
+ * input: task_handle - target task handle pointer; stop_flag - task stop flag pointer.
+ * output: None.
+ */
+static void _pidm_stop_task(TaskHandle_t *task_handle, volatile bool *stop_flag)
+{
+    TaskHandle_t handle;
+    uint32_t wait_count;
+
+    if ((task_handle == NULL) || (stop_flag == NULL))
+    {
+        return;
+    }
+
+    handle = *task_handle;
+    if (handle == NULL)
+    {
+        return;
+    }
+
+    *stop_flag = true;
+    for (wait_count = 0U; wait_count < PIDM_TASK_STOP_WAIT_RETRY; wait_count++)
+    {
+        if (*task_handle == NULL)
+        {
+            return;
+        }
+
+        delay_ms(PIDM_TASK_STOP_WAIT_DELAY_MS);
+    }
+
+    handle = *task_handle;
+    if (handle != NULL)
+    {
+        vTaskDelete(handle);
+        *task_handle = NULL;
+    }
+}
 
 /*
  * brief: Clamp one float value into [0.0, 1.0] interval.
@@ -227,32 +269,7 @@ static bool _pidm_start_input_task(void)
  */
 static void _pidm_stop_input_task(void)
 {
-    TaskHandle_t handle;
-    uint32_t wait_count;
-
-    handle = s_pidm_input_task_handle;
-    if (handle == NULL)
-    {
-        return;
-    }
-
-    s_pidm_input_task_stop = true;
-    for (wait_count = 0U; wait_count < 20U; wait_count++)
-    {
-        if (s_pidm_input_task_handle == NULL)
-        {
-            return;
-        }
-
-        delay_ms(5U);
-    }
-
-    handle = s_pidm_input_task_handle;
-    if (handle != NULL)
-    {
-        vTaskDelete(handle);
-        s_pidm_input_task_handle = NULL;
-    }
+    _pidm_stop_task(&s_pidm_input_task_handle, &s_pidm_input_task_stop);
 }
 
 /*
@@ -373,32 +390,7 @@ static bool _pidm_start_probe_task(pidm_app_ctx_t *ctx)
  */
 static void _pidm_stop_probe_task(void)
 {
-    TaskHandle_t handle;
-    uint32_t wait_count;
-
-    handle = s_pidm_probe_task_handle;
-    if (handle == NULL)
-    {
-        return;
-    }
-
-    s_pidm_probe_task_stop = true;
-    for (wait_count = 0U; wait_count < 20U; wait_count++)
-    {
-        if (s_pidm_probe_task_handle == NULL)
-        {
-            return;
-        }
-
-        delay_ms(5U);
-    }
-
-    handle = s_pidm_probe_task_handle;
-    if (handle != NULL)
-    {
-        vTaskDelete(handle);
-        s_pidm_probe_task_handle = NULL;
-    }
+    _pidm_stop_task(&s_pidm_probe_task_handle, &s_pidm_probe_task_stop);
 }
 
 /*
@@ -644,6 +636,51 @@ static void _pidm_refresh_charts(pidm_app_ctx_t *ctx, const pidm_det_feature_s *
 }
 
 /*
+ * brief: Read one consistent feature snapshot from shared app context.
+ * input: ctx - PIDM app context; output pointers receive snapshot fields.
+ * output: None.
+ */
+static void _pidm_read_feature_snapshot(const pidm_app_ctx_t *ctx,
+                                        pidm_det_feature_s *feature,
+                                        esp_err_t *probe_ret,
+                                        uint8_t *feature_valid,
+                                        uint32_t *feature_seq)
+{
+    if ((ctx == NULL) || (feature == NULL) || (probe_ret == NULL) ||
+        (feature_valid == NULL) || (feature_seq == NULL))
+    {
+        return;
+    }
+
+    *probe_ret = ESP_ERR_INVALID_STATE;
+    *feature_valid = 0U;
+    *feature_seq = 0U;
+    lv_memset_00(feature, sizeof(*feature));
+
+    portENTER_CRITICAL(&s_pidm_feature_lock);
+    *probe_ret = ctx->latest_probe_ret;
+    *feature_valid = ctx->latest_feature_valid;
+    *feature_seq = ctx->feature_seq;
+    if (*feature_valid != 0U)
+    {
+        *feature = ctx->latest_feature;
+    }
+    portEXIT_CRITICAL(&s_pidm_feature_lock);
+}
+
+/*
+ * brief: Render one valid PIDM feature snapshot to charts, metrics and beep.
+ * input: ctx - PIDM app context; feature - valid feature snapshot.
+ * output: None.
+ */
+static void _pidm_render_feature_update(pidm_app_ctx_t *ctx, const pidm_det_feature_s *feature)
+{
+    _pidm_refresh_charts(ctx, feature);
+    _pidm_refresh_metrics(ctx, feature);
+    _pidm_try_play_metal_beep(ctx, feature);
+}
+
+/*
  * brief: Periodic timer callback to consume sampled PIDM feature and refresh view.
  * input: timer - LVGL timer carrying PIDM context.
  * output: None.
@@ -667,20 +704,11 @@ static void _pidm_update_timer_cb(lv_timer_t *timer)
         return;
     }
 
-    feature_seq = 0U;
-    probe_ret = ESP_ERR_INVALID_STATE;
-    feature_valid = 0U;
-    lv_memset_00(&feature, sizeof(feature));
-
-    portENTER_CRITICAL(&s_pidm_feature_lock);
-    probe_ret = ctx->latest_probe_ret;
-    feature_valid = ctx->latest_feature_valid;
-    feature_seq = ctx->feature_seq;
-    if (feature_valid != 0U)
-    {
-        feature = ctx->latest_feature;
-    }
-    portEXIT_CRITICAL(&s_pidm_feature_lock);
+    _pidm_read_feature_snapshot(ctx,
+                                &feature,
+                                &probe_ret,
+                                &feature_valid,
+                                &feature_seq);
 
     if (feature_seq == ctx->rendered_feature_seq)
     {
@@ -698,9 +726,92 @@ static void _pidm_update_timer_cb(lv_timer_t *timer)
         return;
     }
 
-    _pidm_refresh_charts(ctx, &feature);
-    _pidm_refresh_metrics(ctx, &feature);
-    _pidm_try_play_metal_beep(ctx, &feature);
+    _pidm_render_feature_update(ctx, &feature);
+}
+
+/*
+ * brief: Release screen object and context used during create flow failures.
+ * input: screen - target screen object; ctx - allocated PIDM context.
+ * output: None.
+ */
+static void _pidm_release_screen_ctx(lv_obj_t *screen, pidm_app_ctx_t *ctx)
+{
+    if (screen != NULL)
+    {
+        lv_obj_del(screen);
+    }
+
+    if (ctx != NULL)
+    {
+        lv_mem_free(ctx);
+    }
+}
+
+/*
+ * brief: Initialize runtime state and optional beep asset path.
+ * input: ctx - PIDM app context pointer.
+ * output: None.
+ */
+static void _pidm_init_runtime_state(pidm_app_ctx_t *ctx)
+{
+    if (ctx == NULL)
+    {
+        return;
+    }
+
+    ctx->latest_probe_ret = ESP_ERR_INVALID_STATE;
+    ctx->latest_feature_valid = 0U;
+    ctx->feature_seq = 0U;
+    ctx->rendered_feature_seq = 0U;
+    ctx->last_beep_ts_ms = 0;
+    ctx->beep_level = 0U;
+
+    if ((usr_fs_format_asset_path("voice/common",
+                                  NULL,
+                                  "Di.ogg",
+                                  ctx->di_ogg_path,
+                                  sizeof(ctx->di_ogg_path)) != ESP_OK) ||
+        !usr_fs_path_exists(ctx->di_ogg_path))
+    {
+        ctx->di_ogg_path[0] = '\0';
+        ESP_LOGW(TAG, "Di.ogg asset not found under voice/common");
+    }
+}
+
+/*
+ * brief: Start PIDM runtime timer and worker tasks with rollback on failure.
+ * input: ctx - PIDM app context pointer.
+ * output: true when all runtime pieces started; otherwise false.
+ */
+static bool _pidm_start_runtime(pidm_app_ctx_t *ctx)
+{
+    if (ctx == NULL)
+    {
+        return false;
+    }
+
+    ctx->update_timer = lv_timer_create(_pidm_update_timer_cb, PIDM_UPDATE_PERIOD_MS, ctx);
+    if (ctx->update_timer == NULL)
+    {
+        return false;
+    }
+
+    if (!_pidm_start_input_task())
+    {
+        lv_timer_del(ctx->update_timer);
+        ctx->update_timer = NULL;
+        return false;
+    }
+
+    if (!_pidm_start_probe_task(ctx))
+    {
+        _pidm_stop_input_task();
+        lv_timer_del(ctx->update_timer);
+        ctx->update_timer = NULL;
+        return false;
+    }
+
+    return true;
 }
 
 /*
@@ -956,7 +1067,7 @@ lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     scr = lv_obj_create(NULL);
     if (scr == NULL)
     {
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(NULL, ctx);
         return NULL;
     }
 
@@ -977,8 +1088,7 @@ lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     body = lv_obj_create(scr);
     if (body == NULL)
     {
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(scr, ctx);
         return NULL;
     }
     lv_obj_set_size(body, lcd_w - (2 * PIDM_MARGIN_X), content_h);
@@ -994,8 +1104,7 @@ lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     chart_grid = lv_obj_create(body);
     if (chart_grid == NULL)
     {
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(scr, ctx);
         return NULL;
     }
     lv_obj_set_width(chart_grid, lv_pct(100));
@@ -1016,8 +1125,7 @@ lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
                                 &ctx->chart_dpk,
                                 &ctx->series_dpk))
     {
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(scr, ctx);
         return NULL;
     }
 
@@ -1029,16 +1137,14 @@ lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
                                 &ctx->chart_slope,
                                 &ctx->series_slope))
     {
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(scr, ctx);
         return NULL;
     }
 
     metrics_grid = lv_obj_create(body);
     if (metrics_grid == NULL)
     {
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(scr, ctx);
         return NULL;
     }
     lv_obj_set_width(metrics_grid, lv_pct(100));
@@ -1054,53 +1160,14 @@ lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 
     if (!_pidm_create_metrics_grid(ctx, metrics_grid))
     {
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(scr, ctx);
         return NULL;
     }
 
-    ctx->latest_probe_ret = ESP_ERR_INVALID_STATE;
-    ctx->latest_feature_valid = 0U;
-    ctx->feature_seq = 0U;
-    ctx->rendered_feature_seq = 0U;
-    ctx->last_beep_ts_ms = 0;
-    ctx->beep_level = 0U;
-
-    if ((usr_fs_format_asset_path("voice/common",
-                                  NULL,
-                                  "Di.ogg",
-                                  ctx->di_ogg_path,
-                                  sizeof(ctx->di_ogg_path)) != ESP_OK) ||
-        !usr_fs_path_exists(ctx->di_ogg_path))
+    _pidm_init_runtime_state(ctx);
+    if (!_pidm_start_runtime(ctx))
     {
-        ctx->di_ogg_path[0] = '\0';
-        ESP_LOGW(TAG, "Di.ogg asset not found under voice/common");
-    }
-
-    ctx->update_timer = lv_timer_create(_pidm_update_timer_cb, PIDM_UPDATE_PERIOD_MS, ctx);
-    if (ctx->update_timer == NULL)
-    {
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
-        return NULL;
-    }
-
-    if (!_pidm_start_input_task())
-    {
-        lv_timer_del(ctx->update_timer);
-        ctx->update_timer = NULL;
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
-        return NULL;
-    }
-
-    if (!_pidm_start_probe_task(ctx))
-    {
-        _pidm_stop_input_task();
-        lv_timer_del(ctx->update_timer);
-        ctx->update_timer = NULL;
-        lv_obj_del(scr);
-        lv_mem_free(ctx);
+        _pidm_release_screen_ctx(scr, ctx);
         return NULL;
     }
 
