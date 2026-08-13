@@ -1,0 +1,70 @@
+{
+  "idf.currentSetup": "C:\\esp\\v5.5.2\\esp-idf",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32s3"
+  },
+  "clangd.path": "C:\\Espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=d:\\JohnHu\\Github_private\\ESP32_S3_WROOM_1\\code\\Inherit_AI\\build"
+  ],
+  "files.exclude": {
+    "build": true,
+    "sdkconfig.defaults.esp32": true,
+    "sdkconfig.defaults.esp32c3": true,
+    "sdkconfig.defaults.esp32c5": true,
+    "sdkconfig.defaults.esp32c6": true,
+    "sdkconfig.defaults.esp32p4": true,
+    "sdkconfig.defaults.esp32s31": true,
+    "main/boards/alientek": true,
+    "main/boards/bread-compact-esp32": true,
+    "main/boards/bread-compact-esp32-lcd": true,
+    "main/boards/bread-compact-ml307": true,
+    "main/boards/bread-compact-nt26": true,
+    "main/boards/bread-compact-wifi": true,
+    "main/boards/bread-compact-wifi-lcd": true,
+    "main/boards/bread-compact-wifi-s3cam": true,
+    "main/boards/dfrobot": true,
+    "main/boards/doit-s3-aibox": true,
+    "main/boards/du-chatx": true,
+    "main/boards/electron-bot": true,
+    "main/boards/espressif": true,
+    "main/boards/freenove-esp32s3-display-2.8-lcd": true,
+    "main/boards/genjutech-s3-1.54tft": true,
+    "main/boards/hu-087": true,
+    "main/boards/jiuchuan-s3": true,
+    "main/boards/kevin": true,
+    "main/boards/labplus": true,
+    "main/boards/lcdwiki-es3c35p": true,
+    "main/boards/lceda-course-examples": true,
+    "main/boards/lckfb": true,
+    "main/boards/lilygo": true,
+    "main/boards/m5stack": true,
+    "main/boards/magiclick": true,
+    "main/boards/minsi-k08-dual": true,
+    "main/boards/mixgo-nova": true,
+    "main/boards/movecall": true,
+    "main/boards/nologo": true,
+    "main/boards/nulllab-ai-vox-v3": true,
+    "main/boards/otto-robot": true,
+    "main/boards/quandong-s3-dev": true,
+    "main/boards/rymcu": true,
+    "main/boards/sensecap-watcher": true,
+    "main/boards/spotpear": true,
+    "main/boards/surfer-c3-1.14tft": true,
+    "main/boards/taiji-pi-s3": true,
+    "main/boards/waveshare": true,
+    "main/boards/wdmomo": true,
+    "main/boards/wk-esp32s3-dev": true,
+    "main/boards/xmini": true,
+    "main/boards/xorigin": true,
+    "main/boards/yunliao-s3": true,
+    "main/boards/zectrix": true,
+    "main/boards/zhengchen": true
+  }
+}
+
+
+
+
