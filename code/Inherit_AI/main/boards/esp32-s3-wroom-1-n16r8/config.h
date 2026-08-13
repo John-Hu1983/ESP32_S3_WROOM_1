@@ -119,3 +119,40 @@ PIDM
 #define PIDM_EN_PORT (Gpba02b::kPortB)
 #define PIDM_EN_PIN (2)
 
+/*
+RC522
+*/
+#define RC522_SPI_HOST (SPI3_HOST)
+#define RC522_CS_IO (GPIO_NUM_0)
+#define RC522_CLK_IO (GPIO_NUM_45)
+#define RC522_MOSI_IO (GPIO_NUM_48)
+#define RC522_MISO_IO (GPIO_NUM_47)
+#define RC522_RST_PORT (Gpba02b::kPortA)
+#define RC522_RST_PIN (6)
+#define RC522_IRQ_PORT (Gpba02b::kPortB)
+#define RC522_IRQ_PIN (4)
+
+/*
+PWM-GPBA02B
+*/
+#define PWM_GPBA02B_PA_CLOCK_DIV (3)
+#define PWM_GPBA02B_PC_CLOCK_DIV (3)
+#define PWM_GPBA02B_DUTY_10_PERCENT (26)
+#define PWM_GPBA02B_07_PORT (Gpba02b::kPortA)
+#define PWM_GPBA02B_07_PIN (7)
+#define PWM_GPBA02B_08_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_08_PIN (0)
+#define PWM_GPBA02B_09_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_09_PIN (1)
+#define PWM_GPBA02B_10_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_10_PIN (2)
+#define PWM_GPBA02B_11_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_11_PIN (3)
+#define PWM_GPBA02B_12_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_12_PIN (4)
+#define PWM_GPBA02B_13_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_13_PIN (5)
+#define PWM_GPBA02B_14_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_14_PIN (6)
+#define PWM_GPBA02B_15_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_15_PIN (7)

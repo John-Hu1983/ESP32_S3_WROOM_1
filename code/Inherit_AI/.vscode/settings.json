@@ -62,7 +62,8 @@
     "main/boards/yunliao-s3": true,
     "main/boards/zectrix": true,
     "main/boards/zhengchen": true
-  }
+  },
+  "idf.monitorPort": "COM2"
 }
 
 

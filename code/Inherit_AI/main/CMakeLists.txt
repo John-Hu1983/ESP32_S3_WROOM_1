@@ -1,5 +1,6 @@
 # Define source files
 set(SOURCES "audio/audio_codec.cc"
+            "bsp/bsp_env.cc"
             "bsp/gpba02b.cc"
             "audio/audio_debugger.cc"
             "audio/audio_service.cc"

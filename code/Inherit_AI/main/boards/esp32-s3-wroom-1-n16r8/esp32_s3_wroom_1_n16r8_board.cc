@@ -1,5 +1,6 @@
 ﻿#include "application.h"
 #include "assets/lang_config.h"
+#include "bsp/bsp_env.h"
 #include "bsp/gpba02b.h"
 #include "button.h"
 #include "codecs/no_audio_codec.h"
@@ -44,19 +45,64 @@
 #define LAMP_GPIO GPIO_NUM_NC
 #endif
 
+namespace {
+BspEnv::Config CreateBspEnvConfig() {
+    BspEnv::Config config = {};
+    BspEnv::GetDefaultConfig(&config);
+
+    config.power_lock_pin = {POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN};
+    config.pdm_enable_pin = {PDM_EN_PORT, PDM_EN_PIN};
+    config.i2s_enable_pin = {I2S_EN_PORT, I2S_EN_PIN};
+    config.pidm_enable_pin = {PIDM_EN_PORT, PIDM_EN_PIN};
+    config.lcd_reset_pin = {LCD_IO_RESET_PORT, LCD_IO_RESET_PIN};
+
+#if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \
+    defined(CAM_IO_PWDN_PIN)
+    config.camera_present = true;
+    config.camera_reset_pin = {CAM_IO_RESET_PORT, CAM_IO_RESET_PIN};
+    config.camera_pwdn_pin = {CAM_IO_PWDN_PORT, CAM_IO_PWDN_PIN};
+#if defined(CAM_IO_LIGHT_PORT) && defined(CAM_IO_LIGHT_PIN)
+    config.camera_light_pin = {CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN};
+#endif
+#endif
+
+#if defined(RC522_RST_PORT) && defined(RC522_RST_PIN)
+    config.rc522_present = true;
+    config.rc522_reset_pin = {RC522_RST_PORT, RC522_RST_PIN};
+#endif
+
+#if defined(RC522_ENABLE_PORT) && defined(RC522_ENABLE_PIN)
+    config.rc522_enable_pin = {RC522_ENABLE_PORT, RC522_ENABLE_PIN};
+#endif
+
+    config.pwm_enable_mask_port_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
+    config.pwm_enable_mask_port_c =
+        static_cast<uint8_t>((1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) |
+                             (1U << PWM_GPBA02B_10_PIN) | (1U << PWM_GPBA02B_11_PIN) |
+                             (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
+    config.pwm_clock_div_port_a = PWM_GPBA02B_PA_CLOCK_DIV;
+    config.pwm_clock_div_port_c = PWM_GPBA02B_PC_CLOCK_DIV;
+    config.pwm_duty = PWM_GPBA02B_DUTY_10_PERCENT;
+
+    return config;
+}
+}  // namespace
+
 class Esp32S3Wroom1N16r8Board : public WifiBoard {
 private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
+    Gpba02b& extend = Gpba02b::Instance();
+    BspEnv bsp_env_;
     Button boot_button_;
     Button touch_button_;
     Button volume_up_button_;
     Button volume_down_button_;
 
-    void InitializeGpba02b() {
+    esp_err_t InitializeGpba02b() {
         Gpba02b::Config gpba02b_config = {};
-        Gpba02b::Instance().GetDefaultConfig(&gpba02b_config);
+        extend.GetDefaultConfig(&gpba02b_config);
         gpba02b_config.spi_host = GPBA02B_SPI_HOST;
         gpba02b_config.miso_io = GPBA02B_IO_MISO;
         gpba02b_config.mosi_io = GPBA02B_IO_MOSI;
@@ -65,13 +111,14 @@ private:
         gpba02b_config.clock_hz = GPBA02B_DEFAULT_CLOCK_HZ;
         gpba02b_config.device_id = GPBA02B_DEVICE_ID;
 
-        esp_err_t err = Gpba02b::Instance().Init(&gpba02b_config);
+        esp_err_t err = extend.Init(&gpba02b_config);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to initialize GPBA02B: %s", esp_err_to_name(err));
-            return;
+            return err;
         }
 
         ESP_LOGI(TAG, "GPBA02B initialized");
+        return ESP_OK;
     }
 
     void InitializeDisplaySpiBus() {
@@ -177,12 +224,14 @@ private:
     }
 
 public:
-    Esp32S3Wroom1N16r8Board()
-        : boot_button_(BOOT_BUTTON_GPIO),
-          touch_button_(TOUCH_BUTTON_GPIO),
-          volume_up_button_(VOLUME_UP_BUTTON_GPIO),
-          volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
-                InitializeGpba02b();
+        Esp32S3Wroom1N16r8Board()
+                : bsp_env_(CreateBspEnvConfig()),
+                    boot_button_(BOOT_BUTTON_GPIO),
+                    touch_button_(TOUCH_BUTTON_GPIO),
+                    volume_up_button_(VOLUME_UP_BUTTON_GPIO),
+                    volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
+                ESP_ERROR_CHECK(InitializeGpba02b());
+                ESP_ERROR_CHECK(bsp_env_.Initialize());
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
         InitializeButtons();
