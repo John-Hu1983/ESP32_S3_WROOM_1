@@ -1,0 +1,14 @@
+{
+    "type": "esp32-s3-wroom-1-n16r8",
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "esp32-s3-wroom-1-n16r8",
+            "sdkconfig_append": []
+        },
+        {
+            "name": "esp32-s3-wroom-1-n16r8-128x64",
+            "sdkconfig_append": []
+        }
+    ]
+}

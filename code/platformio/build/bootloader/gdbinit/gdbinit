@@ -1,0 +1,2 @@
+source D:/JohnHu/Github_private/ESP32_S3_WROOM_1/code/platformio/build/bootloader/gdbinit/symbols
+source D:/JohnHu/Github_private/ESP32_S3_WROOM_1/code/platformio/build/bootloader/gdbinit/connect

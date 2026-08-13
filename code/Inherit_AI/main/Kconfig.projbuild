@@ -169,6 +169,12 @@ choice BOARD_TYPE
     config BOARD_TYPE_BREAD_COMPACT_WIFI
         bool "Bread Compact Wi-Fi (面包板)"
         depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP32_S3_WROOM_1_N16R8
+        bool "ESP32-S3-WROOM-1-N16R8 (Custom)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP32_S3_WROOM_1_N8R2
+        bool "ESP32-S3-WROOM-1-N8R2 (Custom)"
+        depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_BREAD_COMPACT_WIFI_LCD
         bool "Bread Compact Wi-Fi + LCD (面包板)"
         depends on IDF_TARGET_ESP32S3
