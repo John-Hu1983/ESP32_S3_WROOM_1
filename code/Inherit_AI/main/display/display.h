@@ -48,6 +48,9 @@ public:
     virtual void ClearTextGlyphs() {}
     virtual void SetEmojiCollection(std::shared_ptr<EmojiCollection>) {}
     virtual void SetupUI() { setup_ui_called_ = true; }
+    virtual bool HasSelectableControls() { return false; }
+    virtual bool SelectNextControl() { return false; }
+    virtual bool SelectPreviousControl() { return false; }
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }

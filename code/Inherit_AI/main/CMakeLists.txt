@@ -2,6 +2,7 @@
 set(SOURCES "audio/audio_codec.cc"
             "bsp/bsp_env.cc"
             "bsp/gpba02b.cc"
+            "peripherals/keyboard.cc"
             "audio/audio_debugger.cc"
             "audio/audio_service.cc"
             "audio/demuxer/ogg_demuxer.cc"

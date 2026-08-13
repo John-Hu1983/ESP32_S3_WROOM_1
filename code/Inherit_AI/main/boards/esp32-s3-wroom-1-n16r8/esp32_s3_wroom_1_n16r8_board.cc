@@ -2,14 +2,13 @@
 #include "assets/lang_config.h"
 #include "bsp/bsp_env.h"
 #include "bsp/gpba02b.h"
-#include "button.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
-#include "ui/desktop_display.h"
 #include "display/lcd_display.h"
-#include "lamp_controller.h"
 #include "mcp_server.h"
+#include "peripherals/keyboard.h"
 #include "system_reset.h"
+#include "ui/desktop_display.h"
 #include "wifi_board.h"
 
 #include <driver/spi_common.h>
@@ -21,34 +20,11 @@
 #include <freertos/task.h>
 #include "esp_lcd_st7796.h"
 
-#include <vector>
+#include <memory>
 
 #define TAG "Esp32S3Wroom1N16r8Board"
 
-#ifndef BOOT_BUTTON_GPIO
-#define BOOT_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef TOUCH_BUTTON_GPIO
-#define TOUCH_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef VOLUME_UP_BUTTON_GPIO
-#define VOLUME_UP_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef VOLUME_DOWN_BUTTON_GPIO
-#define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef LAMP_GPIO
-#define LAMP_GPIO GPIO_NUM_NC
-#endif
-
-namespace {
-#define ENABLE_TEMP_MIC_CHECK (1)
-
-BspEnv::Config CreateBspEnvConfig() {
+static BspEnv::Config CreateBspEnvConfig() {
     BspEnv::Config config = {};
     BspEnv::GetDefaultConfig(&config);
 
@@ -75,10 +51,6 @@ BspEnv::Config CreateBspEnvConfig() {
     config.rc522_reset_pin = {RC522_RST_PORT, RC522_RST_PIN};
 #endif
 
-#if defined(RC522_ENABLE_PORT) && defined(RC522_ENABLE_PIN)
-    config.rc522_enable_pin = {RC522_ENABLE_PORT, RC522_ENABLE_PIN};
-#endif
-
     config.pwm_enable_mask_port_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
     config.pwm_enable_mask_port_c = static_cast<uint8_t>(
         (1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) | (1U << PWM_GPBA02B_10_PIN) |
@@ -89,7 +61,17 @@ BspEnv::Config CreateBspEnvConfig() {
 
     return config;
 }
-}  // namespace
+
+static Keyboard::Config CreateKeyboardConfig() {
+    Keyboard::Config config = {};
+    config.keys[Keyboard::kKey0] = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
+    config.keys[Keyboard::kKey1] = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
+    config.active_low = true;
+    config.poll_interval_ms = 10;
+    config.debounce_ms = 30;
+    config.long_press_ms = 700;
+    return config;
+}
 
 class Esp32S3Wroom1N16r8Board : public WifiBoard {
 private:
@@ -97,11 +79,8 @@ private:
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
     Gpba02b& extend = Gpba02b::Instance();
-    BspEnv bsp_env_;
-    Button boot_button_;
-    Button touch_button_;
-    Button volume_up_button_;
-    Button volume_down_button_;
+    std::unique_ptr<BspEnv> bsp_env_;
+    std::unique_ptr<Keyboard> keyboard_;
 
     esp_err_t InitializeGpba02b() {
         Gpba02b::Config gpba02b_config = {};
@@ -175,160 +154,76 @@ private:
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new DesktopSpiLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH,
-                            LCD_DEFAULT_HEIGHT, 0, 0, mirror_x, mirror_y,
-                            swap_xy);
+                                            LCD_DEFAULT_HEIGHT, 0, 0, mirror_x, mirror_y, swap_xy);
     }
 
-    void InitializeButtons() {
-        boot_button_.OnClick([this]() {
+    void InitializeBspEnv() {
+        bsp_env_ = std::make_unique<BspEnv>(CreateBspEnvConfig());
+        bsp_env_->Initialize();
+    }
+
+    bool IsDesktopSelectionMode() {
+        if (display_ == nullptr) {
+            return false;
+        }
+
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() != kDeviceStateIdle) {
+            return false;
+        }
+
+        return display_->HasSelectableControls();
+    }
+
+    void InitializeKeyboard() {
+        keyboard_ = std::make_unique<Keyboard>(CreateKeyboardConfig());
+
+        keyboard_->OnClick(Keyboard::kKey0, [this]() {
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting) {
                 EnterWifiConfigMode();
                 return;
             }
+
+            if (IsDesktopSelectionMode()) {
+                display_->SelectPreviousControl();
+                return;
+            }
+
             app.ToggleChatState();
         });
-        touch_button_.OnPressDown([this]() { Application::GetInstance().StartListening(); });
-        touch_button_.OnPressUp([this]() { Application::GetInstance().StopListening(); });
 
-        volume_up_button_.OnClick([this]() {
-            auto codec = GetAudioCodec();
-            auto volume = codec->output_volume() + 10;
-            if (volume > 100) {
-                volume = 100;
+        keyboard_->OnClick(Keyboard::kKey1, [this]() {
+            if (IsDesktopSelectionMode()) {
+                display_->SelectNextControl();
             }
-            codec->SetOutputVolume(volume);
-            GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume));
         });
 
-        volume_up_button_.OnLongPress([this]() {
-            GetAudioCodec()->SetOutputVolume(100);
-            GetDisplay()->ShowNotification(Lang::Strings::MAX_VOLUME);
-        });
+        keyboard_->OnPressDown(Keyboard::kKey1,
+                               [this]() {
+                                   if (IsDesktopSelectionMode()) {
+                                       return;
+                                   }
+                                   Application::GetInstance().StartListening();
+                               });
+        keyboard_->OnPressUp(Keyboard::kKey1,
+                             [this]() {
+                                 if (IsDesktopSelectionMode()) {
+                                     return;
+                                 }
+                                 Application::GetInstance().StopListening();
+                             });
 
-        volume_down_button_.OnClick([this]() {
-            auto codec = GetAudioCodec();
-            auto volume = codec->output_volume() - 10;
-            if (volume < 0) {
-                volume = 0;
-            }
-            codec->SetOutputVolume(volume);
-            GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume));
-        });
-
-        volume_down_button_.OnLongPress([this]() {
-            GetAudioCodec()->SetOutputVolume(0);
-            GetDisplay()->ShowNotification(Lang::Strings::MUTED);
-        });
-    }
-
-    void InitializeTools() {
-        static LampController lamp(LAMP_GPIO);
-        (void)lamp;
-    }
-
-    void StartTemporaryMicCheck() {
-#if ENABLE_TEMP_MIC_CHECK
-        BaseType_t created = xTaskCreate(
-            [](void* arg) {
-                auto* board = static_cast<Esp32S3Wroom1N16r8Board*>(arg);
-                auto* codec = board->GetAudioCodec();
-
-                if (codec == nullptr) {
-                    ESP_LOGE(TAG, "TEMP MIC CHECK: codec is null");
-                    vTaskDelete(nullptr);
-                    return;
-                }
-
-                // Give peripherals a short settle time, then sample PDM input.
-                vTaskDelay(pdMS_TO_TICKS(200));
-                bool input_was_enabled = codec->input_enabled();
-                codec->EnableInput(true);
-
-                constexpr int kSamplesPerFrame = 160;  // 10 ms @ 16 kHz
-                constexpr int kFrameCount = 200;       // about 2 seconds
-                std::vector<int16_t> data(kSamplesPerFrame * codec->input_channels());
-
-                int64_t abs_sum = 0;
-                int peak = 0;
-                int valid_samples = 0;
-                int valid_frames = 0;
-
-                ESP_LOGW(TAG, "TEMP MIC CHECK: start, please speak to MIC for 2 seconds");
-
-                for (int frame = 0; frame < kFrameCount; ++frame) {
-                    if (!codec->InputData(data)) {
-                        continue;
-                    }
-
-                    ++valid_frames;
-                    int channels = codec->input_channels();
-                    if (channels <= 0) {
-                        channels = 1;
-                    }
-
-                    for (int i = 0; i < kSamplesPerFrame; ++i) {
-                        int32_t sample = data[i * channels];
-                        int value =
-                            sample >= 0 ? static_cast<int>(sample) : static_cast<int>(-sample);
-                        abs_sum += value;
-                        if (value > peak) {
-                            peak = value;
-                        }
-                        ++valid_samples;
-                    }
-                }
-
-                if (!input_was_enabled) {
-                    codec->EnableInput(false);
-                }
-
-                if (valid_samples <= 0) {
-                    ESP_LOGE(TAG, "TEMP MIC CHECK: no audio samples captured");
-                    vTaskDelete(nullptr);
-                    return;
-                }
-
-                int mean_abs = static_cast<int>(abs_sum / valid_samples);
-                ESP_LOGW(TAG, "TEMP MIC CHECK: frames=%d mean_abs=%d peak=%d", valid_frames,
-                         mean_abs, peak);
-
-                if (peak < 120 && mean_abs < 12) {
-                    ESP_LOGE(
-                        TAG,
-                        "TEMP MIC CHECK RESULT: signal too weak, likely MIC power/GND/data issue");
-                } else if (peak < 500) {
-                    ESP_LOGW(
-                        TAG,
-                        "TEMP MIC CHECK RESULT: low signal, check MIC grounding and speak closer");
-                } else {
-                    ESP_LOGI(TAG, "TEMP MIC CHECK RESULT: MIC signal looks active");
-                }
-
-                vTaskDelete(nullptr);
-            },
-            "mic_temp_check", 4096, this, 2, nullptr);
-
-        if (created != pdPASS) {
-            ESP_LOGW(TAG, "TEMP MIC CHECK: failed to create task");
-        }
-#endif
+        ESP_ERROR_CHECK(keyboard_->Start());
     }
 
 public:
-    Esp32S3Wroom1N16r8Board()
-        : bsp_env_(CreateBspEnvConfig()),
-          boot_button_(BOOT_BUTTON_GPIO),
-          touch_button_(TOUCH_BUTTON_GPIO),
-          volume_up_button_(VOLUME_UP_BUTTON_GPIO),
-          volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
+    Esp32S3Wroom1N16r8Board() {
         InitializeGpba02b();
-        bsp_env_.Initialize();
+        InitializeBspEnv();
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
-        InitializeButtons();
-        InitializeTools();
-        StartTemporaryMicCheck();
+        InitializeKeyboard();
     }
 
     // Speaker uses standard I2S, microphone uses PDM.

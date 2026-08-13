@@ -24,6 +24,19 @@ static lv_color_t DesktopTextColor() { return lv_color_hex(0xF6EDE8); }
 
 static lv_color_t DesktopShadowColor() { return lv_color_hex(0x1F0A18); }
 
+static uint32_t InvertRgbHex(uint32_t color_hex) {
+    return color_hex ^ 0x00FFFFFF;
+}
+
+static lv_color_t ContrastTextForHex(uint32_t color_hex) {
+    uint8_t r = static_cast<uint8_t>((color_hex >> 16) & 0xFF);
+    uint8_t g = static_cast<uint8_t>((color_hex >> 8) & 0xFF);
+    uint8_t b = static_cast<uint8_t>(color_hex & 0xFF);
+
+    uint32_t luma = 299U * r + 587U * g + 114U * b;
+    return luma >= 140000U ? lv_color_hex(0x111111) : lv_color_hex(0xF5F5F5);
+}
+
 static void ApplyDesktopBackdrop(lv_obj_t* obj) {
     if (obj == nullptr) {
         return;
@@ -112,22 +125,25 @@ bool DesktopSpiLcdDisplay::ShouldDisplayRole(const char* role) {
     return role != nullptr && std::strcmp(role, "system") == 0;
 }
 
-void DesktopSpiLcdDisplay::BuildGrid(lv_obj_t* parent, const GridStyle& style) {
+void DesktopSpiLcdDisplay::BuildGrid(lv_obj_t* parent, const GridStyle& style,
+                                     std::vector<lv_obj_t*>* out_tiles) {
     if (parent == nullptr) {
         return;
     }
 
-    const lv_color_t selected_color = lv_color_hex(0xE95420);
     const lv_color_t default_text_color = style.text_color;
-    const lv_color_t checked_text_color = lv_color_white();
     const lv_font_t* app_name_font = ResolveAppNameFont(style.text_font);
     const lv_coord_t tile_radius = 14;
     const lv_coord_t tile_padding = 6;
+    const lv_style_selector_t sel_main_checked_pressed =
+        MainStateSelector(MergeStates(LV_STATE_CHECKED, LV_STATE_PRESSED));
     const lv_style_selector_t sel_main = MainSelector();
     const lv_style_selector_t sel_main_checked = MainStateSelector(LV_STATE_CHECKED);
     const lv_style_selector_t sel_main_pressed = MainStateSelector(LV_STATE_PRESSED);
-    const lv_style_selector_t sel_main_checked_pressed =
-        MainStateSelector(MergeStates(LV_STATE_CHECKED, LV_STATE_PRESSED));
+
+    if (out_tiles != nullptr) {
+        out_tiles->clear();
+    }
 
     static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                    LV_GRID_TEMPLATE_LAST};
@@ -142,7 +158,11 @@ void DesktopSpiLcdDisplay::BuildGrid(lv_obj_t* parent, const GridStyle& style) {
     for (int i = 0; i < app_count; ++i) {
         lv_obj_t* tile = lv_btn_create(parent);
         lv_obj_remove_style_all(tile);
-        lv_color_t tile_color = lv_color_hex(kDesktopApps[i].color_hex);
+        uint32_t tile_color_hex = kDesktopApps[i].color_hex;
+        uint32_t selected_color_hex = InvertRgbHex(tile_color_hex);
+        lv_color_t tile_color = lv_color_hex(tile_color_hex);
+        lv_color_t selected_color = lv_color_hex(selected_color_hex);
+        lv_color_t selected_text_color = ContrastTextForHex(selected_color_hex);
 
         lv_obj_set_style_bg_color(tile, tile_color, sel_main);
         lv_obj_set_style_bg_color(tile, selected_color, sel_main_checked);
@@ -150,8 +170,8 @@ void DesktopSpiLcdDisplay::BuildGrid(lv_obj_t* parent, const GridStyle& style) {
         lv_obj_set_style_bg_color(tile, selected_color, sel_main_checked_pressed);
         lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, sel_main);
         lv_obj_set_style_border_width(tile, 2, sel_main);
-        lv_obj_set_style_border_color(tile, lv_color_white(), sel_main_checked);
-        lv_obj_set_style_border_color(tile, lv_color_white(), sel_main_checked_pressed);
+        lv_obj_set_style_border_color(tile, selected_text_color, sel_main_checked);
+        lv_obj_set_style_border_color(tile, selected_text_color, sel_main_checked_pressed);
         lv_obj_set_style_border_opa(tile, LV_OPA_TRANSP, sel_main);
         lv_obj_set_style_border_opa(tile, LV_OPA_COVER, sel_main_checked);
         lv_obj_set_style_border_opa(tile, LV_OPA_COVER, sel_main_checked_pressed);
@@ -160,6 +180,7 @@ void DesktopSpiLcdDisplay::BuildGrid(lv_obj_t* parent, const GridStyle& style) {
         lv_obj_set_style_shadow_opa(tile, LV_OPA_TRANSP, sel_main);
         lv_obj_set_style_pad_all(tile, tile_padding, sel_main);
         lv_obj_set_scrollbar_mode(tile, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_add_flag(tile, LV_OBJ_FLAG_CHECKABLE);
 
         int row = i / 3;
         int col = i % 3;
@@ -170,7 +191,8 @@ void DesktopSpiLcdDisplay::BuildGrid(lv_obj_t* parent, const GridStyle& style) {
             lv_obj_set_style_text_font(icon_label, style.icon_font, 0);
         }
         lv_obj_set_style_text_color(icon_label, default_text_color, sel_main);
-        lv_obj_set_style_text_color(icon_label, checked_text_color, sel_main_checked);
+        lv_obj_set_style_text_color(icon_label, selected_text_color, sel_main_checked);
+        lv_obj_set_style_text_color(icon_label, selected_text_color, sel_main_checked_pressed);
         lv_label_set_text(icon_label, kDesktopApps[i].symbol);
         lv_obj_align(icon_label, LV_ALIGN_TOP_MID, 0, 4);
 
@@ -179,11 +201,84 @@ void DesktopSpiLcdDisplay::BuildGrid(lv_obj_t* parent, const GridStyle& style) {
             lv_obj_set_style_text_font(name_label, app_name_font, 0);
         }
         lv_obj_set_style_text_color(name_label, default_text_color, sel_main);
-        lv_obj_set_style_text_color(name_label, checked_text_color, sel_main_checked);
+        lv_obj_set_style_text_color(name_label, selected_text_color, sel_main_checked);
+        lv_obj_set_style_text_color(name_label, selected_text_color, sel_main_checked_pressed);
         lv_obj_set_style_text_letter_space(name_label, 1, 0);
         lv_label_set_text(name_label, kDesktopApps[i].name);
         lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, -4);
+
+        if (out_tiles != nullptr) {
+            out_tiles->push_back(tile);
+        }
     }
+}
+
+void DesktopSpiLcdDisplay::RefreshSelectionLocked() {
+    if (desktop_tiles_.empty()) {
+        selected_tile_index_ = -1;
+        return;
+    }
+
+    const int tile_count = static_cast<int>(desktop_tiles_.size());
+    if (selected_tile_index_ < -1 || selected_tile_index_ >= tile_count) {
+        selected_tile_index_ = -1;
+    }
+
+    for (int i = 0; i < tile_count; ++i) {
+        lv_obj_t* tile = desktop_tiles_[i];
+        if (tile == nullptr) {
+            continue;
+        }
+
+        if (selected_tile_index_ >= 0 && i == selected_tile_index_) {
+            lv_obj_add_state(tile, LV_STATE_CHECKED);
+        } else {
+            lv_obj_remove_state(tile, LV_STATE_CHECKED);
+        }
+    }
+}
+
+bool DesktopSpiLcdDisplay::HasSelectableControls() {
+    DisplayLockGuard lock(this);
+    return !desktop_tiles_.empty();
+}
+
+bool DesktopSpiLcdDisplay::SelectNextControl() {
+    DisplayLockGuard lock(this);
+    if (desktop_tiles_.empty()) {
+        return false;
+    }
+
+    const int tile_count = static_cast<int>(desktop_tiles_.size());
+    if (selected_tile_index_ < 0) {
+        selected_tile_index_ = 0;
+    } else if (selected_tile_index_ >= tile_count - 1) {
+        selected_tile_index_ = -1;
+    } else {
+        ++selected_tile_index_;
+    }
+
+    RefreshSelectionLocked();
+    return true;
+}
+
+bool DesktopSpiLcdDisplay::SelectPreviousControl() {
+    DisplayLockGuard lock(this);
+    if (desktop_tiles_.empty()) {
+        return false;
+    }
+
+    const int tile_count = static_cast<int>(desktop_tiles_.size());
+    if (selected_tile_index_ < 0) {
+        selected_tile_index_ = tile_count - 1;
+    } else if (selected_tile_index_ <= 0) {
+        selected_tile_index_ = -1;
+    } else {
+        --selected_tile_index_;
+    }
+
+    RefreshSelectionLocked();
+    return true;
 }
 
 void DesktopSpiLcdDisplay::SetupUI() {
@@ -302,7 +397,9 @@ void DesktopSpiLcdDisplay::SetupUI() {
     grid_style.text_color = text_color;
     grid_style.tile_color = panel_color;
     grid_style.spacing = spacing;
-    DesktopSpiLcdDisplay::BuildGrid(content_, grid_style);
+    DesktopSpiLcdDisplay::BuildGrid(content_, grid_style, &desktop_tiles_);
+    selected_tile_index_ = -1;
+    RefreshSelectionLocked();
 
     bottom_bar_ = lv_obj_create(container_);
     lv_obj_set_size(bottom_bar_, LV_PCT(100), text_font->line_height + spacing * 3);
@@ -455,7 +552,8 @@ void DesktopSpiLcdDisplay::SetTheme(Theme* theme) {
         grid_style.text_color = text_color;
         grid_style.tile_color = panel_color;
         grid_style.spacing = spacing;
-        DesktopSpiLcdDisplay::BuildGrid(content_, grid_style);
+        DesktopSpiLcdDisplay::BuildGrid(content_, grid_style, &desktop_tiles_);
+        RefreshSelectionLocked();
         lv_obj_clear_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
     }
 
