@@ -54,6 +54,8 @@ BspEnv::Config CreateBspEnvConfig() {
     config.pdm_enable_pin = {PDM_EN_PORT, PDM_EN_PIN};
     config.i2s_enable_pin = {I2S_EN_PORT, I2S_EN_PIN};
     config.pidm_enable_pin = {PIDM_EN_PORT, PIDM_EN_PIN};
+    config.button_up_pin = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
+    config.button_down_pin = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
     config.lcd_reset_pin = {LCD_IO_RESET_PORT, LCD_IO_RESET_PIN};
 
 #if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \

@@ -19,6 +19,9 @@ public:
         Pin i2s_enable_pin;
         Pin pidm_enable_pin;
 
+        Pin button_up_pin;
+        Pin button_down_pin;
+
         Pin lcd_reset_pin;
 
         Pin camera_reset_pin;
@@ -60,6 +63,7 @@ private:
     bool IsValidPin(const Pin& pin) const;
     void DelayMs(uint32_t delay_ms) const;
     esp_err_t ConfigureOutput(const Pin& pin, bool level);
+    esp_err_t ConfigureInputPullHigh(const Pin& pin);
     esp_err_t WritePin(const Pin& pin, bool level);
     esp_err_t PulseReset(const Pin& pin, uint32_t pulse_ms, uint32_t settle_ms);
     esp_err_t ConfigurePwm();

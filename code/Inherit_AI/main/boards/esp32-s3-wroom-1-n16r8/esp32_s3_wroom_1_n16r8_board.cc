@@ -5,9 +5,9 @@
 #include "button.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
+#include "ui/desktop_display.h"
 #include "display/lcd_display.h"
 #include "lamp_controller.h"
-#include "led/single_led.h"
 #include "mcp_server.h"
 #include "system_reset.h"
 #include "wifi_board.h"
@@ -17,7 +17,11 @@
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include "esp_lcd_st7796.h"
+
+#include <vector>
 
 #define TAG "Esp32S3Wroom1N16r8Board"
 
@@ -37,15 +41,13 @@
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
 #endif
 
-#ifndef BUILTIN_LED_GPIO
-#define BUILTIN_LED_GPIO GPIO_NUM_NC
-#endif
-
 #ifndef LAMP_GPIO
 #define LAMP_GPIO GPIO_NUM_NC
 #endif
 
 namespace {
+#define ENABLE_TEMP_MIC_CHECK (1)
+
 BspEnv::Config CreateBspEnvConfig() {
     BspEnv::Config config = {};
     BspEnv::GetDefaultConfig(&config);
@@ -54,6 +56,8 @@ BspEnv::Config CreateBspEnvConfig() {
     config.pdm_enable_pin = {PDM_EN_PORT, PDM_EN_PIN};
     config.i2s_enable_pin = {I2S_EN_PORT, I2S_EN_PIN};
     config.pidm_enable_pin = {PIDM_EN_PORT, PIDM_EN_PIN};
+    config.button_up_pin = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
+    config.button_down_pin = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
     config.lcd_reset_pin = {LCD_IO_RESET_PORT, LCD_IO_RESET_PIN};
 
 #if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \
@@ -76,10 +80,9 @@ BspEnv::Config CreateBspEnvConfig() {
 #endif
 
     config.pwm_enable_mask_port_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
-    config.pwm_enable_mask_port_c =
-        static_cast<uint8_t>((1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) |
-                             (1U << PWM_GPBA02B_10_PIN) | (1U << PWM_GPBA02B_11_PIN) |
-                             (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
+    config.pwm_enable_mask_port_c = static_cast<uint8_t>(
+        (1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) | (1U << PWM_GPBA02B_10_PIN) |
+        (1U << PWM_GPBA02B_11_PIN) | (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
     config.pwm_clock_div_port_a = PWM_GPBA02B_PA_CLOCK_DIV;
     config.pwm_clock_div_port_c = PWM_GPBA02B_PC_CLOCK_DIV;
     config.pwm_duty = PWM_GPBA02B_DUTY_10_PERCENT;
@@ -171,8 +174,9 @@ private:
         ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
-        display_ = new SpiLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH, LCD_DEFAULT_HEIGHT, 0,
-                                     0, mirror_x, mirror_y, swap_xy);
+        display_ = new DesktopSpiLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH,
+                            LCD_DEFAULT_HEIGHT, 0, 0, mirror_x, mirror_y,
+                            swap_xy);
     }
 
     void InitializeButtons() {
@@ -223,31 +227,115 @@ private:
         (void)lamp;
     }
 
+    void StartTemporaryMicCheck() {
+#if ENABLE_TEMP_MIC_CHECK
+        BaseType_t created = xTaskCreate(
+            [](void* arg) {
+                auto* board = static_cast<Esp32S3Wroom1N16r8Board*>(arg);
+                auto* codec = board->GetAudioCodec();
+
+                if (codec == nullptr) {
+                    ESP_LOGE(TAG, "TEMP MIC CHECK: codec is null");
+                    vTaskDelete(nullptr);
+                    return;
+                }
+
+                // Give peripherals a short settle time, then sample PDM input.
+                vTaskDelay(pdMS_TO_TICKS(200));
+                bool input_was_enabled = codec->input_enabled();
+                codec->EnableInput(true);
+
+                constexpr int kSamplesPerFrame = 160;  // 10 ms @ 16 kHz
+                constexpr int kFrameCount = 200;       // about 2 seconds
+                std::vector<int16_t> data(kSamplesPerFrame * codec->input_channels());
+
+                int64_t abs_sum = 0;
+                int peak = 0;
+                int valid_samples = 0;
+                int valid_frames = 0;
+
+                ESP_LOGW(TAG, "TEMP MIC CHECK: start, please speak to MIC for 2 seconds");
+
+                for (int frame = 0; frame < kFrameCount; ++frame) {
+                    if (!codec->InputData(data)) {
+                        continue;
+                    }
+
+                    ++valid_frames;
+                    int channels = codec->input_channels();
+                    if (channels <= 0) {
+                        channels = 1;
+                    }
+
+                    for (int i = 0; i < kSamplesPerFrame; ++i) {
+                        int32_t sample = data[i * channels];
+                        int value =
+                            sample >= 0 ? static_cast<int>(sample) : static_cast<int>(-sample);
+                        abs_sum += value;
+                        if (value > peak) {
+                            peak = value;
+                        }
+                        ++valid_samples;
+                    }
+                }
+
+                if (!input_was_enabled) {
+                    codec->EnableInput(false);
+                }
+
+                if (valid_samples <= 0) {
+                    ESP_LOGE(TAG, "TEMP MIC CHECK: no audio samples captured");
+                    vTaskDelete(nullptr);
+                    return;
+                }
+
+                int mean_abs = static_cast<int>(abs_sum / valid_samples);
+                ESP_LOGW(TAG, "TEMP MIC CHECK: frames=%d mean_abs=%d peak=%d", valid_frames,
+                         mean_abs, peak);
+
+                if (peak < 120 && mean_abs < 12) {
+                    ESP_LOGE(
+                        TAG,
+                        "TEMP MIC CHECK RESULT: signal too weak, likely MIC power/GND/data issue");
+                } else if (peak < 500) {
+                    ESP_LOGW(
+                        TAG,
+                        "TEMP MIC CHECK RESULT: low signal, check MIC grounding and speak closer");
+                } else {
+                    ESP_LOGI(TAG, "TEMP MIC CHECK RESULT: MIC signal looks active");
+                }
+
+                vTaskDelete(nullptr);
+            },
+            "mic_temp_check", 4096, this, 2, nullptr);
+
+        if (created != pdPASS) {
+            ESP_LOGW(TAG, "TEMP MIC CHECK: failed to create task");
+        }
+#endif
+    }
+
 public:
-        Esp32S3Wroom1N16r8Board()
-                : bsp_env_(CreateBspEnvConfig()),
-                    boot_button_(BOOT_BUTTON_GPIO),
-                    touch_button_(TOUCH_BUTTON_GPIO),
-                    volume_up_button_(VOLUME_UP_BUTTON_GPIO),
-                    volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
-                ESP_ERROR_CHECK(InitializeGpba02b());
-                ESP_ERROR_CHECK(bsp_env_.Initialize());
+    Esp32S3Wroom1N16r8Board()
+        : bsp_env_(CreateBspEnvConfig()),
+          boot_button_(BOOT_BUTTON_GPIO),
+          touch_button_(TOUCH_BUTTON_GPIO),
+          volume_up_button_(VOLUME_UP_BUTTON_GPIO),
+          volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
+        InitializeGpba02b();
+        bsp_env_.Initialize();
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
         InitializeButtons();
         InitializeTools();
+        StartTemporaryMicCheck();
     }
 
-    virtual Led* GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
-        return &led;
-    }
-
+    // Speaker uses standard I2S, microphone uses PDM.
     virtual AudioCodec* GetAudioCodec() override {
-        // Speaker uses standard I2S, microphone uses PDM.
-        static NoAudioCodecSimplexPdm audio_codec(
-            USER_AUDIO_SAMPLE_RATE_HZ, USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO,
-            I2S_DO_IO, PDM_CLK_IO, PDM_DATA_IO);
+        static NoAudioCodecSimplexPdm audio_codec(USER_AUDIO_SAMPLE_RATE_HZ,
+                                                  USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO,
+                                                  I2S_DO_IO, PDM_CLK_IO, PDM_DATA_IO);
         return &audio_codec;
     }
 
@@ -255,4 +343,3 @@ public:
 };
 
 DECLARE_BOARD(Esp32S3Wroom1N16r8Board);
-

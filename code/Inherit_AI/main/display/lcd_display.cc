@@ -3,6 +3,7 @@
 #include "gif/lvgl_gif.h"
 #include "lvgl_theme.h"
 #include "settings.h"
+#include "ui/desktop_display.h"
 
 #include <esp_err.h>
 #include <esp_log.h>
@@ -476,8 +477,42 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_row(content_, lvgl_theme->spacing(4), 0);  // Space between messages
 
-    // We'll create chat messages dynamically in SetChatMessage
-    chat_message_label_ = nullptr;
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        ESP_LOGI(TAG, "Desktop UI enabled (wechat style)");
+        lv_obj_set_style_pad_all(content_, lvgl_theme->spacing(2), 0);
+        lv_obj_clear_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
+        DesktopSpiLcdDisplay::GridStyle desktop_style = {
+            .icon_font = large_icon_font,
+            .text_font = text_font,
+            .text_color = lvgl_theme->text_color(),
+            .tile_color = lvgl_theme->chat_background_color(),
+            .spacing = static_cast<int>(lvgl_theme->spacing(2)),
+        };
+        DesktopSpiLcdDisplay::BuildGrid(content_, desktop_style);
+
+        bottom_bar_ = lv_obj_create(screen);
+        lv_obj_set_size(bottom_bar_, LV_HOR_RES, text_font->line_height + lvgl_theme->spacing(8));
+        lv_obj_set_style_radius(bottom_bar_, 0, 0);
+        lv_obj_set_style_bg_color(bottom_bar_, lvgl_theme->background_color(), 0);
+        lv_obj_set_style_text_color(bottom_bar_, lvgl_theme->text_color(), 0);
+        lv_obj_set_style_pad_all(bottom_bar_, 0, 0);
+        lv_obj_set_style_pad_left(bottom_bar_, lvgl_theme->spacing(4), 0);
+        lv_obj_set_style_pad_right(bottom_bar_, lvgl_theme->spacing(4), 0);
+        lv_obj_set_style_border_width(bottom_bar_, 0, 0);
+        lv_obj_set_scrollbar_mode(bottom_bar_, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_align(bottom_bar_, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+        chat_message_label_ = lv_label_create(bottom_bar_);
+        lv_obj_set_width(chat_message_label_, LV_HOR_RES - lvgl_theme->spacing(8));
+        lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(chat_message_label_, lvgl_theme->text_color(), 0);
+        lv_obj_align(chat_message_label_, LV_ALIGN_CENTER, 0, 0);
+        lv_label_set_text(chat_message_label_, DesktopSpiLcdDisplay::DefaultPrompt());
+    } else {
+        // We'll create chat messages dynamically in SetChatMessage
+        chat_message_label_ = nullptr;
+    }
 
     low_battery_popup_ = lv_obj_create(screen);
     lv_obj_set_scrollbar_mode(low_battery_popup_, LV_SCROLLBAR_MODE_OFF);
@@ -501,6 +536,11 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(emoji_label_, large_icon_font, 0);
     lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
     lv_label_set_text(emoji_label_, MATERIAL_SYMBOLS_ROBOT_2);
+
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(emoji_label_, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 #if CONFIG_IDF_TARGET_ESP32P4
 #define MAX_MESSAGES 40
@@ -519,6 +559,23 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
                      "SetChatMessage('%s', '%s') failed: content_ is nullptr (SetupUI() was called "
                      "but container not created)",
                      role, content);
+        }
+        return;
+    }
+
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        if (chat_message_label_ == nullptr) {
+            return;
+        }
+        if (!DesktopSpiLcdDisplay::ShouldDisplayRole(role)) {
+            return;
+        }
+        const char* text = (content != nullptr && content[0] != '\0')
+            ? content
+            : DesktopSpiLcdDisplay::DefaultPrompt();
+        lv_label_set_text(chat_message_label_, text);
+        if (bottom_bar_ != nullptr) {
+            lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
         }
         return;
     }
@@ -712,6 +769,9 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
 
 void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
     DisplayLockGuard lock(this);
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        return;
+    }
     if (content_ == nullptr) {
         return;
     }
@@ -801,6 +861,15 @@ void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
 
 void LcdDisplay::ClearChatMessages() {
     DisplayLockGuard lock(this);
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        if (chat_message_label_ != nullptr) {
+            lv_label_set_text(chat_message_label_, DesktopSpiLcdDisplay::DefaultPrompt());
+        }
+        if (bottom_bar_ != nullptr) {
+            lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+        }
+        return;
+    }
     if (content_ == nullptr) {
         return;
     }
@@ -847,22 +916,29 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_bg_color(container_, lvgl_theme->background_color(), 0);
     lv_obj_set_style_border_color(container_, lvgl_theme->border_color(), 0);
 
-    /* Bottom layer: emoji_box_ - centered display */
+    /* Bottom layer: desktop icon grid */
     emoji_box_ = lv_obj_create(screen);
-    lv_obj_set_size(emoji_box_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_size(emoji_box_, LV_HOR_RES - lvgl_theme->spacing(8),
+                    LV_VER_RES - text_font->line_height * 2 - lvgl_theme->spacing(20));
     lv_obj_set_style_bg_opa(emoji_box_, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_pad_all(emoji_box_, 0, 0);
+    lv_obj_set_style_pad_all(emoji_box_, lvgl_theme->spacing(2), 0);
+    lv_obj_set_style_pad_row(emoji_box_, lvgl_theme->spacing(2), 0);
+    lv_obj_set_style_pad_column(emoji_box_, lvgl_theme->spacing(2), 0);
     lv_obj_set_style_border_width(emoji_box_, 0, 0);
-    lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, lvgl_theme->spacing(2));
 
-    emoji_label_ = lv_label_create(emoji_box_);
-    lv_obj_set_style_text_font(emoji_label_, large_icon_font, 0);
-    lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
-    lv_label_set_text(emoji_label_, MATERIAL_SYMBOLS_ROBOT_2);
+    DesktopSpiLcdDisplay::GridStyle desktop_style = {
+        .icon_font = large_icon_font,
+        .text_font = text_font,
+        .text_color = lvgl_theme->text_color(),
+        .tile_color = lvgl_theme->chat_background_color(),
+        .spacing = static_cast<int>(lvgl_theme->spacing(2)),
+    };
+    ESP_LOGI(TAG, "Desktop UI enabled (default style)");
+    DesktopSpiLcdDisplay::BuildGrid(emoji_box_, desktop_style);
 
-    emoji_image_ = lv_img_create(emoji_box_);
-    lv_obj_center(emoji_image_);
-    lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
+    emoji_label_ = nullptr;
+    emoji_image_ = nullptr;
 
     /* Middle layer: preview_image_ - centered display */
     preview_image_ = lv_image_create(screen);
@@ -966,7 +1042,12 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(chat_message_label_, lvgl_theme->text_color(), 0);
     lv_obj_align(chat_message_label_, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);  // Hide until there is content
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        lv_label_set_text(chat_message_label_, DesktopSpiLcdDisplay::DefaultPrompt());
+        lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);  // Hide until there is content
+    }
 #else
     /* Top layer: Bottom bar - fixed height at bottom */
     bottom_bar_ = lv_obj_create(screen);
@@ -998,7 +1079,12 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_anim(chat_message_label_, &a, LV_PART_MAIN);
     lv_obj_set_style_anim_duration(chat_message_label_, lv_anim_speed_clamped(60, 300, 60000),
                                    LV_PART_MAIN);
-    lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);  // Hide until there is content
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        lv_label_set_text(chat_message_label_, DesktopSpiLcdDisplay::DefaultPrompt());
+        lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);  // Hide until there is content
+    }
 #endif
 
     low_battery_popup_ = lv_obj_create(screen);
@@ -1066,11 +1152,25 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
         }
         return;
     }
+    if (DesktopSpiLcdDisplay::IsEnabled() && !DesktopSpiLcdDisplay::ShouldDisplayRole(role)) {
+        return;
+    }
+
+    const char* text = content;
+    if (DesktopSpiLcdDisplay::IsEnabled() && (content == nullptr || content[0] == '\0')) {
+        text = DesktopSpiLcdDisplay::DefaultPrompt();
+    }
+    if (text == nullptr) {
+        text = "";
+    }
+
     lv_anim_delete(chat_message_label_, nullptr);
-    lv_label_set_text(chat_message_label_, content);
-    // Show bottom_bar_ only when there is content (and subtitle is not globally hidden)
+    lv_label_set_text(chat_message_label_, text);
+
     if (bottom_bar_ != nullptr) {
-        if (content == nullptr || content[0] == '\0') {
+        if (DesktopSpiLcdDisplay::IsEnabled()) {
+            lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+        } else if (content == nullptr || content[0] == '\0') {
             lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
         } else if (!hide_subtitle_) {
             lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
@@ -1087,17 +1187,25 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
 
 void LcdDisplay::ClearChatMessages() {
     DisplayLockGuard lock(this);
-    // In non-wechat mode, just clear the chat message label and hide the bar
     if (chat_message_label_ != nullptr) {
-        lv_label_set_text(chat_message_label_, "");
+        lv_label_set_text(chat_message_label_,
+                          DesktopSpiLcdDisplay::IsEnabled() ? DesktopSpiLcdDisplay::DefaultPrompt() : "");
     }
     if (bottom_bar_ != nullptr) {
-        lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+        if (DesktopSpiLcdDisplay::IsEnabled()) {
+            lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 }
 #endif
 
 void LcdDisplay::SetEmotion(const char* emotion) {
+    if (DesktopSpiLcdDisplay::IsEnabled()) {
+        return;
+    }
+
     if (!setup_ui_called_) {
         ESP_LOGW(TAG, "SetEmotion('%s') called before SetupUI() - emotion will not be displayed!",
                  emotion);

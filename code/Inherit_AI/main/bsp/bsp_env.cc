@@ -28,6 +28,8 @@ void BspEnv::GetDefaultConfig(BspEnv::Config* config) {
     config->pdm_enable_pin = InvalidPinConfig();
     config->i2s_enable_pin = InvalidPinConfig();
     config->pidm_enable_pin = InvalidPinConfig();
+    config->button_up_pin = InvalidPinConfig();
+    config->button_down_pin = InvalidPinConfig();
     config->lcd_reset_pin = InvalidPinConfig();
     config->camera_reset_pin = InvalidPinConfig();
     config->camera_pwdn_pin = InvalidPinConfig();
@@ -69,6 +71,13 @@ esp_err_t BspEnv::ConfigureOutput(const BspEnv::Pin& pin, bool level) {
         return ESP_OK;
     }
     return Gpba02b::Instance().config_io_output(pin.port, pin.pin, false, level);
+}
+
+esp_err_t BspEnv::ConfigureInputPullHigh(const BspEnv::Pin& pin) {
+    if (!IsValidPin(pin)) {
+        return ESP_OK;
+    }
+    return Gpba02b::Instance().config_io_input(pin.port, pin.pin, Gpba02b::kIoInputPullHigh);
 }
 
 esp_err_t BspEnv::WritePin(const BspEnv::Pin& pin, bool level) {
@@ -218,6 +227,16 @@ esp_err_t BspEnv::Initialize() {
     }
 
     err = ConfigureOutput(config_.pidm_enable_pin, false);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = ConfigureInputPullHigh(config_.button_up_pin);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = ConfigureInputPullHigh(config_.button_down_pin);
     if (err != ESP_OK) {
         return err;
     }
