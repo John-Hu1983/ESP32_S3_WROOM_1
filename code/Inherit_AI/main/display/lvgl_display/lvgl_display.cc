@@ -1,6 +1,10 @@
 #include <esp_err.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <material_symbols.h>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -17,6 +21,64 @@
 
 #define TAG "Display"
 
+static int CalculateUsagePercent(size_t total_bytes, size_t free_bytes) {
+    if (total_bytes == 0 || free_bytes > total_bytes) {
+        return -1;
+    }
+
+    return static_cast<int>(((total_bytes - free_bytes) * 100U) / total_bytes);
+}
+
+static bool CollectRuntimeCounters(uint32_t* total_runtime_out, uint32_t* idle_runtime_out) {
+#if (configUSE_TRACE_FACILITY == 1) && (configGENERATE_RUN_TIME_STATS == 1)
+    if (total_runtime_out == nullptr || idle_runtime_out == nullptr) {
+        return false;
+    }
+
+    UBaseType_t task_count = uxTaskGetNumberOfTasks();
+    if (task_count == 0) {
+        return false;
+    }
+
+    std::vector<TaskStatus_t> tasks(task_count + 4);
+    configRUN_TIME_COUNTER_TYPE total_runtime = 0;
+    UBaseType_t actual_count = uxTaskGetSystemState(tasks.data(), tasks.size(), &total_runtime);
+    if (actual_count == 0 || total_runtime == 0) {
+        return false;
+    }
+
+    uint32_t idle_runtime = 0;
+    for (UBaseType_t i = 0; i < actual_count; ++i) {
+        const char* task_name = tasks[i].pcTaskName;
+        if (task_name != nullptr && strncmp(task_name, "IDLE", 4) == 0) {
+            idle_runtime += tasks[i].ulRunTimeCounter;
+        }
+    }
+
+    *total_runtime_out = static_cast<uint32_t>(total_runtime);
+    *idle_runtime_out = idle_runtime;
+    return true;
+#else
+    (void)total_runtime_out;
+    (void)idle_runtime_out;
+    return false;
+#endif
+}
+
+static void FormatUsageText(int usage_percent, char* out, size_t out_size) {
+    if (out == nullptr || out_size == 0) {
+        return;
+    }
+
+    if (usage_percent < 0) {
+        snprintf(out, out_size, " --%%");
+    } else {
+        unsigned int safe_percent =
+            (usage_percent > 100) ? 100U : static_cast<unsigned int>(usage_percent);
+        snprintf(out, out_size, "%3u%%", safe_percent);
+    }
+}
+
 LvglDisplay::LvglDisplay() {
     dynamic_glyph_cache_ = std::make_unique<DynamicGlyphCache>();
     // Notification timer
@@ -25,8 +87,13 @@ LvglDisplay::LvglDisplay() {
             [](void* arg) {
                 LvglDisplay* display = static_cast<LvglDisplay*>(arg);
                 DisplayLockGuard lock(display);
-                lv_obj_add_flag(display->notification_label_, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_remove_flag(display->status_label_, LV_OBJ_FLAG_HIDDEN);
+
+                if (display->notification_label_ != nullptr) {
+                    lv_obj_add_flag(display->notification_label_, LV_OBJ_FLAG_HIDDEN);
+                }
+                if (display->status_label_ != nullptr) {
+                    lv_obj_remove_flag(display->status_label_, LV_OBJ_FLAG_HIDDEN);
+                }
             },
         .arg = this,
         .dispatch_method = ESP_TIMER_TASK,
@@ -132,6 +199,9 @@ LvglDisplay::~LvglDisplay() {
     if (battery_label_ != nullptr) {
         lv_obj_del(battery_label_);
     }
+    if (perf_label_ != nullptr) {
+        lv_obj_del(perf_label_);
+    }
     if (low_battery_popup_ != nullptr) {
         lv_obj_del(low_battery_popup_);
     }
@@ -171,6 +241,7 @@ void LvglDisplay::ShowNotification(const char* notification, int duration_ms) {
                  notification);
     }
     DisplayLockGuard lock(this);
+
     if (notification_label_ == nullptr) {
         if (setup_ui_called_) {
             ESP_LOGW(TAG,
@@ -207,6 +278,52 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         } else if (codec->output_volume() > 0 && muted_) {
             muted_ = false;
             lv_label_set_text(mute_label_, "");
+        }
+    }
+
+    int cpu_usage = -1;
+    uint32_t total_runtime = 0;
+    uint32_t idle_runtime = 0;
+    if (CollectRuntimeCounters(&total_runtime, &idle_runtime)) {
+        if (runtime_stats_ready_) {
+            uint32_t delta_total = total_runtime - last_runtime_total_;
+            uint32_t delta_idle = idle_runtime - last_runtime_idle_;
+            if (delta_total > 0) {
+                uint64_t cpu_capacity =
+                    static_cast<uint64_t>(delta_total) * CONFIG_FREERTOS_NUMBER_OF_CORES;
+                uint64_t busy_runtime = (cpu_capacity > delta_idle) ? (cpu_capacity - delta_idle) : 0;
+                cpu_usage = static_cast<int>((busy_runtime * 100U) / cpu_capacity);
+                if (cpu_usage > 100) {
+                    cpu_usage = 100;
+                }
+            }
+        }
+
+        last_runtime_total_ = total_runtime;
+        last_runtime_idle_ = idle_runtime;
+        runtime_stats_ready_ = true;
+    }
+
+    int spiram_usage =
+        CalculateUsagePercent(heap_caps_get_total_size(MALLOC_CAP_SPIRAM),
+                              heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    int internal_usage =
+        CalculateUsagePercent(heap_caps_get_total_size(MALLOC_CAP_INTERNAL),
+                              heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+
+    {
+        DisplayLockGuard lock(this);
+        if (perf_label_ != nullptr) {
+            char cpu_text[8];
+            char spiram_text[8];
+            char internal_text[8];
+            char perf_text[48];
+            FormatUsageText(cpu_usage, cpu_text, sizeof(cpu_text));
+            FormatUsageText(spiram_usage, spiram_text, sizeof(spiram_text));
+            FormatUsageText(internal_usage, internal_text, sizeof(internal_text));
+            snprintf(perf_text, sizeof(perf_text), "cpu:%s mo:%s mi:%s", cpu_text, spiram_text,
+                     internal_text);
+            lv_label_set_text(perf_label_, perf_text);
         }
     }
 

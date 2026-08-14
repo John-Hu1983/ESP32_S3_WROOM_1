@@ -1,4 +1,6 @@
-#include "ui/desktop_display.h"
+// Consolidated service implementation file.
+
+#include "service/desktop.h"
 
 #include "assets/lang_config.h"
 #include "lvgl_theme.h"
@@ -281,6 +283,11 @@ bool DesktopSpiLcdDisplay::SelectPreviousControl() {
     return true;
 }
 
+int DesktopSpiLcdDisplay::GetSelectedControlIndex() {
+    DisplayLockGuard lock(this);
+    return selected_tile_index_;
+}
+
 void DesktopSpiLcdDisplay::SetupUI() {
     if (setup_ui_called_) {
         ESP_LOGW(TAG, "SetupUI() called multiple times, skipping duplicate call");
@@ -329,10 +336,10 @@ void DesktopSpiLcdDisplay::SetupUI() {
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollbar_mode(top_bar_, LV_SCROLLBAR_MODE_OFF);
 
-    network_label_ = lv_label_create(top_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, icon_font, 0);
-    lv_obj_set_style_text_color(network_label_, text_color, 0);
+    perf_label_ = lv_label_create(top_bar_);
+    lv_label_set_text(perf_label_, "cpu: --% mo: --% mi: --%");
+    lv_obj_set_style_text_font(perf_label_, text_font, 0);
+    lv_obj_set_style_text_color(perf_label_, text_color, 0);
 
     lv_obj_t* right_icons = lv_obj_create(top_bar_);
     lv_obj_set_size(right_icons, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -354,6 +361,19 @@ void DesktopSpiLcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(battery_label_, text_color, 0);
     lv_obj_set_style_margin_left(battery_label_, spacing, 0);
 
+    network_label_ = lv_label_create(right_icons);
+    lv_label_set_text(network_label_, "");
+    lv_obj_set_style_text_font(network_label_, icon_font, 0);
+    lv_obj_set_style_text_color(network_label_, text_color, 0);
+    lv_obj_set_style_margin_left(network_label_, spacing, 0);
+
+    status_label_ = lv_label_create(right_icons);
+    lv_label_set_text(status_label_, "--:--");
+    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_color(status_label_, text_color, 0);
+    lv_obj_set_style_margin_left(status_label_, spacing, 0);
+
     status_bar_ = lv_obj_create(top_bar_);
     lv_obj_set_size(status_bar_, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);
@@ -371,14 +391,6 @@ void DesktopSpiLcdDisplay::SetupUI() {
     lv_label_set_text(notification_label_, "");
     lv_obj_align(notification_label_, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-
-    status_label_ = lv_label_create(status_bar_);
-    lv_obj_set_width(status_label_, LV_HOR_RES * 0.56);
-    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(status_label_, text_color, 0);
-    lv_label_set_text(status_label_, Lang::Strings::INITIALIZING);
-    lv_obj_align(status_label_, LV_ALIGN_CENTER, 0, 0);
 
     content_ = lv_obj_create(container_);
     lv_obj_set_width(content_, LV_PCT(100));
@@ -495,6 +507,9 @@ void DesktopSpiLcdDisplay::SetTheme(Theme* theme) {
         lv_obj_set_style_text_font(battery_label_, icon_font, 0);
         lv_obj_set_style_text_font(network_label_, icon_font, 0);
     }
+    if (perf_label_ != nullptr) {
+        lv_obj_set_style_text_font(perf_label_, text_font, 0);
+    }
 
     lv_obj_set_style_text_font(screen, text_font, 0);
     lv_obj_set_style_text_color(screen, text_color, 0);
@@ -538,6 +553,9 @@ void DesktopSpiLcdDisplay::SetTheme(Theme* theme) {
     if (battery_label_ != nullptr) {
         lv_obj_set_style_text_color(battery_label_, text_color, 0);
     }
+    if (perf_label_ != nullptr) {
+        lv_obj_set_style_text_color(perf_label_, text_color, 0);
+    }
 
     if (content_ != nullptr) {
         StyleRoundedCard(content_, panel_color, panel_border_color);
@@ -574,3 +592,156 @@ void DesktopSpiLcdDisplay::SetTheme(Theme* theme) {
 
     Display::SetTheme(lvgl_theme);
 }
+
+
+#include "service/display_factory.h"
+
+#include "service/desktop.h"
+
+Display* CreatePrimaryDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
+                              int width, int height, int offset_x, int offset_y, bool mirror_x,
+                              bool mirror_y, bool swap_xy) {
+    return new DesktopSpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y, mirror_x,
+                                    mirror_y, swap_xy);
+}
+
+
+#include "service/business_service.h"
+
+#include "display.h"
+#include "service/desktop.h"
+
+#include <esp_timer.h>
+
+uint64_t BusinessServiceLayer::GetNowMs() {
+    return static_cast<uint64_t>(esp_timer_get_time() / 1000);
+}
+
+void BusinessServiceLayer::Initialize(Display* display) {
+    if (display != nullptr && display->HasSelectableControls()) {
+        current_service_index_ = -1;
+    } else {
+        current_service_index_ = 0;
+    }
+
+    last_click_ms_[0] = 0;
+    last_click_ms_[1] = 0;
+}
+
+bool BusinessServiceLayer::IsDesktopActive(Display* display) const {
+    return current_service_index_ < 0 && display != nullptr && display->HasSelectableControls();
+}
+
+bool BusinessServiceLayer::IsAiServiceActive() const { return current_service_index_ == 0; }
+
+bool BusinessServiceLayer::HandleDesktopKey(uint8_t key_index, BoardKeyEventType event_type,
+                                            Display* display, int* entered_service_index) {
+    if (entered_service_index != nullptr) {
+        *entered_service_index = -1;
+    }
+
+    if (!IsDesktopActive(display)) {
+        return false;
+    }
+
+    if (display == nullptr) {
+        return true;
+    }
+
+    if (key_index == kPrimaryKey && event_type == BoardKeyEventType::Click) {
+        display->SelectPreviousControl();
+        return true;
+    }
+
+    if (key_index == kSecondaryKey && event_type == BoardKeyEventType::Click) {
+        display->SelectNextControl();
+        return true;
+    }
+
+    if (key_index == kSecondaryKey && event_type == BoardKeyEventType::LongPress) {
+        int selected_index = display->GetSelectedControlIndex();
+        if (selected_index < 0) {
+            selected_index = 0;
+        }
+        if (selected_index >= kServiceCount) {
+            selected_index = kServiceCount - 1;
+        }
+
+        if (entered_service_index != nullptr) {
+            *entered_service_index = selected_index;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+bool BusinessServiceLayer::HandleDualClickExit(uint8_t key_index, BoardKeyEventType event_type) {
+    if (current_service_index_ < 0 || event_type != BoardKeyEventType::Click) {
+        return false;
+    }
+
+    if (key_index != kPrimaryKey && key_index != kSecondaryKey) {
+        return false;
+    }
+
+    uint64_t now_ms = GetNowMs();
+    uint8_t other_key = key_index == kPrimaryKey ? kSecondaryKey : kPrimaryKey;
+    last_click_ms_[key_index] = now_ms;
+
+    if (last_click_ms_[other_key] != 0 &&
+        (now_ms - last_click_ms_[other_key]) <= kDualClickWindowMs) {
+        last_click_ms_[0] = 0;
+        last_click_ms_[1] = 0;
+        return true;
+    }
+
+    return false;
+}
+
+service_key_result_t BusinessServiceLayer::HandleServiceKey(uint8_t key_index,
+                                                            BoardKeyEventType event_type,
+                                                            Display* display) {
+    service_key_result_t result = {0};
+    if (current_service_index_ < 0 || current_service_index_ >= service_get_count()) {
+        return result;
+    }
+
+    result = service_handle_key(current_service_index_, key_index,
+                                static_cast<uint8_t>(event_type));
+    if (result.consumed && display != nullptr && result.notification != nullptr &&
+        result.notification[0] != '\0') {
+        display->ShowNotification(result.notification, 900);
+    }
+
+    return result;
+}
+
+void BusinessServiceLayer::EnterService(int service_index, Display* display) {
+    if (display == nullptr || service_index < 0 || service_index >= kServiceCount) {
+        return;
+    }
+
+    const service_item_t* item = service_get_item(service_index);
+    if (item == nullptr) {
+        return;
+    }
+
+    current_service_index_ = service_index;
+    display->SetStatus(item->status);
+    display->SetChatMessage("system", item->prompt);
+    display->ShowNotification(item->name, 1000);
+}
+
+void BusinessServiceLayer::EnterDesktop(Display* display, bool show_notification) {
+    if (display == nullptr || !display->HasSelectableControls()) {
+        return;
+    }
+
+    current_service_index_ = -1;
+    if (show_notification) {
+        display->ShowNotification("Desktop", 1000);
+    }
+    display->SetChatMessage("system", DesktopSpiLcdDisplay::DefaultPrompt());
+}
+

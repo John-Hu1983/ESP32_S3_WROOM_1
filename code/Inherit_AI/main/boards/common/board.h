@@ -6,6 +6,7 @@
 #include <mqtt.h>
 #include <udp.h>
 #include <string>
+#include <cstdint>
 #include <functional>
 #include <network_interface.h>
 
@@ -39,9 +40,19 @@ enum class PowerSaveLevel {
     PERFORMANCE,  // No power saving (maximum power consumption / full performance)
 };
 
+// Generic board key event for application-level input routing
+enum class BoardKeyEventType : uint8_t {
+    PressDown,
+    PressUp,
+    Click,
+    LongPress,
+};
+
 // Network event callback type (event, data)
 // data contains additional info like SSID for Connecting/Connected events
 using NetworkEventCallback = std::function<void(NetworkEvent event, const std::string& data)>;
+using BoardKeyEventCallback =
+    std::function<void(uint8_t key_index, BoardKeyEventType event_type)>;
 
 void* create_board();
 class AudioCodec;
@@ -76,6 +87,8 @@ public:
     virtual NetworkInterface* GetNetwork() = 0;
     virtual void StartNetwork() = 0;
     virtual void SetNetworkEventCallback(NetworkEventCallback callback) { (void)callback; }
+    virtual void SetKeyEventCallback(BoardKeyEventCallback callback) { (void)callback; }
+    virtual void EnterNetworkConfigMode() {}
     virtual const char* GetNetworkStateIcon() = 0;
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging);
     virtual std::string GetSystemInfoJson();

@@ -35,6 +35,7 @@ public:
     bool HasSelectableControls() override;
     bool SelectNextControl() override;
     bool SelectPreviousControl() override;
+    int GetSelectedControlIndex() override;
 
 private:
     struct DesktopAppItem {

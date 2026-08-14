@@ -19,7 +19,20 @@ set(SOURCES "audio/audio_codec.cc"
             "display/display.cc"
             "display/text_glyph.cc"
             "display/lcd_display.cc"
-            "ui/desktop_display.cc"
+            "service/service_impl.cc"
+            "service/service_logic.c"
+            "service/apps/service_ai.c"
+            "service/apps/service_wifi.c"
+            "service/apps/service_scan.c"
+            "service/apps/service_link.c"
+            "service/apps/service_offline.c"
+            "service/apps/service_cell.c"
+            "service/apps/service_signal.c"
+            "service/apps/service_node.c"
+            "service/apps/service_debug.c"
+            "service/apps/service_tools.c"
+            "service/apps/service_mute.c"
+            "service/apps/service_power.c"
             "display/oled_display.cc"
             "display/lvgl_display/lvgl_display.cc"
             "display/emote_display.cc"
@@ -46,7 +59,7 @@ set(SOURCES "audio/audio_codec.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "bsp" "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols")
+set(INCLUDE_DIRS "." "bsp" "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols" "service")
 
 # Add board common files
 list(APPEND SOURCES

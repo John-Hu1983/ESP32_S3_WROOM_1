@@ -3,7 +3,7 @@
 #include "gif/lvgl_gif.h"
 #include "lvgl_theme.h"
 #include "settings.h"
-#include "ui/desktop_display.h"
+#include "service/desktop.h"
 
 #include <esp_err.h>
 #include <esp_log.h>
@@ -13,6 +13,7 @@
 #include <noto_emoji.h>
 #include <src/misc/cache/lv_cache.h>
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <vector>
 
@@ -24,6 +25,17 @@ LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
 LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 LV_FONT_DECLARE(font_material_symbols_30_4);
 LV_FONT_DECLARE(font_noto_emoji_30_4);
+
+static bool IsClockText(const char* status) {
+    if (status == nullptr || std::strlen(status) != 5) {
+        return false;
+    }
+
+    return std::isdigit(static_cast<unsigned char>(status[0])) &&
+           std::isdigit(static_cast<unsigned char>(status[1])) && status[2] == ':' &&
+           std::isdigit(static_cast<unsigned char>(status[3])) &&
+           std::isdigit(static_cast<unsigned char>(status[4]));
+}
 
 void LcdDisplay::InitializeLcdThemes() {
     auto text_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_TEXT_FONT);
@@ -95,6 +107,33 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
         .skip_unhandled_events = false,
     };
     esp_timer_create(&preview_timer_args, &preview_timer_);
+
+    esp_timer_create_args_t bottom_notification_timer_args = {
+        .callback =
+            [](void* arg) {
+                LcdDisplay* display = static_cast<LcdDisplay*>(arg);
+                DisplayLockGuard lock(display);
+
+                if (!display->notification_in_bottom_bar_ || display->chat_message_label_ == nullptr) {
+                    return;
+                }
+
+                const char* current = lv_label_get_text(display->chat_message_label_);
+                if (current != nullptr && display->bottom_bar_notification_text_ == std::string(current)) {
+                    lv_label_set_text(display->chat_message_label_,
+                                      display->bottom_bar_previous_text_.c_str());
+                }
+
+                display->notification_in_bottom_bar_ = false;
+                display->bottom_bar_previous_text_.clear();
+                display->bottom_bar_notification_text_.clear();
+            },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "bottom_notify_timer",
+        .skip_unhandled_events = false,
+    };
+    esp_timer_create(&bottom_notification_timer_args, &bottom_notification_timer_);
 }
 
 SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
@@ -304,6 +343,11 @@ LcdDisplay::~LcdDisplay() {
         esp_timer_delete(preview_timer_);
     }
 
+    if (bottom_notification_timer_ != nullptr) {
+        esp_timer_stop(bottom_notification_timer_);
+        esp_timer_delete(bottom_notification_timer_);
+    }
+
     if (preview_image_ != nullptr) {
         lv_obj_del(preview_image_);
     }
@@ -347,6 +391,83 @@ LcdDisplay::~LcdDisplay() {
     if (panel_io_ != nullptr) {
         esp_lcd_panel_io_del(panel_io_);
     }
+}
+
+void LcdDisplay::ShowNotification(const char* notification, int duration_ms) {
+    if (!setup_ui_called_) {
+        ESP_LOGW(TAG, "ShowNotification('%s') called before SetupUI() - message will be lost!",
+                 notification);
+    }
+
+    {
+        DisplayLockGuard lock(this);
+        bool use_bottom_bar_notification =
+            (bottom_bar_ != nullptr && chat_message_label_ != nullptr &&
+             bottom_notification_timer_ != nullptr);
+        if (use_bottom_bar_notification) {
+            if (!notification_in_bottom_bar_) {
+                const char* current = lv_label_get_text(chat_message_label_);
+                bottom_bar_previous_text_ = (current != nullptr) ? current : "";
+            }
+
+            if (bottom_bar_ != nullptr) {
+                lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+            }
+
+            lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+            lv_obj_set_style_anim_duration(chat_message_label_, 4500, 0);
+            bottom_bar_notification_text_ = (notification != nullptr) ? notification : "";
+            lv_label_set_text(chat_message_label_, bottom_bar_notification_text_.c_str());
+            notification_in_bottom_bar_ = true;
+            if (status_label_ != nullptr) {
+                lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+            }
+            if (notification_label_ != nullptr) {
+                lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+            }
+
+            esp_timer_stop(bottom_notification_timer_);
+            ESP_ERROR_CHECK(esp_timer_start_once(bottom_notification_timer_, duration_ms * 1000));
+            return;
+        }
+    }
+
+    LvglDisplay::ShowNotification(notification, duration_ms);
+}
+
+void LcdDisplay::SetStatus(const char* status) {
+    if (!setup_ui_called_) {
+        ESP_LOGW(TAG, "SetStatus('%s') called before SetupUI() - message will be lost!", status);
+    }
+
+    {
+        DisplayLockGuard lock(this);
+        bool use_bottom_bar_status =
+            (bottom_bar_ != nullptr && chat_message_label_ != nullptr && !IsClockText(status));
+        if (use_bottom_bar_status) {
+            lv_obj_remove_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+            lv_obj_set_style_anim_duration(chat_message_label_, 4500, 0);
+            lv_label_set_text(chat_message_label_, (status != nullptr) ? status : "");
+
+            notification_in_bottom_bar_ = false;
+            bottom_bar_previous_text_.clear();
+            bottom_bar_notification_text_.clear();
+            if (bottom_notification_timer_ != nullptr) {
+                esp_timer_stop(bottom_notification_timer_);
+            }
+
+            if (status_label_ != nullptr) {
+                lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+            }
+            if (notification_label_ != nullptr) {
+                lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+            }
+            return;
+        }
+    }
+
+    LvglDisplay::SetStatus(status);
 }
 
 bool LcdDisplay::Lock(int timeout_ms) { return lvgl_port_lock(timeout_ms); }
@@ -402,13 +523,13 @@ void LcdDisplay::SetupUI() {
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollbar_mode(top_bar_, LV_SCROLLBAR_MODE_OFF);
 
-    // Left icon
-    network_label_ = lv_label_create(top_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, icon_font, 0);
-    lv_obj_set_style_text_color(network_label_, lvgl_theme->text_color(), 0);
+    // Left section: performance usage
+    perf_label_ = lv_label_create(top_bar_);
+    lv_label_set_text(perf_label_, "cpu: --% mo: --% mi: --%");
+    lv_obj_set_style_text_font(perf_label_, text_font, 0);
+    lv_obj_set_style_text_color(perf_label_, lvgl_theme->text_color(), 0);
 
-    // Right icons container
+    // Right section: mute/battery + network icon + clock (clock on far right)
     lv_obj_t* right_icons = lv_obj_create(top_bar_);
     lv_obj_set_size(right_icons, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(right_icons, LV_OPA_TRANSP, 0);
@@ -428,6 +549,18 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(battery_label_, icon_font, 0);
     lv_obj_set_style_text_color(battery_label_, lvgl_theme->text_color(), 0);
     lv_obj_set_style_margin_left(battery_label_, lvgl_theme->spacing(2), 0);
+
+    network_label_ = lv_label_create(right_icons);
+    lv_label_set_text(network_label_, "");
+    lv_obj_set_style_text_font(network_label_, icon_font, 0);
+    lv_obj_set_style_text_color(network_label_, lvgl_theme->text_color(), 0);
+    lv_obj_set_style_margin_left(network_label_, lvgl_theme->spacing(2), 0);
+
+    status_label_ = lv_label_create(right_icons);
+    lv_label_set_text(status_label_, "--:--");
+    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_color(status_label_, lvgl_theme->text_color(), 0);
 
     /* Layer 2: Status bar - for center text labels */
     status_bar_ = lv_obj_create(screen);
@@ -449,14 +582,6 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(notification_label_, "");
     lv_obj_align(notification_label_, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-
-    status_label_ = lv_label_create(status_bar_);
-    lv_obj_set_width(status_label_, LV_HOR_RES * 0.8);
-    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(status_label_, lvgl_theme->text_color(), 0);
-    lv_label_set_text(status_label_, Lang::Strings::INITIALIZING);
-    lv_obj_align(status_label_, LV_ALIGN_CENTER, 0, 0);
 
     /* Content - Chat area */
     content_ = lv_obj_create(container_);
@@ -510,8 +635,26 @@ void LcdDisplay::SetupUI() {
         lv_obj_align(chat_message_label_, LV_ALIGN_CENTER, 0, 0);
         lv_label_set_text(chat_message_label_, DesktopSpiLcdDisplay::DefaultPrompt());
     } else {
-        // We'll create chat messages dynamically in SetChatMessage
-        chat_message_label_ = nullptr;
+        bottom_bar_ = lv_obj_create(screen);
+        lv_obj_set_size(bottom_bar_, LV_HOR_RES, text_font->line_height + lvgl_theme->spacing(8));
+        lv_obj_set_style_radius(bottom_bar_, 0, 0);
+        lv_obj_set_style_bg_color(bottom_bar_, lvgl_theme->background_color(), 0);
+        lv_obj_set_style_text_color(bottom_bar_, lvgl_theme->text_color(), 0);
+        lv_obj_set_style_pad_all(bottom_bar_, 0, 0);
+        lv_obj_set_style_pad_left(bottom_bar_, lvgl_theme->spacing(4), 0);
+        lv_obj_set_style_pad_right(bottom_bar_, lvgl_theme->spacing(4), 0);
+        lv_obj_set_style_border_width(bottom_bar_, 0, 0);
+        lv_obj_set_scrollbar_mode(bottom_bar_, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_align(bottom_bar_, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+        chat_message_label_ = lv_label_create(bottom_bar_);
+        lv_obj_set_width(chat_message_label_, LV_HOR_RES - lvgl_theme->spacing(8));
+        lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(chat_message_label_, lvgl_theme->text_color(), 0);
+        lv_obj_align(chat_message_label_, LV_ALIGN_CENTER, 0, 0);
+        lv_label_set_text(chat_message_label_, "");
+        lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
     }
 
     low_battery_popup_ = lv_obj_create(screen);
@@ -763,8 +906,10 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
         lv_obj_scroll_to_view_recursive(msg_bubble, LV_ANIM_ON);
     }
 
-    // Store reference to the latest message label
-    chat_message_label_ = msg_text;
+    if (bottom_bar_ == nullptr) {
+        // Store reference to the latest message label for layouts without a dedicated bottom bar.
+        chat_message_label_ = msg_text;
+    }
 }
 
 void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
@@ -878,7 +1023,9 @@ void LcdDisplay::ClearChatMessages() {
     lv_obj_clean(content_);
 
     // Reset chat_message_label_ as it has been deleted
-    chat_message_label_ = nullptr;
+    if (bottom_bar_ == nullptr) {
+        chat_message_label_ = nullptr;
+    }
 
     // Show the centered AI logo (emoji_label_) again
     if (emoji_label_ != nullptr) {
@@ -964,13 +1111,13 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_scrollbar_mode(top_bar_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_align(top_bar_, LV_ALIGN_TOP_MID, 0, 0);
 
-    // Left icon
-    network_label_ = lv_label_create(top_bar_);
-    lv_label_set_text(network_label_, "");
-    lv_obj_set_style_text_font(network_label_, icon_font, 0);
-    lv_obj_set_style_text_color(network_label_, lvgl_theme->text_color(), 0);
+    // Left section: performance usage
+    perf_label_ = lv_label_create(top_bar_);
+    lv_label_set_text(perf_label_, "cpu: --% mo: --% mi: --%");
+    lv_obj_set_style_text_font(perf_label_, text_font, 0);
+    lv_obj_set_style_text_color(perf_label_, lvgl_theme->text_color(), 0);
 
-    // Right icons container
+    // Right section: mute/battery + network icon + clock (clock on far right)
     lv_obj_t* right_icons = lv_obj_create(top_bar_);
     lv_obj_set_size(right_icons, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(right_icons, LV_OPA_TRANSP, 0);
@@ -990,6 +1137,18 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_font(battery_label_, icon_font, 0);
     lv_obj_set_style_text_color(battery_label_, lvgl_theme->text_color(), 0);
     lv_obj_set_style_margin_left(battery_label_, lvgl_theme->spacing(2), 0);
+
+    network_label_ = lv_label_create(right_icons);
+    lv_label_set_text(network_label_, "");
+    lv_obj_set_style_text_font(network_label_, icon_font, 0);
+    lv_obj_set_style_text_color(network_label_, lvgl_theme->text_color(), 0);
+    lv_obj_set_style_margin_left(network_label_, lvgl_theme->spacing(2), 0);
+
+    status_label_ = lv_label_create(right_icons);
+    lv_label_set_text(status_label_, "--:--");
+    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_color(status_label_, lvgl_theme->text_color(), 0);
 
     /* Layer 2: Status bar - for center text labels */
     status_bar_ = lv_obj_create(screen);
@@ -1011,14 +1170,6 @@ void LcdDisplay::SetupUI() {
     lv_label_set_text(notification_label_, "");
     lv_obj_align(notification_label_, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-
-    status_label_ = lv_label_create(status_bar_);
-    lv_obj_set_width(status_label_, LV_HOR_RES * 0.75);
-    lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_style_text_align(status_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(status_label_, lvgl_theme->text_color(), 0);
-    lv_label_set_text(status_label_, Lang::Strings::INITIALIZING);
-    lv_obj_align(status_label_, LV_ALIGN_CENTER, 0, 0);
 
 #if CONFIG_USE_MULTILINE_CHAT_MESSAGE
     /* Bottom bar - auto height, grows upward with wrapped text */
@@ -1315,6 +1466,9 @@ void LcdDisplay::SetTheme(Theme* theme) {
         lv_obj_set_style_text_font(battery_label_, icon_font, 0);
         lv_obj_set_style_text_font(network_label_, icon_font, 0);
     }
+    if (perf_label_ != nullptr) {
+        lv_obj_set_style_text_font(perf_label_, text_font, 0);
+    }
 
     // Set parent text color
     lv_obj_set_style_text_font(screen, text_font, 0);
@@ -1340,6 +1494,9 @@ void LcdDisplay::SetTheme(Theme* theme) {
     lv_obj_set_style_text_color(notification_label_, lvgl_theme->text_color(), 0);
     lv_obj_set_style_text_color(mute_label_, lvgl_theme->text_color(), 0);
     lv_obj_set_style_text_color(battery_label_, lvgl_theme->text_color(), 0);
+    if (perf_label_ != nullptr) {
+        lv_obj_set_style_text_color(perf_label_, lvgl_theme->text_color(), 0);
+    }
     lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
 
     // If we have the chat message style, update all message bubbles

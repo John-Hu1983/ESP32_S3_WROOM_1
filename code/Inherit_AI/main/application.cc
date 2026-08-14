@@ -19,6 +19,10 @@
 
 #define TAG "Application"
 
+static constexpr uint8_t kPrimaryBoardKey = 0;
+static constexpr uint8_t kSecondaryBoardKey = 1;
+static constexpr int kDesktopAiAppIndex = 0;
+
 Application::Application() {
     event_group_ = xEventGroupCreate();
 
@@ -65,6 +69,10 @@ void Application::Initialize() {
     // Print board name/version info
     display->SetChatMessage("system", SystemInfo::GetUserAgent().c_str());
 
+    // Initialize custom service layer while keeping the original app lifecycle.
+    business_service_.Initialize(display);
+    ai_app_active_ = business_service_.IsAiServiceActive();
+
     // Setup the audio service
     auto codec = board.GetAudioCodec();
     audio_service_.Initialize(codec);
@@ -84,6 +92,11 @@ void Application::Initialize() {
         xEventGroupSetBits(event_group_, MAIN_EVENT_PLAYBACK_DRAINED);
     };
     audio_service_.SetCallbacks(callbacks);
+
+    board.SetKeyEventCallback([this](uint8_t key_index, BoardKeyEventType event_type) {
+        // Keyboard callbacks may run outside the main task; route via schedule.
+        Schedule([this, key_index, event_type]() { HandleBoardKeyEvent(key_index, event_type); });
+    });
 
     // Add state change listeners
     state_machine_.AddStateChangeListener([this](DeviceState old_state, DeviceState new_state) {
@@ -819,8 +832,157 @@ void Application::HandleStopListeningEvent() {
     }
 }
 
+bool Application::IsDesktopHomeActive() const {
+    auto display = Board::GetInstance().GetDisplay();
+    return business_service_.IsDesktopActive(display);
+}
+
+void Application::EnterDesktopHome() {
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    if (display == nullptr || !display->HasSelectableControls()) {
+        return;
+    }
+
+    business_service_.EnterDesktop(display);
+    ai_app_active_ = false;
+    audio_service_.EnableWakeWordDetection(false);
+
+    auto state = GetDeviceState();
+    if (state == kDeviceStateConnecting || state == kDeviceStateListening ||
+        state == kDeviceStateSpeaking) {
+        if (protocol_ && protocol_->IsAudioChannelOpened()) {
+            protocol_->CloseAudioChannel();
+        } else {
+            SetDeviceState(kDeviceStateIdle);
+        }
+    }
+}
+
+void Application::EnterAiApp() {
+    auto display = Board::GetInstance().GetDisplay();
+    if (display == nullptr) {
+        return;
+    }
+
+    business_service_.EnterService(kDesktopAiAppIndex, display);
+    ai_app_active_ = true;
+
+    if (GetDeviceState() == kDeviceStateIdle) {
+        audio_service_.EnableWakeWordDetection(true);
+    }
+}
+
+void Application::HandleBoardKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
+    auto& board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    auto state = GetDeviceState();
+    bool desktop_home_active = IsDesktopHomeActive();
+
+    ESP_LOGI(TAG, "Board key event: key=%u type=%d state=%d desktop=%d ai=%d", key_index,
+             static_cast<int>(event_type), static_cast<int>(state),
+             desktop_home_active ? 1 : 0, ai_app_active_ ? 1 : 0);
+
+    if (business_service_.HandleDualClickExit(key_index, event_type)) {
+        EnterDesktopHome();
+        return;
+    }
+
+    if (desktop_home_active) {
+        int entered_service_index = -1;
+        if (business_service_.HandleDesktopKey(key_index, event_type, display,
+                                               &entered_service_index)) {
+            if (entered_service_index >= 0) {
+                if (entered_service_index == kDesktopAiAppIndex) {
+                    EnterAiApp();
+                } else {
+                    business_service_.EnterService(entered_service_index, display);
+                    ai_app_active_ = false;
+                    audio_service_.EnableWakeWordDetection(false);
+
+                    if (state == kDeviceStateConnecting || state == kDeviceStateListening ||
+                        state == kDeviceStateSpeaking) {
+                        if (protocol_ && protocol_->IsAudioChannelOpened()) {
+                            protocol_->CloseAudioChannel();
+                        } else {
+                            SetDeviceState(kDeviceStateIdle);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        if (key_index == kPrimaryBoardKey && event_type == BoardKeyEventType::LongPress) {
+            board.EnterNetworkConfigMode();
+            return;
+        }
+        return;
+    }
+
+    if (state == kDeviceStateStarting && key_index == kPrimaryBoardKey &&
+        event_type == BoardKeyEventType::Click) {
+        board.EnterNetworkConfigMode();
+        return;
+    }
+
+    const service_key_result_t service_result =
+        business_service_.HandleServiceKey(key_index, event_type, display);
+    if (service_result.consumed) {
+        switch (service_result.command) {
+        case SERVICE_CMD_NONE:
+            break;
+        case SERVICE_CMD_TOGGLE_CHAT:
+            ToggleChatState();
+            break;
+        case SERVICE_CMD_START_LISTENING:
+            StartListening();
+            break;
+        case SERVICE_CMD_STOP_LISTENING:
+            StopListening();
+            break;
+        case SERVICE_CMD_ENTER_DESKTOP:
+            EnterDesktopHome();
+            break;
+        case SERVICE_CMD_ENTER_NETWORK_CONFIG:
+            board.EnterNetworkConfigMode();
+            break;
+        }
+        return;
+    }
+
+    if (!ai_app_active_) {
+        return;
+    }
+
+    if (key_index == kPrimaryBoardKey) {
+        if (event_type == BoardKeyEventType::Click) {
+            ToggleChatState();
+            return;
+        }
+
+        if (event_type == BoardKeyEventType::LongPress) {
+            EnterDesktopHome();
+        }
+        return;
+    }
+
+    if (key_index == kSecondaryBoardKey && event_type == BoardKeyEventType::PressDown) {
+        StartListening();
+        return;
+    }
+
+    if (key_index == kSecondaryBoardKey && event_type == BoardKeyEventType::PressUp) {
+        StopListening();
+    }
+}
+
 void Application::HandleWakeWordDetectedEvent() {
     if (!protocol_) {
+        return;
+    }
+
+    if (!ai_app_active_) {
         return;
     }
 
@@ -933,7 +1095,7 @@ void Application::HandleStateChangedEvent() {
             display->ClearChatMessages();    // Clear messages first
             display->SetEmotion("neutral");  // Then set emotion (wechat mode checks child count)
             audio_service_.EnableVoiceProcessing(false);
-            audio_service_.EnableWakeWordDetection(true);
+            audio_service_.EnableWakeWordDetection(ai_app_active_);
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);

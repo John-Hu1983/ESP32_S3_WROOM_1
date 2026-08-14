@@ -159,6 +159,8 @@ void WifiBoard::SetNetworkEventCallback(NetworkEventCallback callback) {
     network_event_callback_ = std::move(callback);
 }
 
+void WifiBoard::EnterNetworkConfigMode() { EnterWifiConfigMode(); }
+
 void WifiBoard::OnWifiConnectTimeout(void* arg) {
     auto* board = static_cast<WifiBoard*>(arg);
     ESP_LOGW(TAG, "WiFi connection timeout, entering config mode");

@@ -1,14 +1,12 @@
-﻿#include "application.h"
-#include "assets/lang_config.h"
-#include "bsp/bsp_env.h"
+﻿#include "bsp/bsp_env.h"
 #include "bsp/gpba02b.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
 #include "display/lcd_display.h"
 #include "mcp_server.h"
 #include "peripherals/keyboard.h"
+#include "service/display_factory.h"
 #include "system_reset.h"
-#include "ui/desktop_display.h"
 #include "wifi_board.h"
 
 #include <driver/spi_common.h>
@@ -21,6 +19,7 @@
 #include "esp_lcd_st7796.h"
 
 #include <memory>
+#include <utility>
 
 #define TAG "Esp32S3Wroom1N16r8Board"
 
@@ -81,6 +80,17 @@ private:
     Gpba02b& extend = Gpba02b::Instance();
     std::unique_ptr<BspEnv> bsp_env_;
     std::unique_ptr<Keyboard> keyboard_;
+    BoardKeyEventCallback key_event_callback_ = nullptr;
+
+    void NotifyKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
+        if (key_event_callback_) {
+            key_event_callback_(key_index, event_type);
+            return;
+        }
+
+        ESP_LOGW(TAG, "Drop key event: key=%u type=%d (callback not set)", key_index,
+                 static_cast<int>(event_type));
+    }
 
     esp_err_t InitializeGpba02b() {
         Gpba02b::Config gpba02b_config = {};
@@ -153,8 +163,8 @@ private:
         ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
-        display_ = new DesktopSpiLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH,
-                                            LCD_DEFAULT_HEIGHT, 0, 0, mirror_x, mirror_y, swap_xy);
+        display_ = CreatePrimaryDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH, LCD_DEFAULT_HEIGHT,
+                        0, 0, mirror_x, mirror_y, swap_xy);
     }
 
     void InitializeBspEnv() {
@@ -162,57 +172,25 @@ private:
         bsp_env_->Initialize();
     }
 
-    bool IsDesktopSelectionMode() {
-        if (display_ == nullptr) {
-            return false;
-        }
-
-        auto& app = Application::GetInstance();
-        if (app.GetDeviceState() != kDeviceStateIdle) {
-            return false;
-        }
-
-        return display_->HasSelectableControls();
-    }
-
     void InitializeKeyboard() {
         keyboard_ = std::make_unique<Keyboard>(CreateKeyboardConfig());
 
-        keyboard_->OnClick(Keyboard::kKey0, [this]() {
-            auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting) {
-                EnterWifiConfigMode();
-                return;
-            }
+        keyboard_->OnClick(Keyboard::kKey0,
+                           [this]() { NotifyKeyEvent(Keyboard::kKey0, BoardKeyEventType::Click); });
+        keyboard_->OnLongPress(
+            Keyboard::kKey0,
+            [this]() { NotifyKeyEvent(Keyboard::kKey0, BoardKeyEventType::LongPress); });
 
-            if (IsDesktopSelectionMode()) {
-                display_->SelectPreviousControl();
-                return;
-            }
-
-            app.ToggleChatState();
-        });
-
-        keyboard_->OnClick(Keyboard::kKey1, [this]() {
-            if (IsDesktopSelectionMode()) {
-                display_->SelectNextControl();
-            }
-        });
-
-        keyboard_->OnPressDown(Keyboard::kKey1,
-                               [this]() {
-                                   if (IsDesktopSelectionMode()) {
-                                       return;
-                                   }
-                                   Application::GetInstance().StartListening();
-                               });
+        keyboard_->OnClick(Keyboard::kKey1,
+                           [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::Click); });
+        keyboard_->OnLongPress(
+            Keyboard::kKey1,
+            [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::LongPress); });
+        keyboard_->OnPressDown(
+            Keyboard::kKey1,
+            [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::PressDown); });
         keyboard_->OnPressUp(Keyboard::kKey1,
-                             [this]() {
-                                 if (IsDesktopSelectionMode()) {
-                                     return;
-                                 }
-                                 Application::GetInstance().StopListening();
-                             });
+                             [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::PressUp); });
 
         ESP_ERROR_CHECK(keyboard_->Start());
     }
@@ -224,6 +202,10 @@ public:
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
         InitializeKeyboard();
+    }
+
+    virtual void SetKeyEventCallback(BoardKeyEventCallback callback) override {
+        key_event_callback_ = std::move(callback);
     }
 
     // Speaker uses standard I2S, microphone uses PDM.

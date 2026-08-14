@@ -51,6 +51,7 @@ public:
     virtual bool HasSelectableControls() { return false; }
     virtual bool SelectNextControl() { return false; }
     virtual bool SelectPreviousControl() { return false; }
+    virtual int GetSelectedControlIndex() { return -1; }
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }
