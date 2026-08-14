@@ -46,9 +46,9 @@
 #endif
 
 namespace {
-BspEnv::Config CreateBspEnvConfig() {
-    BspEnv::Config config = {};
-    BspEnv::GetDefaultConfig(&config);
+bsp_env_config_t CreateBspEnvConfig() {
+    bsp_env_config_t config = {};
+    bsp_env_get_default_config(&config);
 
     config.power_lock_pin = {POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN};
     config.pdm_enable_pin = {PDM_EN_PORT, PDM_EN_PIN};
@@ -95,15 +95,15 @@ private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
-    BspEnv bsp_env_;
+    bsp_env_t bsp_env_;
     Button boot_button_;
     Button touch_button_;
     Button volume_up_button_;
     Button volume_down_button_;
 
     void InitializeGpba02b() {
-        Gpba02b::Config gpba02b_config = {};
-        Gpba02b::Instance().GetDefaultConfig(&gpba02b_config);
+        gpba02b_config_t gpba02b_config = {};
+        gpba02b_get_default_config(&gpba02b_config);
         gpba02b_config.spi_host = GPBA02B_SPI_HOST;
         gpba02b_config.miso_io = GPBA02B_IO_MISO;
         gpba02b_config.mosi_io = GPBA02B_IO_MOSI;
@@ -112,7 +112,7 @@ private:
         gpba02b_config.clock_hz = GPBA02B_DEFAULT_CLOCK_HZ;
         gpba02b_config.device_id = GPBA02B_DEVICE_ID;
 
-        esp_err_t err = Gpba02b::Instance().Init(&gpba02b_config);
+        esp_err_t err = gpba02b_init(gpba02b_instance(), &gpba02b_config);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to initialize GPBA02B: %s", esp_err_to_name(err));
             return;
@@ -229,13 +229,14 @@ private:
 
 public:
     Esp32S3Wroom1N8r2Board() :
-        bsp_env_(CreateBspEnvConfig()),
         boot_button_(BOOT_BUTTON_GPIO),
         touch_button_(TOUCH_BUTTON_GPIO),
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
+        bsp_env_config_t bsp_env_config = CreateBspEnvConfig();
+        bsp_env_init(&bsp_env_, &bsp_env_config);
         InitializeGpba02b();
-        ESP_ERROR_CHECK(bsp_env_.Initialize());
+        ESP_ERROR_CHECK(bsp_env_initialize(&bsp_env_));
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
         InitializeButtons();

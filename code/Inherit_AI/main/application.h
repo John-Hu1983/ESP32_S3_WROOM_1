@@ -18,7 +18,7 @@
 #include "device_state.h"
 #include "device_state_machine.h"
 #include "board.h"
-#include "service/business_service.h"
+#include "service/service_desktop.h"
 
 // Main event bits
 #define MAIN_EVENT_SCHEDULE             (1 << 0)
@@ -146,7 +146,7 @@ private:
     bool has_server_time_ = false;
     bool aborted_ = false;
     bool assets_version_checked_ = false;
-    BusinessServiceLayer business_service_;
+    service_desktop_runtime_t desktop_runtime_ = {};
     bool ai_app_active_ = true;
     bool play_popup_on_listening_ = false;  // Flag to play popup sound after state changes to listening
     bool pending_listening_start_ = false;  // Waiting for playback to drain before starting listening (auto mode)
@@ -168,10 +168,14 @@ private:
     void ContinueWakeWordInvoke(const std::string& wake_word);
     void StartListeningAudio();
     void ConfigureWakeWordForListening();
-    void HandleBoardKeyEvent(uint8_t key_index, BoardKeyEventType event_type);
-    bool IsDesktopHomeActive() const;
-    void EnterDesktopHome();
-    void EnterAiApp();
+    void EnterDesktopHome(bool show_notification);
+    void EnterService(int service_index);
+    void PushDesktopKeyEvent(uint8_t key_index, BoardKeyEventType event_type);
+    void RunServiceCommand(service_command_t command);
+    static void DesktopEnterServiceCallback(void* ctx, int service_index);
+    static void DesktopEnterHomeCallback(void* ctx, bool show_notification);
+    static void DesktopShowNotificationCallback(void* ctx, const char* text, uint32_t duration_ms);
+    static void DesktopRunCommandCallback(void* ctx, service_command_t command);
 
     // Activation task (runs in background)
     void ActivationTask();

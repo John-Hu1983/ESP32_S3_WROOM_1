@@ -3,7 +3,7 @@
 #include "gif/lvgl_gif.h"
 #include "lvgl_theme.h"
 #include "settings.h"
-#include "service/desktop.h"
+#include "display/st7365p_lcd_display.h"
 
 #include <esp_err.h>
 #include <esp_log.h>

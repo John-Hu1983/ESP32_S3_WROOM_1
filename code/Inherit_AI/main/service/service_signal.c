@@ -1,4 +1,4 @@
-#include "service/apps/service_items.h"
+#include "service/service_signal.h"
 
 static const service_key_binding_t k_bindings[] = {
     {0, SERVICE_KEY_EVENT_CLICK, SERVICE_CMD_NONE, "Signal: history"},
@@ -7,7 +7,7 @@ static const service_key_binding_t k_bindings[] = {
 };
 
 const service_item_t g_service_signal = {
-    6,
+    7,
     "Signal",
     "Signal Service",
     "Signal tools",

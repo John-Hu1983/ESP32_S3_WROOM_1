@@ -19,15 +19,15 @@
 /*
     power control
 */
-#define POWER_LOCK_IO_PORT (Gpba02b::kPortB)
+#define POWER_LOCK_IO_PORT (GPBA02B_PORT_B)
 #define POWER_LOCK_IO_PIN (3)
 
 /*
     button
 */
-#define BUTTON_UP_IO_PORT (Gpba02b::kPortA)
+#define BUTTON_UP_IO_PORT (GPBA02B_PORT_A)
 #define BUTTON_UP_IO_PIN (0)
-#define BUTTON_DOWN_IO_PORT (Gpba02b::kPortA)
+#define BUTTON_DOWN_IO_PORT (GPBA02B_PORT_A)
 #define BUTTON_DOWN_IO_PIN (1)
 
 /*
@@ -40,7 +40,7 @@
 #define LCD_IO_MOSI (GPIO_NUM_12)
 #define LCD_IO_CLK (GPIO_NUM_13)
 #define LCD_DEFAULT_CLOCK_HZ (40 * 1000 * 1000)
-#define LCD_IO_RESET_PORT (Gpba02b::kPortA)
+#define LCD_IO_RESET_PORT (GPBA02B_PORT_A)
 #define LCD_IO_RESET_PIN (5)
 #define LCD_DEFAULT_WIDTH (320)
 #define LCD_DEFAULT_HEIGHT (480)
@@ -64,7 +64,7 @@ PDM
 */
 #define PDM_CLK_IO (GPIO_NUM_41)
 #define PDM_DATA_IO (GPIO_NUM_42)
-#define PDM_EN_PORT (Gpba02b::kPortB)
+#define PDM_EN_PORT (GPBA02B_PORT_B)
 #define PDM_EN_PIN (0)
 
 /*
@@ -75,7 +75,7 @@ I2S
 #define I2S_WS_IO (GPIO_NUM_39)
 #define I2S_DO_IO (GPIO_NUM_38)
 #define I2S_DI_IO (GPIO_NUM_NC)
-#define I2S_EN_PORT (Gpba02b::kPortB)
+#define I2S_EN_PORT (GPBA02B_PORT_B)
 #define I2S_EN_PIN (1)
 
 /*
@@ -103,11 +103,11 @@ I2S
 #define CAM_XCLK_EXTERNAL_OSC (1)
 #define CAM_XCLK_EXTERNAL_HZ (24000000U)
 
-#define CAM_IO_RESET_PORT (Gpba02b::kPortA)
+#define CAM_IO_RESET_PORT (GPBA02B_PORT_A)
 #define CAM_IO_RESET_PIN (2)
-#define CAM_IO_PWDN_PORT (Gpba02b::kPortA)
+#define CAM_IO_PWDN_PORT (GPBA02B_PORT_A)
 #define CAM_IO_PWDN_PIN (3)
-#define CAM_IO_LIGHT_PORT (Gpba02b::kPortA)
+#define CAM_IO_LIGHT_PORT (GPBA02B_PORT_A)
 #define CAM_IO_LIGHT_PIN (4)
 
 /*
@@ -116,7 +116,7 @@ PIDM
 #define PIDM_IO_PULSE (GPIO_NUM_2)
 #define PIDM_IO_ADC (GPIO_NUM_1)
 #define PIDM_ADC_CHANNEL (ADC_CHANNEL_0)
-#define PIDM_EN_PORT (Gpba02b::kPortB)
+#define PIDM_EN_PORT (GPBA02B_PORT_B)
 #define PIDM_EN_PIN (2)
 
 /*
@@ -127,9 +127,9 @@ RC522
 #define RC522_CLK_IO (GPIO_NUM_45)
 #define RC522_MOSI_IO (GPIO_NUM_48)
 #define RC522_MISO_IO (GPIO_NUM_47)
-#define RC522_RST_PORT (Gpba02b::kPortA)
+#define RC522_RST_PORT (GPBA02B_PORT_A)
 #define RC522_RST_PIN (6)
-#define RC522_IRQ_PORT (Gpba02b::kPortB)
+#define RC522_IRQ_PORT (GPBA02B_PORT_B)
 #define RC522_IRQ_PIN (4)
 
 /*
@@ -138,21 +138,21 @@ PWM-GPBA02B
 #define PWM_GPBA02B_PA_CLOCK_DIV (3)
 #define PWM_GPBA02B_PC_CLOCK_DIV (3)
 #define PWM_GPBA02B_DUTY_10_PERCENT (26)
-#define PWM_GPBA02B_07_PORT (Gpba02b::kPortA)
+#define PWM_GPBA02B_07_PORT (GPBA02B_PORT_A)
 #define PWM_GPBA02B_07_PIN (7)
-#define PWM_GPBA02B_08_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_08_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_08_PIN (0)
-#define PWM_GPBA02B_09_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_09_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_09_PIN (1)
-#define PWM_GPBA02B_10_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_10_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_10_PIN (2)
-#define PWM_GPBA02B_11_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_11_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_11_PIN (3)
-#define PWM_GPBA02B_12_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_12_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_12_PIN (4)
-#define PWM_GPBA02B_13_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_13_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_13_PIN (5)
-#define PWM_GPBA02B_14_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_14_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_14_PIN (6)
-#define PWM_GPBA02B_15_PORT (Gpba02b::kPortC)
+#define PWM_GPBA02B_15_PORT (GPBA02B_PORT_C)
 #define PWM_GPBA02B_15_PIN (7)

@@ -1,73 +1,73 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <esp_err.h>
 
 #include "bsp/gpba02b.h"
 
-class BspEnv {
-public:
-    struct Pin {
-        Gpba02b::Port port;
-        uint8_t pin;
-    };
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-    struct Config {
-        Pin power_lock_pin;
-        Pin pdm_enable_pin;
-        Pin i2s_enable_pin;
-        Pin pidm_enable_pin;
+typedef struct {
+    gpba02b_port_t port;
+    uint8_t pin;
+} bsp_env_pin_t;
 
-        Pin button_up_pin;
-        Pin button_down_pin;
+typedef struct {
+    bsp_env_pin_t power_lock_pin;
+    bsp_env_pin_t pdm_enable_pin;
+    bsp_env_pin_t i2s_enable_pin;
+    bsp_env_pin_t pidm_enable_pin;
 
-        Pin lcd_reset_pin;
+    bsp_env_pin_t button_up_pin;
+    bsp_env_pin_t button_down_pin;
 
-        Pin camera_reset_pin;
-        Pin camera_pwdn_pin;
-        Pin camera_light_pin;
+    bsp_env_pin_t lcd_reset_pin;
 
-        Pin rc522_reset_pin;
-        Pin rc522_enable_pin;
+    bsp_env_pin_t camera_reset_pin;
+    bsp_env_pin_t camera_pwdn_pin;
+    bsp_env_pin_t camera_light_pin;
 
-        bool camera_present;
-        bool rc522_present;
+    bsp_env_pin_t rc522_reset_pin;
+    bsp_env_pin_t rc522_enable_pin;
 
-        uint8_t pwm_enable_mask_port_a;
-        uint8_t pwm_enable_mask_port_c;
-        uint8_t pwm_clock_div_port_a;
-        uint8_t pwm_clock_div_port_c;
-        uint8_t pwm_duty;
+    bool camera_present;
+    bool rc522_present;
 
-        uint32_t enable_step_delay_ms;
-        uint32_t reset_pulse_ms;
-        uint32_t reset_release_delay_ms;
-        uint32_t lcd_reset_release_delay_ms;
-    };
+    uint8_t pwm_enable_mask_port_a;
+    uint8_t pwm_enable_mask_port_c;
+    uint8_t pwm_clock_div_port_a;
+    uint8_t pwm_clock_div_port_c;
+    uint8_t pwm_duty;
 
-    static constexpr Gpba02b::Port kInvalidPort = static_cast<Gpba02b::Port>(0xFF);
-    static constexpr uint8_t kInvalidPin = 0xFF;
+    uint32_t enable_step_delay_ms;
+    uint32_t reset_pulse_ms;
+    uint32_t reset_release_delay_ms;
+    uint32_t lcd_reset_release_delay_ms;
+} bsp_env_config_t;
 
-    static Pin InvalidPinConfig();
-    static void GetDefaultConfig(Config* config);
+typedef struct {
+    bsp_env_config_t config;
+} bsp_env_t;
 
-    explicit BspEnv(const Config& config);
-
-    esp_err_t Initialize();
-    esp_err_t LcdReset();
-    esp_err_t CameraReset();
-    esp_err_t Rc522Reset();
-
-private:
-    bool IsValidPin(const Pin& pin) const;
-    void DelayMs(uint32_t delay_ms) const;
-    esp_err_t ConfigureOutput(const Pin& pin, bool level);
-    esp_err_t ConfigureInputPullHigh(const Pin& pin);
-    esp_err_t WritePin(const Pin& pin, bool level);
-    esp_err_t PulseReset(const Pin& pin, uint32_t pulse_ms, uint32_t settle_ms);
-    esp_err_t ConfigurePwm();
-    esp_err_t ApplyEnableSequence();
-
-    Config config_;
+enum {
+    BSP_ENV_INVALID_PORT = 0xFF,
+    BSP_ENV_INVALID_PIN = 0xFF,
 };
+
+bsp_env_pin_t bsp_env_invalid_pin_config(void);
+void bsp_env_get_default_config(bsp_env_config_t* config);
+
+void bsp_env_init(bsp_env_t* env, const bsp_env_config_t* config);
+
+esp_err_t bsp_env_initialize(bsp_env_t* env);
+esp_err_t bsp_env_lcd_reset(bsp_env_t* env);
+esp_err_t bsp_env_camera_reset(bsp_env_t* env);
+esp_err_t bsp_env_rc522_reset(bsp_env_t* env);
+
+#ifdef __cplusplus
+}
+#endif

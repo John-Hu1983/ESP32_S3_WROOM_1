@@ -3,9 +3,9 @@
 #include "codecs/no_audio_codec.h"
 #include "config.h"
 #include "display/lcd_display.h"
+#include "display/st7365p_lcd_display.h"
 #include "mcp_server.h"
 #include "peripherals/keyboard.h"
-#include "service/display_factory.h"
 #include "system_reset.h"
 #include "wifi_board.h"
 
@@ -18,14 +18,16 @@
 #include <freertos/task.h>
 #include "esp_lcd_st7796.h"
 
-#include <memory>
 #include <utility>
 
 #define TAG "Esp32S3Wroom1N16r8Board"
 
-static BspEnv::Config CreateBspEnvConfig() {
-    BspEnv::Config config = {};
-    BspEnv::GetDefaultConfig(&config);
+static constexpr uint32_t kKeyboardTaskStackSize = 3072;
+static constexpr UBaseType_t kKeyboardTaskPriority = 2;
+
+static bsp_env_config_t CreateBspEnvConfig() {
+    bsp_env_config_t config = {};
+    bsp_env_get_default_config(&config);
 
     config.power_lock_pin = {POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN};
     config.pdm_enable_pin = {PDM_EN_PORT, PDM_EN_PIN};
@@ -61,14 +63,13 @@ static BspEnv::Config CreateBspEnvConfig() {
     return config;
 }
 
-static Keyboard::Config CreateKeyboardConfig() {
-    Keyboard::Config config = {};
-    config.keys[Keyboard::kKey0] = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
-    config.keys[Keyboard::kKey1] = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
+static keyboard_config_t CreateKeyboardConfig() {
+    keyboard_config_t config = {};
+    keyboard_get_default_config(&config);
+    config.up_key = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
+    config.down_key = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
     config.active_low = true;
     config.poll_interval_ms = 10;
-    config.debounce_ms = 30;
-    config.long_press_ms = 700;
     return config;
 }
 
@@ -77,10 +78,58 @@ private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
-    Gpba02b& extend = Gpba02b::Instance();
-    std::unique_ptr<BspEnv> bsp_env_;
-    std::unique_ptr<Keyboard> keyboard_;
+    gpba02b_t* gpba02b_ = gpba02b_instance();
+    bsp_env_t bsp_env_;
+    keyboard_t keyboard_ = {};
+    btn_scan_s keyboard_scan_ = {};
+    TaskHandle_t keyboard_task_handle_ = nullptr;
     BoardKeyEventCallback key_event_callback_ = nullptr;
+
+    static void KeyboardTaskEntry(void* arg) {
+        auto* board = static_cast<Esp32S3Wroom1N16r8Board*>(arg);
+        board->KeyboardTaskLoop();
+    }
+
+    void KeyboardTaskLoop() {
+        while (true) {
+            btn_status_e status =
+                keyboard_scan_event(&keyboard_, &keyboard_scan_,
+                                    static_cast<uint8_t>(keyboard_.config.poll_interval_ms));
+
+            switch (status) {
+                case Btn_Up_Click:
+                    NotifyKeyEvent(0, BoardKeyEventType::Click);
+                    break;
+                case Btn_Down_Click:
+                    NotifyKeyEvent(1, BoardKeyEventType::Click);
+                    break;
+                case Btn_Up_Hold_Enter:
+                    NotifyKeyEvent(0, BoardKeyEventType::LongPress);
+                    break;
+                case Btn_Down_Hold_Enter:
+                    NotifyKeyEvent(1, BoardKeyEventType::LongPress);
+                    break;
+                case Btn_Both_Click:
+                    NotifyKeyEvent(0, BoardKeyEventType::Click);
+                    NotifyKeyEvent(1, BoardKeyEventType::Click);
+                    break;
+                case Btn_Both_Hold_Enter:
+                    NotifyKeyEvent(0, BoardKeyEventType::LongPress);
+                    break;
+                case Btn_Idle:
+                case Btn_Up_Double:
+                case Btn_Up_Hold_Continue:
+                case Btn_Down_Double:
+                case Btn_Down_Hold_Continue:
+                case Btn_Both_Double:
+                case Btn_Both_Hold_Continue:
+                default:
+                    break;
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(keyboard_.config.poll_interval_ms));
+        }
+    }
 
     void NotifyKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
         if (key_event_callback_) {
@@ -93,8 +142,8 @@ private:
     }
 
     esp_err_t InitializeGpba02b() {
-        Gpba02b::Config gpba02b_config = {};
-        extend.GetDefaultConfig(&gpba02b_config);
+        gpba02b_config_t gpba02b_config = {};
+        gpba02b_get_default_config(&gpba02b_config);
         gpba02b_config.spi_host = GPBA02B_SPI_HOST;
         gpba02b_config.miso_io = GPBA02B_IO_MISO;
         gpba02b_config.mosi_io = GPBA02B_IO_MOSI;
@@ -103,7 +152,7 @@ private:
         gpba02b_config.clock_hz = GPBA02B_DEFAULT_CLOCK_HZ;
         gpba02b_config.device_id = GPBA02B_DEVICE_ID;
 
-        esp_err_t err = extend.Init(&gpba02b_config);
+        esp_err_t err = gpba02b_init(gpba02b_, &gpba02b_config);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to initialize GPBA02B: %s", esp_err_to_name(err));
             return err;
@@ -163,36 +212,27 @@ private:
         ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
-        display_ = CreatePrimaryDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH, LCD_DEFAULT_HEIGHT,
-                        0, 0, mirror_x, mirror_y, swap_xy);
+        display_ = new St7365pLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH,
+                         LCD_DEFAULT_HEIGHT, 0, 0, mirror_x, mirror_y, swap_xy);
     }
 
     void InitializeBspEnv() {
-        bsp_env_ = std::make_unique<BspEnv>(CreateBspEnvConfig());
-        bsp_env_->Initialize();
+        bsp_env_config_t bsp_env_config = CreateBspEnvConfig();
+        bsp_env_init(&bsp_env_, &bsp_env_config);
+        ESP_ERROR_CHECK(bsp_env_initialize(&bsp_env_));
     }
 
     void InitializeKeyboard() {
-        keyboard_ = std::make_unique<Keyboard>(CreateKeyboardConfig());
+        keyboard_config_t keyboard_config = CreateKeyboardConfig();
+        ESP_ERROR_CHECK(keyboard_init_obj(&keyboard_, &keyboard_config));
+        keyboard_scan_ = {};
 
-        keyboard_->OnClick(Keyboard::kKey0,
-                           [this]() { NotifyKeyEvent(Keyboard::kKey0, BoardKeyEventType::Click); });
-        keyboard_->OnLongPress(
-            Keyboard::kKey0,
-            [this]() { NotifyKeyEvent(Keyboard::kKey0, BoardKeyEventType::LongPress); });
-
-        keyboard_->OnClick(Keyboard::kKey1,
-                           [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::Click); });
-        keyboard_->OnLongPress(
-            Keyboard::kKey1,
-            [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::LongPress); });
-        keyboard_->OnPressDown(
-            Keyboard::kKey1,
-            [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::PressDown); });
-        keyboard_->OnPressUp(Keyboard::kKey1,
-                             [this]() { NotifyKeyEvent(Keyboard::kKey1, BoardKeyEventType::PressUp); });
-
-        ESP_ERROR_CHECK(keyboard_->Start());
+        BaseType_t created = xTaskCreate(KeyboardTaskEntry, "keyboard_poll", kKeyboardTaskStackSize,
+                                         this, kKeyboardTaskPriority, &keyboard_task_handle_);
+        if (created != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create keyboard task");
+            ESP_ERROR_CHECK(ESP_FAIL);
+        }
     }
 
 public:

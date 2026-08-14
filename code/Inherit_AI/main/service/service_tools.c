@@ -1,4 +1,4 @@
-#include "service/apps/service_items.h"
+#include "service/service_tools.h"
 
 static const service_key_binding_t k_bindings[] = {
     {0, SERVICE_KEY_EVENT_CLICK, SERVICE_CMD_NONE, "Tools: previous"},
@@ -7,7 +7,7 @@ static const service_key_binding_t k_bindings[] = {
 };
 
 const service_item_t g_service_tools = {
-    9,
+    10,
     "Tools",
     "Tools Service",
     "System tools",

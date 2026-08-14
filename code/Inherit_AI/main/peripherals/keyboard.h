@@ -3,74 +3,70 @@
 #include "bsp/gpba02b.h"
 
 #include <esp_err.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 
-#include <atomic>
-#include <cstdint>
-#include <functional>
+#include <stdbool.h>
+#include <stdint.h>
 
-class Keyboard {
-public:
-    static constexpr uint8_t kKeyCount = 2;
-    static constexpr uint8_t kKey0 = 0;
-    static constexpr uint8_t kKey1 = 1;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-    struct KeyPin {
-        Gpba02b::Port port;
-        uint8_t pin;
-    };
+#define KEYBOARD_CLICK_DEBOUNCE_MS (20)
+#define KEYBOARD_HOLD_MS (800U)
+#define KEYBOARD_RELEASE_MS (40U)
 
-    struct Config {
-        KeyPin keys[kKeyCount];
-        bool active_low = true;
-        uint32_t poll_interval_ms = 10;
-        uint32_t debounce_ms = 30;
-        uint32_t long_press_ms = 700;
-    };
+typedef struct {
+    gpba02b_port_t port;
+    uint8_t pin;
+} keyboard_key_pin_t;
 
-    explicit Keyboard(const Config& config);
-    ~Keyboard();
+typedef enum {
+    Btn_Idle = 0,
+    Btn_Up_Click,
+    Btn_Up_Double,
+    Btn_Up_Hold_Enter,
+    Btn_Up_Hold_Continue,
+    Btn_Down_Click,
+    Btn_Down_Double,
+    Btn_Down_Hold_Enter,
+    Btn_Down_Hold_Continue,
+    Btn_Both_Click,
+    Btn_Both_Double,
+    Btn_Both_Hold_Enter,
+    Btn_Both_Hold_Continue,
+} btn_status_e;
 
-    void OnPressDown(uint8_t key_index, std::function<void()> callback);
-    void OnPressUp(uint8_t key_index, std::function<void()> callback);
-    void OnClick(uint8_t key_index, std::function<void()> callback);
-    void OnLongPress(uint8_t key_index, std::function<void()> callback);
+typedef enum {
+    Btn_Level_None = 0,
+    Btn_Level_Up,
+    Btn_Level_Down,
+    Btn_Level_Both,
+} btn_level_e;
 
-    esp_err_t Start();
-    void Stop();
+typedef struct {
+    btn_level_e prev_level;
+    uint8_t step;
+    uint16_t debounce;
+    uint16_t hold_period;
+} btn_scan_s;
 
-private:
-    struct KeyCallbacks {
-        std::function<void()> on_press_down;
-        std::function<void()> on_press_up;
-        std::function<void()> on_click;
-        std::function<void()> on_long_press;
-    };
+typedef struct {
+    keyboard_key_pin_t up_key;
+    keyboard_key_pin_t down_key;
+    bool active_low;
+    uint32_t poll_interval_ms;
+} keyboard_config_t;
 
-    struct KeyState {
-        bool valid = false;
-        bool raw_pressed = false;
-        bool stable_pressed = false;
-        uint64_t raw_changed_ms = 0;
-        uint64_t pressed_since_ms = 0;
-        bool long_press_fired = false;
-        KeyCallbacks callbacks;
-    };
+typedef struct {
+    keyboard_config_t config;
+    bool initialized;
+} keyboard_t;
 
-    Config config_;
-    KeyState key_states_[kKeyCount];
-    TaskHandle_t task_handle_ = nullptr;
-    std::atomic<bool> running_{false};
+void keyboard_get_default_config(keyboard_config_t* config);
+esp_err_t keyboard_init_obj(keyboard_t* keyboard, const keyboard_config_t* config);
+bool keyboard_read_level(const keyboard_t* keyboard, btn_level_e* level);
+btn_status_e keyboard_scan_event(keyboard_t* keyboard, btn_scan_s* scan, uint8_t ms);
 
-    static void PollTaskEntry(void* arg);
-    void PollTaskLoop();
-    void PollOnce();
-
-    bool IsKeyIndexValid(uint8_t key_index) const;
-    bool IsPinValid(const KeyPin& key_pin) const;
-    bool ReadPressed(uint8_t key_index, bool* pressed) const;
-    void HandleStableChange(uint8_t key_index, bool pressed, uint64_t now_ms);
-
-    static uint64_t GetNowMs();
-};
+#ifdef __cplusplus
+}
+#endif

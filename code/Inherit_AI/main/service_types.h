@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define SERVICE_APP_COUNT 12
+#define SERVICE_APP_COUNT 13
 
 typedef enum {
     SERVICE_KEY_EVENT_PRESS_DOWN = 0,
@@ -46,11 +46,6 @@ typedef struct {
     service_command_t command;
     const char* notification;
 } service_key_result_t;
-
-const service_item_t* service_get_item(int service_index);
-int service_get_count(void);
-service_key_result_t service_handle_key(int service_index, uint8_t key_index,
-                                        uint8_t event_type);
 
 #ifdef __cplusplus
 }

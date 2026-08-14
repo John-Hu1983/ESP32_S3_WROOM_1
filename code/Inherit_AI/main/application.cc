@@ -7,6 +7,7 @@
 #include "mcp_server.h"
 #include "mqtt_protocol.h"
 #include "settings.h"
+#include "service/service_desktop.h"
 #include "system_info.h"
 #include "text_glyph_payload.h"
 #include "websocket_protocol.h"
@@ -19,9 +20,17 @@
 
 #define TAG "Application"
 
-static constexpr uint8_t kPrimaryBoardKey = 0;
-static constexpr uint8_t kSecondaryBoardKey = 1;
-static constexpr int kDesktopAiAppIndex = 0;
+static constexpr int kDesktopServiceIndex = 0;
+static constexpr int kDesktopAiAppIndex = 1;
+static constexpr uint32_t kDesktopEnterNotificationMs = 1000;
+
+namespace {
+
+uint8_t ToServiceEventType(BoardKeyEventType event_type) {
+    return static_cast<uint8_t>(event_type);
+}
+
+}  // namespace
 
 Application::Application() {
     event_group_ = xEventGroupCreate();
@@ -69,9 +78,7 @@ void Application::Initialize() {
     // Print board name/version info
     display->SetChatMessage("system", SystemInfo::GetUserAgent().c_str());
 
-    // Initialize custom service layer while keeping the original app lifecycle.
-    business_service_.Initialize(display);
-    ai_app_active_ = business_service_.IsAiServiceActive();
+    ai_app_active_ = false;
 
     // Setup the audio service
     auto codec = board.GetAudioCodec();
@@ -93,10 +100,21 @@ void Application::Initialize() {
     };
     audio_service_.SetCallbacks(callbacks);
 
-    board.SetKeyEventCallback([this](uint8_t key_index, BoardKeyEventType event_type) {
-        // Keyboard callbacks may run outside the main task; route via schedule.
-        Schedule([this, key_index, event_type]() { HandleBoardKeyEvent(key_index, event_type); });
-    });
+    service_desktop_runtime_init(&desktop_runtime_);
+    EnterDesktopHome(false);
+
+    service_desktop_ops_t desktop_ops = {};
+    desktop_ops.ctx = this;
+    desktop_ops.enter_service = DesktopEnterServiceCallback;
+    desktop_ops.enter_desktop = DesktopEnterHomeCallback;
+    desktop_ops.show_notification = DesktopShowNotificationCallback;
+    desktop_ops.run_command = DesktopRunCommandCallback;
+    ESP_ERROR_CHECK(service_desktop_task_start(&desktop_runtime_, &desktop_ops));
+
+    board.SetKeyEventCallback(
+        [this](uint8_t key_index, BoardKeyEventType event_type) {
+            PushDesktopKeyEvent(key_index, event_type);
+        });
 
     // Add state change listeners
     state_machine_.AddStateChangeListener([this](DeviceState old_state, DeviceState new_state) {
@@ -832,19 +850,100 @@ void Application::HandleStopListeningEvent() {
     }
 }
 
-bool Application::IsDesktopHomeActive() const {
-    auto display = Board::GetInstance().GetDisplay();
-    return business_service_.IsDesktopActive(display);
-}
-
-void Application::EnterDesktopHome() {
-    auto& board = Board::GetInstance();
-    auto display = board.GetDisplay();
-    if (display == nullptr || !display->HasSelectableControls()) {
+void Application::DesktopEnterServiceCallback(void* ctx, int service_index) {
+    auto* app = static_cast<Application*>(ctx);
+    if (app == nullptr) {
         return;
     }
 
-    business_service_.EnterDesktop(display);
+    app->Schedule([app, service_index]() { app->EnterService(service_index); });
+}
+
+void Application::DesktopEnterHomeCallback(void* ctx, bool show_notification) {
+    auto* app = static_cast<Application*>(ctx);
+    if (app == nullptr) {
+        return;
+    }
+
+    app->Schedule([app, show_notification]() { app->EnterDesktopHome(show_notification); });
+}
+
+void Application::DesktopShowNotificationCallback(void* ctx, const char* text,
+                                                  uint32_t duration_ms) {
+    auto* app = static_cast<Application*>(ctx);
+    if (app == nullptr || text == nullptr) {
+        return;
+    }
+
+    std::string message(text);
+    app->Schedule([message = std::move(message), duration_ms]() {
+        auto display = Board::GetInstance().GetDisplay();
+        if (display != nullptr) {
+            display->ShowNotification(message.c_str(), duration_ms);
+        }
+    });
+}
+
+void Application::DesktopRunCommandCallback(void* ctx, service_command_t command) {
+    auto* app = static_cast<Application*>(ctx);
+    if (app == nullptr) {
+        return;
+    }
+
+    app->Schedule([app, command]() { app->RunServiceCommand(command); });
+}
+
+void Application::PushDesktopKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
+    if (!service_desktop_post_key_event(&desktop_runtime_, key_index,
+                                        ToServiceEventType(event_type))) {
+        ESP_LOGW(TAG, "Drop key event: key=%u type=%d", key_index, static_cast<int>(event_type));
+    }
+}
+
+void Application::RunServiceCommand(service_command_t command) {
+    switch (command) {
+        case SERVICE_CMD_NONE:
+            break;
+        case SERVICE_CMD_TOGGLE_CHAT:
+            ToggleChatState();
+            break;
+        case SERVICE_CMD_START_LISTENING:
+            StartListening();
+            break;
+        case SERVICE_CMD_STOP_LISTENING:
+            StopListening();
+            break;
+        case SERVICE_CMD_ENTER_DESKTOP:
+            EnterDesktopHome(true);
+            break;
+        case SERVICE_CMD_ENTER_NETWORK_CONFIG:
+            Board::GetInstance().EnterNetworkConfigMode();
+            break;
+    }
+}
+
+void Application::EnterDesktopHome(bool show_notification) {
+    const service_item_t* desktop_item = service_desktop_get_item(kDesktopServiceIndex);
+    auto display = Board::GetInstance().GetDisplay();
+    if (display != nullptr) {
+        if (show_notification) {
+            const char* desktop_name = desktop_item != nullptr && desktop_item->name != nullptr
+                                           ? desktop_item->name
+                                           : "Desktop";
+            display->ShowNotification(desktop_name, kDesktopEnterNotificationMs);
+        }
+
+        if (desktop_item != nullptr && desktop_item->status != nullptr) {
+            display->SetStatus(desktop_item->status);
+        }
+
+        const char* desktop_prompt =
+            (desktop_item != nullptr && desktop_item->prompt != nullptr)
+                ? desktop_item->prompt
+                : "System ready. Select app.";
+        display->SetChatMessage("system", desktop_prompt);
+    }
+
     ai_app_active_ = false;
     audio_service_.EnableWakeWordDetection(false);
 
@@ -859,121 +958,46 @@ void Application::EnterDesktopHome() {
     }
 }
 
-void Application::EnterAiApp() {
+void Application::EnterService(int service_index) {
+    if (service_index < 0 || service_index >= service_desktop_get_count()) {
+        return;
+    }
+
+    const service_item_t* item = service_desktop_get_item(service_index);
+    if (item == nullptr) {
+        return;
+    }
+
     auto display = Board::GetInstance().GetDisplay();
-    if (display == nullptr) {
+    if (display != nullptr) {
+        if (item->status != nullptr) {
+            display->SetStatus(item->status);
+        }
+        if (item->prompt != nullptr) {
+            display->SetChatMessage("system", item->prompt);
+        }
+        if (item->name != nullptr) {
+            display->ShowNotification(item->name, kDesktopEnterNotificationMs);
+        }
+    }
+
+    ai_app_active_ = (service_index == kDesktopAiAppIndex);
+    if (ai_app_active_) {
+        if (GetDeviceState() == kDeviceStateIdle) {
+            audio_service_.EnableWakeWordDetection(true);
+        }
         return;
     }
 
-    business_service_.EnterService(kDesktopAiAppIndex, display);
-    ai_app_active_ = true;
-
-    if (GetDeviceState() == kDeviceStateIdle) {
-        audio_service_.EnableWakeWordDetection(true);
-    }
-}
-
-void Application::HandleBoardKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
-    auto& board = Board::GetInstance();
-    auto display = board.GetDisplay();
+    audio_service_.EnableWakeWordDetection(false);
     auto state = GetDeviceState();
-    bool desktop_home_active = IsDesktopHomeActive();
-
-    ESP_LOGI(TAG, "Board key event: key=%u type=%d state=%d desktop=%d ai=%d", key_index,
-             static_cast<int>(event_type), static_cast<int>(state),
-             desktop_home_active ? 1 : 0, ai_app_active_ ? 1 : 0);
-
-    if (business_service_.HandleDualClickExit(key_index, event_type)) {
-        EnterDesktopHome();
-        return;
-    }
-
-    if (desktop_home_active) {
-        int entered_service_index = -1;
-        if (business_service_.HandleDesktopKey(key_index, event_type, display,
-                                               &entered_service_index)) {
-            if (entered_service_index >= 0) {
-                if (entered_service_index == kDesktopAiAppIndex) {
-                    EnterAiApp();
-                } else {
-                    business_service_.EnterService(entered_service_index, display);
-                    ai_app_active_ = false;
-                    audio_service_.EnableWakeWordDetection(false);
-
-                    if (state == kDeviceStateConnecting || state == kDeviceStateListening ||
-                        state == kDeviceStateSpeaking) {
-                        if (protocol_ && protocol_->IsAudioChannelOpened()) {
-                            protocol_->CloseAudioChannel();
-                        } else {
-                            SetDeviceState(kDeviceStateIdle);
-                        }
-                    }
-                }
-            }
-            return;
+    if (state == kDeviceStateConnecting || state == kDeviceStateListening ||
+        state == kDeviceStateSpeaking) {
+        if (protocol_ && protocol_->IsAudioChannelOpened()) {
+            protocol_->CloseAudioChannel();
+        } else {
+            SetDeviceState(kDeviceStateIdle);
         }
-
-        if (key_index == kPrimaryBoardKey && event_type == BoardKeyEventType::LongPress) {
-            board.EnterNetworkConfigMode();
-            return;
-        }
-        return;
-    }
-
-    if (state == kDeviceStateStarting && key_index == kPrimaryBoardKey &&
-        event_type == BoardKeyEventType::Click) {
-        board.EnterNetworkConfigMode();
-        return;
-    }
-
-    const service_key_result_t service_result =
-        business_service_.HandleServiceKey(key_index, event_type, display);
-    if (service_result.consumed) {
-        switch (service_result.command) {
-        case SERVICE_CMD_NONE:
-            break;
-        case SERVICE_CMD_TOGGLE_CHAT:
-            ToggleChatState();
-            break;
-        case SERVICE_CMD_START_LISTENING:
-            StartListening();
-            break;
-        case SERVICE_CMD_STOP_LISTENING:
-            StopListening();
-            break;
-        case SERVICE_CMD_ENTER_DESKTOP:
-            EnterDesktopHome();
-            break;
-        case SERVICE_CMD_ENTER_NETWORK_CONFIG:
-            board.EnterNetworkConfigMode();
-            break;
-        }
-        return;
-    }
-
-    if (!ai_app_active_) {
-        return;
-    }
-
-    if (key_index == kPrimaryBoardKey) {
-        if (event_type == BoardKeyEventType::Click) {
-            ToggleChatState();
-            return;
-        }
-
-        if (event_type == BoardKeyEventType::LongPress) {
-            EnterDesktopHome();
-        }
-        return;
-    }
-
-    if (key_index == kSecondaryBoardKey && event_type == BoardKeyEventType::PressDown) {
-        StartListening();
-        return;
-    }
-
-    if (key_index == kSecondaryBoardKey && event_type == BoardKeyEventType::PressUp) {
-        StopListening();
     }
 }
 
