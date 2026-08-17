@@ -10,6 +10,8 @@
 #include <esp_log.h>
 #include <esp_rom_sys.h>
 
+#define GPBA02B_LOG_TAG "GPBA02B"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

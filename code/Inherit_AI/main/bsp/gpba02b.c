@@ -1,6 +1,5 @@
 #include "gpba02b.h"
 
-#define TAG "GPBA02B"
 
 typedef struct {
     spi_device_handle_t spi_device;
@@ -386,7 +385,7 @@ esp_err_t gpba02b_init(const gpba02b_config_t* config) {
     dev->od_pmos_mask[1] = 0;
     dev->od_pmos_mask[2] = 0;
 
-    ESP_LOGI(TAG, "GPBA02B initialized on SPI host %d, device_id=%u", (int)config->spi_host,
+    ESP_LOGI(GPBA02B_LOG_TAG, "GPBA02B initialized on SPI host %d, device_id=%u", (int)config->spi_host,
              (unsigned)dev->device_id);
     return ESP_OK;
 }

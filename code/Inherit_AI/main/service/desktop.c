@@ -1,7 +1,5 @@
 #include "service/desktop.h"
 
-#define TAG "desktop"
-
 extern const service_item_t g_service_ai;
 extern const service_item_t g_service_wifi;
 extern const service_item_t g_service_scan;
@@ -33,6 +31,17 @@ static lv_coord_t k_desktop_col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_F
 static lv_coord_t k_desktop_row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                          LV_GRID_TEMPLATE_LAST};
 
+static void desktop_apply_selection(desktop_runtime_t* runtime);
+
+/* ==================== private functions (static) ==================== */
+
+/*
+ * brief  : Find the best parent layer to host desktop controls.
+ * input  : screen - Active screen object; screen_width - Display width;
+ *          screen_height - Display height.
+ * output : Candidate parent object, or null pointer when screen is invalid.
+ * type   : private
+ */
 static lv_obj_t* desktop_find_layer_parent(lv_obj_t* screen, lv_coord_t screen_width,
                                            lv_coord_t screen_height) {
     uint32_t child_count;
@@ -74,6 +83,12 @@ static lv_obj_t* desktop_find_layer_parent(lv_obj_t* screen, lv_coord_t screen_w
     return best_parent;
 }
 
+/*
+ * brief  : Walk up to a parent that does not apply LVGL layout rules.
+ * input  : candidate - Preferred parent; screen - Active screen fallback.
+ * output : Absolute-position-safe parent object.
+ * type   : private
+ */
 static lv_obj_t* desktop_resolve_absolute_parent(lv_obj_t* candidate, lv_obj_t* screen) {
     lv_obj_t* node = candidate;
 
@@ -95,6 +110,14 @@ static lv_obj_t* desktop_resolve_absolute_parent(lv_obj_t* candidate, lv_obj_t* 
     return node;
 }
 
+/*
+ * brief  : Recursively detect top and bottom reserved bar heights.
+ * input  : node - Current object node; screen_width - Display width;
+ *          screen_height - Display height; top_reserved - top height output pointer;
+ *          bottom_reserved - bottom height output pointer.
+ * output : None.
+ * type   : private
+ */
 static void desktop_resolve_bar_reserve_walk(lv_obj_t* node, lv_coord_t screen_width,
                                              lv_coord_t screen_height, lv_coord_t* top_reserved,
                                              lv_coord_t* bottom_reserved) {
@@ -127,21 +150,41 @@ static void desktop_resolve_bar_reserve_walk(lv_obj_t* node, lv_coord_t screen_w
     }
 }
 
-const service_item_t g_desktop = {
-    0, "Desktop", "Desktop", "System ready. Select app.", 0, 0,
-};
-
+/*
+ * brief  : Return first selectable app index in desktop list.
+ * input  : None.
+ * output : First selectable service index or DESKTOP_NO_SELECTION.
+ * type   : private
+ */
 static int first_app_index(void) {
     return desktop_get_count() > 1 ? 1 : DESKTOP_NO_SELECTION;
 }
 
+/*
+ * brief  : Return last selectable app index in desktop list.
+ * input  : None.
+ * output : Last selectable service index or DESKTOP_NO_SELECTION.
+ * type   : private
+ */
 static int last_app_index(void) {
     int count = desktop_get_count();
     return count > 1 ? count - 1 : DESKTOP_NO_SELECTION;
 }
 
+/*
+ * brief  : Convert service list index to desktop tile index.
+ * input  : service_index - Service index in global list.
+ * output : Tile index in desktop grid.
+ * type   : private
+ */
 static int service_index_to_tile_index(int service_index) { return service_index - 1; }
 
+/*
+ * brief  : Normalize selected index into valid app range.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
 static void normalize_selected(desktop_runtime_t* runtime) {
     int first_index;
     int last_index;
@@ -155,21 +198,136 @@ static void normalize_selected(desktop_runtime_t* runtime) {
 
     if (first_index == DESKTOP_NO_SELECTION || last_index == DESKTOP_NO_SELECTION) {
         runtime->state.selected_service_index = DESKTOP_NO_SELECTION;
+        runtime->state.selected_since_ms = 0;
         return;
     }
 
     if (runtime->state.selected_service_index == DESKTOP_NO_SELECTION) {
+        runtime->state.selected_since_ms = 0;
         return;
     }
 
     if (runtime->state.selected_service_index < first_index ||
         runtime->state.selected_service_index > last_index) {
         runtime->state.selected_service_index = DESKTOP_NO_SELECTION;
+        runtime->state.selected_since_ms = 0;
     }
 }
 
+/*
+ * brief  : Get current monotonic time in milliseconds.
+ * input  : None.
+ * output : Current time in ms.
+ * type   : private
+ */
 static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 
+/*
+ * brief  : Update selection activity timestamp for timeout tracking.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_mark_selection_activity(desktop_runtime_t* runtime) {
+    if (runtime == 0) {
+        return;
+    }
+
+    if (runtime->state.selected_service_index == DESKTOP_NO_SELECTION) {
+        runtime->state.selected_since_ms = 0;
+        return;
+    }
+
+    runtime->state.selected_since_ms = now_ms();
+}
+
+/*
+ * brief  : Clear selected icon state in runtime and UI.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_clear_selection(desktop_runtime_t* runtime) {
+    if (runtime == 0) {
+        return;
+    }
+
+    runtime->state.selected_service_index = DESKTOP_NO_SELECTION;
+    runtime->state.selected_since_ms = 0;
+    desktop_apply_selection(runtime);
+}
+
+/*
+ * brief  : Check whether current selection has exceeded timeout window.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : true when selected icon should expire; otherwise false.
+ * type   : private
+ */
+static bool desktop_selection_timed_out(const desktop_runtime_t* runtime) {
+    if (runtime == 0 || runtime->state.selected_service_index == DESKTOP_NO_SELECTION ||
+        runtime->state.selected_since_ms == 0) {
+        return false;
+    }
+
+    return (now_ms() - runtime->state.selected_since_ms) >= DESKTOP_SELECTION_TIMEOUT_MS;
+}
+
+/*
+ * brief  : Compute queue wait ticks until selection timeout deadline.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : portMAX_DELAY when no active selection; 0 when already timed out;
+ *          otherwise positive wait ticks until timeout.
+ * type   : private
+ */
+static TickType_t desktop_selection_wait_ticks(const desktop_runtime_t* runtime) {
+    uint64_t elapsed_ms;
+    uint64_t remain_ms;
+    TickType_t wait_ticks;
+
+    if (runtime == 0 || runtime->state.selected_service_index == DESKTOP_NO_SELECTION ||
+        runtime->state.selected_since_ms == 0) {
+        return portMAX_DELAY;
+    }
+
+    elapsed_ms = now_ms() - runtime->state.selected_since_ms;
+    if (elapsed_ms >= DESKTOP_SELECTION_TIMEOUT_MS) {
+        return 0;
+    }
+
+    remain_ms = DESKTOP_SELECTION_TIMEOUT_MS - elapsed_ms;
+    if (remain_ms > UINT32_MAX) {
+        remain_ms = UINT32_MAX;
+    }
+
+    wait_ticks = pdMS_TO_TICKS((uint32_t)remain_ms);
+    if (wait_ticks == 0) {
+        wait_ticks = 1;
+    }
+    return wait_ticks;
+}
+
+/*
+ * brief  : Clear cached desktop layer pointer and tile references.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_reset_layer_state(desktop_runtime_t* runtime) {
+    if (runtime == 0) {
+        return;
+    }
+
+    runtime->desktop_layer = 0;
+    runtime->desktop_tile_count = 0;
+    memset(runtime->desktop_tiles, 0, sizeof(runtime->desktop_tiles));
+}
+
+/*
+ * brief  : Apply selected-state style to all desktop tiles.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
 static void desktop_apply_selection_locked(desktop_runtime_t* runtime) {
     int selected_tile_index;
     uint8_t i;
@@ -198,6 +356,12 @@ static void desktop_apply_selection_locked(desktop_runtime_t* runtime) {
     }
 }
 
+/*
+ * brief  : Show or hide desktop layer while LVGL lock is already held.
+ * input  : runtime - Desktop runtime state pointer; visible - true to show.
+ * output : None.
+ * type   : private
+ */
 static void desktop_set_visible_locked(desktop_runtime_t* runtime, bool visible) {
     lv_obj_t* layer;
 
@@ -207,9 +371,7 @@ static void desktop_set_visible_locked(desktop_runtime_t* runtime, bool visible)
 
     layer = (lv_obj_t*)runtime->desktop_layer;
     if (!lv_obj_is_valid(layer)) {
-        runtime->desktop_layer = 0;
-        runtime->desktop_tile_count = 0;
-        memset(runtime->desktop_tiles, 0, sizeof(runtime->desktop_tiles));
+        desktop_reset_layer_state(runtime);
         return;
     }
 
@@ -220,19 +382,33 @@ static void desktop_set_visible_locked(desktop_runtime_t* runtime, bool visible)
     }
 }
 
+/*
+ * brief  : Show or hide desktop layer with LVGL lock management.
+ * input  : runtime - Desktop runtime state pointer; visible - true to show.
+ * output : None.
+ * type   : private
+ */
 static void desktop_set_visible(desktop_runtime_t* runtime, bool visible) {
     if (runtime == 0) {
         return;
     }
 
-    if (!lvgl_port_lock(30000)) {
-        ESP_LOGW(TAG, "Failed to lock LVGL for desktop visibility update");
+    if (!lvgl_port_lock(DESKTOP_LVGL_LOCK_TIMEOUT_MS)) {
+        ESP_LOGW(DESKTOP_LOG_TAG, "Failed to lock LVGL for desktop visibility update");
         return;
     }
     desktop_set_visible_locked(runtime, visible);
     lvgl_port_unlock();
 }
 
+/*
+ * brief  : Resolve top and bottom reserved heights for chrome bars.
+ * input  : screen - Active screen; screen_width - Display width;
+ *          screen_height - Display height; top_reserved - top output pointer;
+ *          bottom_reserved - bottom output pointer.
+ * output : None.
+ * type   : private
+ */
 static void desktop_resolve_bar_reserve(lv_obj_t* screen, lv_coord_t screen_width,
                                         lv_coord_t screen_height, lv_coord_t* top_reserved,
                                         lv_coord_t* bottom_reserved) {
@@ -255,6 +431,12 @@ static void desktop_resolve_bar_reserve(lv_obj_t* screen, lv_coord_t screen_widt
     }
 }
 
+/*
+ * brief  : Build or refresh desktop control grid layer.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
 static void desktop_create_controls(desktop_runtime_t* runtime) {
     lv_display_t* display;
     lv_obj_t* layer;
@@ -278,8 +460,8 @@ static void desktop_create_controls(desktop_runtime_t* runtime) {
         return;
     }
 
-    if (!lvgl_port_lock(30000)) {
-        ESP_LOGW(TAG, "Failed to lock LVGL for desktop creation");
+    if (!lvgl_port_lock(DESKTOP_LVGL_LOCK_TIMEOUT_MS)) {
+        ESP_LOGW(DESKTOP_LOG_TAG, "Failed to lock LVGL for desktop creation");
         return;
     }
 
@@ -303,9 +485,6 @@ static void desktop_create_controls(desktop_runtime_t* runtime) {
     desktop_resolve_bar_reserve(screen, screen_width, screen_height, &top_reserved,
                                 &bottom_reserved);
 
-    // LVGL uses top-left as origin.
-    // Physical start near top bar maps to y = top_bar_height in this coordinate system.
-    // Target height: lcd_height - top_bar_height - bottom_bar_height
     layer_width = screen_width - (DESKTOP_LAYER_MARGIN_X * 2);
     layer_height = screen_height - top_reserved - bottom_reserved;
     layer_x = 0;
@@ -337,11 +516,11 @@ static void desktop_create_controls(desktop_runtime_t* runtime) {
         layer_height = parent_height - layer_y;
     }
 
-    ESP_LOGI(TAG, "desktop parent layout=%u coords=(%d,%d)-(%d,%d)",
+    ESP_LOGI(DESKTOP_LOG_TAG, "desktop parent layout=%u coords=(%d,%d)-(%d,%d)",
              (unsigned int)lv_obj_get_style_layout(layer_parent, 0), (int)parent_coords.x1,
              (int)parent_coords.y1, (int)parent_coords.x2, (int)parent_coords.y2);
 
-    ESP_LOGI(TAG,
+    ESP_LOGI(DESKTOP_LOG_TAG,
              "desktop layout screen=%dx%d top=%d bottom=%d pos=(%d,%d) size=%dx%d parent=%dx%d",
              (int)screen_width, (int)screen_height, (int)top_reserved, (int)bottom_reserved,
              (int)layer_x, (int)layer_y, (int)layer_width, (int)layer_height, (int)parent_width,
@@ -361,10 +540,7 @@ static void desktop_create_controls(desktop_runtime_t* runtime) {
         if (lv_obj_is_valid(layer)) {
             lv_obj_del(layer);
         }
-
-        runtime->desktop_layer = 0;
-        runtime->desktop_tile_count = 0;
-        memset(runtime->desktop_tiles, 0, sizeof(runtime->desktop_tiles));
+        desktop_reset_layer_state(runtime);
     }
 
     if (layer_width < 80) {
@@ -383,9 +559,8 @@ static void desktop_create_controls(desktop_runtime_t* runtime) {
     }
 
     layer = lv_obj_create(layer_parent);
+    desktop_reset_layer_state(runtime);
     runtime->desktop_layer = layer;
-    runtime->desktop_tile_count = 0;
-    memset(runtime->desktop_tiles, 0, sizeof(runtime->desktop_tiles));
 
     lv_obj_set_size(layer, layer_width, layer_height);
     lv_obj_set_pos(layer, layer_x, layer_y);
@@ -453,19 +628,32 @@ static void desktop_create_controls(desktop_runtime_t* runtime) {
     lvgl_port_unlock();
 }
 
+/*
+ * brief  : Refresh visual selected-state with LVGL lock management.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
 static void desktop_apply_selection(desktop_runtime_t* runtime) {
     if (runtime == 0) {
         return;
     }
 
-    if (!lvgl_port_lock(30000)) {
-        ESP_LOGW(TAG, "Failed to lock LVGL for selection update");
+    if (!lvgl_port_lock(DESKTOP_LVGL_LOCK_TIMEOUT_MS)) {
+        ESP_LOGW(DESKTOP_LOG_TAG, "Failed to lock LVGL for selection update");
         return;
     }
     desktop_apply_selection_locked(runtime);
     lvgl_port_unlock();
 }
 
+/*
+ * brief  : Match key event to current service key bindings.
+ * input  : service_index - Current service index; key_index - Physical key id;
+ *          event_type - Key event type.
+ * output : service_key_result_t with consumed flag and command.
+ * type   : private
+ */
 static service_key_result_t handle_service_key(int service_index, uint8_t key_index,
                                                uint8_t event_type) {
     service_key_result_t result = {0};
@@ -491,6 +679,12 @@ static service_key_result_t handle_service_key(int service_index, uint8_t key_in
     return result;
 }
 
+/*
+ * brief  : Apply selection and show selected app name notification.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
 static void show_selected_service(desktop_runtime_t* runtime) {
     const service_item_t* item;
 
@@ -508,6 +702,32 @@ static void show_selected_service(desktop_runtime_t* runtime) {
     runtime->ops.show_notification(runtime->ops.ctx, item->name, DESKTOP_SELECT_NOTIFICATION_MS);
 }
 
+/*
+ * brief  : Switch runtime back to desktop home mode.
+ * input  : runtime - Desktop runtime state pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_switch_to_home(desktop_runtime_t* runtime) {
+    if (runtime == 0) {
+        return;
+    }
+
+    runtime->state.current_service_index = -1;
+    normalize_selected(runtime);
+    desktop_mark_selection_activity(runtime);
+    desktop_create_controls(runtime);
+    desktop_apply_selection(runtime);
+    desktop_set_visible(runtime, true);
+}
+
+/*
+ * brief  : Detect dual-click gesture to exit app and return home.
+ * input  : runtime - Desktop runtime state pointer; key_index - Physical key id;
+ *          event_type - Key event type.
+ * output : true if gesture handled; otherwise false.
+ * type   : private
+ */
 static bool handle_dual_click_exit(desktop_runtime_t* runtime, uint8_t key_index,
                                    uint8_t event_type) {
     uint64_t now;
@@ -526,25 +746,27 @@ static bool handle_dual_click_exit(desktop_runtime_t* runtime, uint8_t key_index
     other_key = key_index == DESKTOP_PRIMARY_KEY ? DESKTOP_SECONDARY_KEY : DESKTOP_PRIMARY_KEY;
     runtime->state.last_click_ms[key_index] = now;
 
-    if (runtime->state.last_click_ms[other_key] != 0 &&
-        (now - runtime->state.last_click_ms[other_key]) <= DESKTOP_DUAL_CLICK_WINDOW_MS) {
-        runtime->state.last_click_ms[0] = 0;
-        runtime->state.last_click_ms[1] = 0;
-        runtime->state.current_service_index = -1;
-        normalize_selected(runtime);
-        desktop_create_controls(runtime);
-        desktop_apply_selection(runtime);
-        desktop_set_visible(runtime, true);
-
-        if (runtime->ops.enter_desktop != 0) {
-            runtime->ops.enter_desktop(runtime->ops.ctx, true);
-        }
-        return true;
+    if (runtime->state.last_click_ms[other_key] == 0 ||
+        (now - runtime->state.last_click_ms[other_key]) > DESKTOP_DUAL_CLICK_WINDOW_MS) {
+        return false;
     }
 
-    return false;
+    runtime->state.last_click_ms[0] = 0;
+    runtime->state.last_click_ms[1] = 0;
+    desktop_switch_to_home(runtime);
+
+    if (runtime->ops.enter_desktop != 0) {
+        runtime->ops.enter_desktop(runtime->ops.ctx, true);
+    }
+    return true;
 }
 
+/*
+ * brief  : Dispatch one service command to upper-layer callback.
+ * input  : runtime - Desktop runtime state pointer; command - Service command.
+ * output : None.
+ * type   : private
+ */
 static void run_service_command(desktop_runtime_t* runtime, service_command_t command) {
     if (runtime == 0 || runtime->ops.run_command == 0) {
         return;
@@ -552,6 +774,13 @@ static void run_service_command(desktop_runtime_t* runtime, service_command_t co
     runtime->ops.run_command(runtime->ops.ctx, command);
 }
 
+/*
+ * brief  : Process key events while user stays at desktop home.
+ * input  : runtime - Desktop runtime state pointer; key_index - Physical key id;
+ *          event_type - Key event type.
+ * output : None.
+ * type   : private
+ */
 static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
                              uint8_t event_type) {
     int first_index;
@@ -573,6 +802,7 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
         } else {
             runtime->state.selected_service_index--;
         }
+        desktop_mark_selection_activity(runtime);
         show_selected_service(runtime);
         return;
     }
@@ -585,6 +815,7 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
         } else {
             runtime->state.selected_service_index++;
         }
+        desktop_mark_selection_activity(runtime);
         show_selected_service(runtime);
         return;
     }
@@ -595,6 +826,7 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
             return;
         }
         runtime->state.current_service_index = runtime->state.selected_service_index;
+        runtime->state.selected_since_ms = 0;
         runtime->state.last_click_ms[0] = 0;
         runtime->state.last_click_ms[1] = 0;
         desktop_set_visible(runtime, false);
@@ -604,6 +836,13 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
     }
 }
 
+/*
+ * brief  : Process key events while running inside a selected app.
+ * input  : runtime - Desktop runtime state pointer; key_index - Physical key id;
+ *          event_type - Key event type.
+ * output : None.
+ * type   : private
+ */
 static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index,
                                 uint8_t event_type) {
     service_key_result_t result;
@@ -619,11 +858,7 @@ static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index,
     result = handle_service_key(runtime->state.current_service_index, key_index, event_type);
     if (result.consumed) {
         if (result.command == SERVICE_CMD_ENTER_DESKTOP) {
-            runtime->state.current_service_index = -1;
-            normalize_selected(runtime);
-            desktop_create_controls(runtime);
-            desktop_apply_selection(runtime);
-            desktop_set_visible(runtime, true);
+            desktop_switch_to_home(runtime);
         }
 
         if (result.notification != 0 && result.notification[0] != '\0' &&
@@ -635,21 +870,29 @@ static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index,
         return;
     }
 
-    if (runtime->state.current_service_index == DESKTOP_AI_SERVICE_INDEX) {
-        if (key_index == DESKTOP_PRIMARY_KEY && event_type == SERVICE_KEY_EVENT_CLICK) {
-            run_service_command(runtime, SERVICE_CMD_TOGGLE_CHAT);
-        } else if (key_index == DESKTOP_SECONDARY_KEY &&
-                   event_type == SERVICE_KEY_EVENT_PRESS_DOWN) {
-            run_service_command(runtime, SERVICE_CMD_START_LISTENING);
-        } else if (key_index == DESKTOP_SECONDARY_KEY && event_type == SERVICE_KEY_EVENT_PRESS_UP) {
-            run_service_command(runtime, SERVICE_CMD_STOP_LISTENING);
-        }
+    if (runtime->state.current_service_index != DESKTOP_AI_SERVICE_INDEX) {
+        return;
+    }
+
+    if (key_index == DESKTOP_PRIMARY_KEY && event_type == SERVICE_KEY_EVENT_CLICK) {
+        run_service_command(runtime, SERVICE_CMD_TOGGLE_CHAT);
+    } else if (key_index == DESKTOP_SECONDARY_KEY && event_type == SERVICE_KEY_EVENT_PRESS_DOWN) {
+        run_service_command(runtime, SERVICE_CMD_START_LISTENING);
+    } else if (key_index == DESKTOP_SECONDARY_KEY && event_type == SERVICE_KEY_EVENT_PRESS_UP) {
+        run_service_command(runtime, SERVICE_CMD_STOP_LISTENING);
     }
 }
 
+/*
+ * brief  : Desktop task loop that consumes key events from queue.
+ * input  : arg - desktop_runtime_t pointer.
+ * output : None.
+ * type   : private
+ */
 static void desktop_task_loop(void* arg) {
     desktop_runtime_t* runtime = (desktop_runtime_t*)arg;
     desktop_key_event_t event = {0};
+    TickType_t wait_ticks;
 
     if (runtime == 0 || runtime->key_queue == 0) {
         vTaskDelete(0);
@@ -657,7 +900,20 @@ static void desktop_task_loop(void* arg) {
     }
 
     while (true) {
-        if (xQueueReceive(runtime->key_queue, &event, portMAX_DELAY) != pdTRUE) {
+        if (desktop_is_home(runtime)) {
+            wait_ticks = desktop_selection_wait_ticks(runtime);
+            if (wait_ticks == 0) {
+                desktop_clear_selection(runtime);
+                continue;
+            }
+        } else {
+            wait_ticks = portMAX_DELAY;
+        }
+
+        if (xQueueReceive(runtime->key_queue, &event, wait_ticks) != pdTRUE) {
+            if (desktop_is_home(runtime) && desktop_selection_timed_out(runtime)) {
+                desktop_clear_selection(runtime);
+            }
             continue;
         }
 
@@ -669,6 +925,18 @@ static void desktop_task_loop(void* arg) {
     }
 }
 
+/* ==================== public functions ==================== */
+
+const service_item_t g_desktop = {
+    0, "Desktop", "Desktop", "System ready. Select app.", 0, 0,
+};
+
+/*
+ * brief  : Initialize desktop runtime with default state.
+ * input  : runtime - Desktop runtime output pointer.
+ * output : None.
+ * type   : public
+ */
 void desktop_runtime_init(desktop_runtime_t* runtime) {
     if (runtime == 0) {
         return;
@@ -677,10 +945,16 @@ void desktop_runtime_init(desktop_runtime_t* runtime) {
     memset(runtime, 0, sizeof(*runtime));
     runtime->state.current_service_index = -1;
     runtime->state.selected_service_index = DESKTOP_NO_SELECTION;
+    runtime->state.selected_since_ms = 0;
 }
 
-esp_err_t desktop_task_start(desktop_runtime_t* runtime,
-                                     const desktop_ops_t* ops) {
+/*
+ * brief  : Start desktop task and initialize desktop control layer.
+ * input  : runtime - Desktop runtime pointer; ops - Callback table.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
+esp_err_t desktop_task_start(desktop_runtime_t* runtime, const desktop_ops_t* ops) {
     BaseType_t created;
 
     if (runtime == 0 || ops == 0 || ops->ctx == 0) {
@@ -690,10 +964,9 @@ esp_err_t desktop_task_start(desktop_runtime_t* runtime,
     runtime->ops = *ops;
 
     if (runtime->key_queue == 0) {
-        runtime->key_queue =
-            xQueueCreate(DESKTOP_KEY_QUEUE_DEPTH, sizeof(desktop_key_event_t));
+        runtime->key_queue = xQueueCreate(DESKTOP_KEY_QUEUE_DEPTH, sizeof(desktop_key_event_t));
         if (runtime->key_queue == 0) {
-            ESP_LOGE(TAG, "Failed to create desktop key queue");
+            ESP_LOGE(DESKTOP_LOG_TAG, "Failed to create desktop key queue");
             return ESP_FAIL;
         }
     }
@@ -707,18 +980,24 @@ esp_err_t desktop_task_start(desktop_runtime_t* runtime,
     desktop_create_controls(runtime);
     desktop_set_visible(runtime, runtime->state.current_service_index < 0);
 
-    created = xTaskCreate(desktop_task_loop, "desktop", DESKTOP_TASK_STACK_SIZE,
-                          runtime, DESKTOP_TASK_PRIORITY, &runtime->task_handle);
+    created = xTaskCreate(desktop_task_loop, "desktop", DESKTOP_TASK_STACK_SIZE, runtime,
+                          DESKTOP_TASK_PRIORITY, &runtime->task_handle);
     if (created != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create desktop service task");
+        ESP_LOGE(DESKTOP_LOG_TAG, "Failed to create desktop service task");
         return ESP_FAIL;
     }
 
     return ESP_OK;
 }
 
-bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index,
-                                    uint8_t event_type) {
+/*
+ * brief  : Post one key event into desktop queue.
+ * input  : runtime - Desktop runtime pointer; key_index - Physical key id;
+ *          event_type - Key event type.
+ * output : true if queued; otherwise false.
+ * type   : public
+ */
+bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index, uint8_t event_type) {
     desktop_key_event_t event;
 
     if (runtime == 0 || runtime->key_queue == 0) {
@@ -730,8 +1009,20 @@ bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index,
     return xQueueSend(runtime->key_queue, &event, 0) == pdTRUE;
 }
 
+/*
+ * brief  : Get number of service items in desktop list.
+ * input  : None.
+ * output : Total item count.
+ * type   : public
+ */
 int desktop_get_count(void) { return (int)(sizeof(k_services) / sizeof(k_services[0])); }
 
+/*
+ * brief  : Get service item metadata by index.
+ * input  : service_index - Service index in list.
+ * output : service_item_t pointer when valid; null pointer otherwise.
+ * type   : public
+ */
 const service_item_t* desktop_get_item(int service_index) {
     if (service_index < 0 || service_index >= desktop_get_count()) {
         return 0;
@@ -739,6 +1030,12 @@ const service_item_t* desktop_get_item(int service_index) {
     return k_services[service_index];
 }
 
+/*
+ * brief  : Check whether runtime is currently in desktop home mode.
+ * input  : runtime - Desktop runtime pointer.
+ * output : true when home mode; otherwise false.
+ * type   : public
+ */
 bool desktop_is_home(const desktop_runtime_t* runtime) {
     return runtime != 0 && runtime->state.current_service_index < 0;
 }

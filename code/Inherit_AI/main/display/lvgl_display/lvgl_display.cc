@@ -65,18 +65,31 @@ static bool CollectRuntimeCounters(uint32_t* total_runtime_out, uint32_t* idle_r
 #endif
 }
 
-static void FormatUsageText(int usage_percent, char* out, size_t out_size) {
+static void FormatUsageCompact(int usage_percent, char* out, size_t out_size) {
     if (out == nullptr || out_size == 0) {
         return;
     }
 
     if (usage_percent < 0) {
-        snprintf(out, out_size, " --%%");
+        snprintf(out, out_size, "--");
     } else {
         unsigned int safe_percent =
             (usage_percent > 100) ? 100U : static_cast<unsigned int>(usage_percent);
-        snprintf(out, out_size, "%3u%%", safe_percent);
+        snprintf(out, out_size, "%u", safe_percent);
     }
+}
+
+static const char* UsageColorHex(int usage_percent) {
+    if (usage_percent < 0) {
+        return "9AA0A6";
+    }
+    if (usage_percent < 60) {
+        return "7FD35A";
+    }
+    if (usage_percent < 85) {
+        return "F2C94C";
+    }
+    return "EB5757";
 }
 
 LvglDisplay::LvglDisplay() {
@@ -314,14 +327,16 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
     {
         DisplayLockGuard lock(this);
         if (perf_label_ != nullptr) {
-            char cpu_text[8];
-            char spiram_text[8];
-            char internal_text[8];
-            char perf_text[48];
-            FormatUsageText(cpu_usage, cpu_text, sizeof(cpu_text));
-            FormatUsageText(spiram_usage, spiram_text, sizeof(spiram_text));
-            FormatUsageText(internal_usage, internal_text, sizeof(internal_text));
-            snprintf(perf_text, sizeof(perf_text), "cpu:%s mo:%s mi:%s", cpu_text, spiram_text,
+            char cpu_text[4];
+            char spiram_text[4];
+            char internal_text[4];
+            char perf_text[96];
+            FormatUsageCompact(cpu_usage, cpu_text, sizeof(cpu_text));
+            FormatUsageCompact(spiram_usage, spiram_text, sizeof(spiram_text));
+            FormatUsageCompact(internal_usage, internal_text, sizeof(internal_text));
+            snprintf(perf_text, sizeof(perf_text),
+                     "#%s C%s%%# #%s M%s%%# #%s I%s%%#", UsageColorHex(cpu_usage), cpu_text,
+                     UsageColorHex(spiram_usage), spiram_text, UsageColorHex(internal_usage),
                      internal_text);
             lv_label_set_text(perf_label_, perf_text);
         }

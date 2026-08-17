@@ -11,6 +11,8 @@
 
 #define PREVIEW_IMAGE_DURATION_MS 5000
 
+class LvglTheme;
+
 class LcdDisplay : public LvglDisplay {
 protected:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
@@ -38,6 +40,7 @@ protected:
     std::string bottom_bar_notification_text_;
 
     void InitializeLcdThemes();
+    void ApplyCompactBarStyle(LvglTheme* lvgl_theme);
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
 

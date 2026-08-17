@@ -37,6 +37,90 @@ static bool IsClockText(const char* status) {
            std::isdigit(static_cast<unsigned char>(status[4]));
 }
 
+static bool ShouldUseLvglPsramCanvas(void) {
+#if CONFIG_SPIRAM && SOC_PSRAM_DMA_CAPABLE
+    return true;
+#else
+    return false;
+#endif
+}
+
+static uint32_t ResolveLvglBufferLines(bool use_psram_canvas, uint32_t internal_lines,
+                                       uint32_t psram_lines) {
+    return use_psram_canvas ? psram_lines : internal_lines;
+}
+
+void LcdDisplay::ApplyCompactBarStyle(LvglTheme* lvgl_theme) {
+    const lv_font_t* compact_text_font;
+    const lv_font_t* compact_icon_font;
+    lv_coord_t top_bar_height;
+    lv_coord_t top_bar_vpad;
+    lv_coord_t side_pad;
+    lv_coord_t bottom_bar_height;
+
+    if (lvgl_theme == nullptr) {
+        return;
+    }
+
+    compact_text_font = &BUILTIN_TEXT_FONT;
+    compact_icon_font = &BUILTIN_ICON_FONT;
+    top_bar_height = compact_text_font->line_height + lvgl_theme->spacing(4);
+    top_bar_vpad = lvgl_theme->spacing(2);
+    side_pad = lvgl_theme->spacing(4);
+    bottom_bar_height = compact_text_font->line_height + lvgl_theme->spacing(8);
+
+    if (perf_label_ != nullptr) {
+        lv_obj_set_style_text_font(perf_label_, compact_text_font, 0);
+    }
+    if (status_label_ != nullptr) {
+        lv_obj_set_style_text_font(status_label_, compact_text_font, 0);
+    }
+    if (notification_label_ != nullptr) {
+        lv_obj_set_style_text_font(notification_label_, compact_text_font, 0);
+    }
+    if (chat_message_label_ != nullptr) {
+        lv_obj_set_style_text_font(chat_message_label_, compact_text_font, 0);
+        lv_obj_set_width(chat_message_label_, LV_HOR_RES - lvgl_theme->spacing(8));
+    }
+
+    if (mute_label_ != nullptr) {
+        lv_obj_set_style_text_font(mute_label_, compact_icon_font, 0);
+    }
+    if (battery_label_ != nullptr) {
+        lv_obj_set_style_text_font(battery_label_, compact_icon_font, 0);
+    }
+    if (network_label_ != nullptr) {
+        lv_obj_set_style_text_font(network_label_, compact_icon_font, 0);
+    }
+
+    if (top_bar_ != nullptr) {
+        lv_obj_set_height(top_bar_, top_bar_height);
+        lv_obj_set_style_pad_top(top_bar_, top_bar_vpad, 0);
+        lv_obj_set_style_pad_bottom(top_bar_, top_bar_vpad, 0);
+        lv_obj_set_style_pad_left(top_bar_, side_pad, 0);
+        lv_obj_set_style_pad_right(top_bar_, side_pad, 0);
+    }
+
+    if (status_bar_ != nullptr) {
+        lv_obj_set_height(status_bar_, top_bar_height);
+        lv_obj_set_style_pad_top(status_bar_, top_bar_vpad, 0);
+        lv_obj_set_style_pad_bottom(status_bar_, top_bar_vpad, 0);
+    }
+
+    if (bottom_bar_ != nullptr) {
+#if CONFIG_USE_MULTILINE_CHAT_MESSAGE
+        lv_obj_set_width(bottom_bar_, LV_HOR_RES);
+        lv_obj_set_style_pad_all(bottom_bar_, lvgl_theme->spacing(4), 0);
+        lv_obj_set_style_min_height(bottom_bar_, bottom_bar_height, 0);
+#else
+        lv_obj_set_size(bottom_bar_, LV_HOR_RES, bottom_bar_height);
+        lv_obj_set_style_pad_all(bottom_bar_, 0, 0);
+        lv_obj_set_style_pad_left(bottom_bar_, side_pad, 0);
+        lv_obj_set_style_pad_right(bottom_bar_, side_pad, 0);
+#endif
+    }
+}
+
 void LcdDisplay::InitializeLcdThemes() {
     auto text_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_TEXT_FONT);
     auto icon_font = std::make_shared<LvglBuiltInFont>(&BUILTIN_ICON_FONT);
@@ -181,11 +265,15 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     lvgl_port_init(&port_cfg);
 
     ESP_LOGI(TAG, "Adding LCD display");
+    const bool use_psram_canvas = ShouldUseLvglPsramCanvas();
+    const uint32_t lvgl_buffer_lines = ResolveLvglBufferLines(use_psram_canvas, 20U, 120U);
+    ESP_LOGI(TAG, "LVGL canvas memory: %s", use_psram_canvas ? "PSRAM" : "internal RAM");
+    ESP_LOGI(TAG, "LVGL draw buffer lines: %lu", (unsigned long)lvgl_buffer_lines);
     const lvgl_port_display_cfg_t display_cfg = {
         .io_handle = panel_io_,
         .panel_handle = panel_,
         .control_handle = nullptr,
-        .buffer_size = static_cast<uint32_t>(width_ * 20),
+        .buffer_size = static_cast<uint32_t>(width_) * lvgl_buffer_lines,
         .double_buffer = false,
         .trans_size = 0,
         .hres = static_cast<uint32_t>(width_),
@@ -201,7 +289,7 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         .flags =
             {
                 .buff_dma = 1,
-                .buff_spiram = 0,
+                .buff_spiram = static_cast<unsigned int>(use_psram_canvas),
                 .sw_rotate = 0,
                 .swap_bytes = 1,
                 .full_refresh = 0,
@@ -241,10 +329,14 @@ RgbLcdDisplay::RgbLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     lvgl_port_init(&port_cfg);
 
     ESP_LOGI(TAG, "Adding LCD display");
+    const bool use_psram_canvas = ShouldUseLvglPsramCanvas();
+    const uint32_t lvgl_buffer_lines = ResolveLvglBufferLines(use_psram_canvas, 20U, 120U);
+    ESP_LOGI(TAG, "LVGL canvas memory: %s", use_psram_canvas ? "PSRAM" : "internal RAM");
+    ESP_LOGI(TAG, "LVGL draw buffer lines: %lu", (unsigned long)lvgl_buffer_lines);
     const lvgl_port_display_cfg_t display_cfg = {
         .io_handle = panel_io_,
         .panel_handle = panel_,
-        .buffer_size = static_cast<uint32_t>(width_ * 20),
+        .buffer_size = static_cast<uint32_t>(width_) * lvgl_buffer_lines,
         .double_buffer = true,
         .hres = static_cast<uint32_t>(width_),
         .vres = static_cast<uint32_t>(height_),
@@ -257,6 +349,7 @@ RgbLcdDisplay::RgbLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         .flags =
             {
                 .buff_dma = 1,
+                .buff_spiram = static_cast<unsigned int>(use_psram_canvas),
                 .swap_bytes = 0,
                 .full_refresh = 1,
                 .direct_mode = 1,
@@ -291,11 +384,15 @@ MipiLcdDisplay::MipiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel
     lvgl_port_init(&port_cfg);
 
     ESP_LOGI(TAG, "Adding LCD display");
+    const bool use_psram_canvas = ShouldUseLvglPsramCanvas();
+    const uint32_t lvgl_buffer_lines = ResolveLvglBufferLines(use_psram_canvas, 50U, 120U);
+    ESP_LOGI(TAG, "LVGL canvas memory: %s", use_psram_canvas ? "PSRAM" : "internal RAM");
+    ESP_LOGI(TAG, "LVGL draw buffer lines: %lu", (unsigned long)lvgl_buffer_lines);
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = panel_io,
         .panel_handle = panel,
         .control_handle = nullptr,
-        .buffer_size = static_cast<uint32_t>(width_ * 50),
+        .buffer_size = static_cast<uint32_t>(width_) * lvgl_buffer_lines,
         .double_buffer = false,
         .hres = static_cast<uint32_t>(width_),
         .vres = static_cast<uint32_t>(height_),
@@ -310,7 +407,7 @@ MipiLcdDisplay::MipiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel
         .flags =
             {
                 .buff_dma = true,
-                .buff_spiram = false,
+                .buff_spiram = use_psram_canvas,
                 .sw_rotate = true,
             },
     };
@@ -525,7 +622,8 @@ void LcdDisplay::SetupUI() {
 
     // Left section: performance usage
     perf_label_ = lv_label_create(top_bar_);
-    lv_label_set_text(perf_label_, "cpu: --% mo: --% mi: --%");
+    lv_label_set_recolor(perf_label_, true);
+    lv_label_set_text(perf_label_, "#9AA0A6 C--% M--% I--%#");
     lv_obj_set_style_text_font(perf_label_, text_font, 0);
     lv_obj_set_style_text_color(perf_label_, lvgl_theme->text_color(), 0);
 
@@ -684,6 +782,8 @@ void LcdDisplay::SetupUI() {
         lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(emoji_label_, LV_OBJ_FLAG_HIDDEN);
     }
+
+    ApplyCompactBarStyle(lvgl_theme);
 }
 #if CONFIG_IDF_TARGET_ESP32P4
 #define MAX_MESSAGES 40
@@ -1113,7 +1213,8 @@ void LcdDisplay::SetupUI() {
 
     // Left section: performance usage
     perf_label_ = lv_label_create(top_bar_);
-    lv_label_set_text(perf_label_, "cpu: --% mo: --% mi: --%");
+    lv_label_set_recolor(perf_label_, true);
+    lv_label_set_text(perf_label_, "#9AA0A6 C--% M--% I--%#");
     lv_obj_set_style_text_font(perf_label_, text_font, 0);
     lv_obj_set_style_text_color(perf_label_, lvgl_theme->text_color(), 0);
 
@@ -1250,6 +1351,8 @@ void LcdDisplay::SetupUI() {
     lv_obj_set_style_text_color(low_battery_label_, lv_color_white(), 0);
     lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
+
+    ApplyCompactBarStyle(lvgl_theme);
 }
 
 void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
@@ -1454,21 +1557,6 @@ void LcdDisplay::SetTheme(Theme* theme) {
 
     // Set font
     auto text_font = lvgl_theme->text_font()->font();
-    auto icon_font = lvgl_theme->icon_font()->font();
-    auto large_icon_font = lvgl_theme->large_icon_font()->font();
-
-    if (text_font->line_height >= 40) {
-        lv_obj_set_style_text_font(mute_label_, large_icon_font, 0);
-        lv_obj_set_style_text_font(battery_label_, large_icon_font, 0);
-        lv_obj_set_style_text_font(network_label_, large_icon_font, 0);
-    } else {
-        lv_obj_set_style_text_font(mute_label_, icon_font, 0);
-        lv_obj_set_style_text_font(battery_label_, icon_font, 0);
-        lv_obj_set_style_text_font(network_label_, icon_font, 0);
-    }
-    if (perf_label_ != nullptr) {
-        lv_obj_set_style_text_font(perf_label_, text_font, 0);
-    }
 
     // Set parent text color
     lv_obj_set_style_text_font(screen, text_font, 0);
@@ -1498,6 +1586,9 @@ void LcdDisplay::SetTheme(Theme* theme) {
         lv_obj_set_style_text_color(perf_label_, lvgl_theme->text_color(), 0);
     }
     lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
+
+    // Keep bars compact even when runtime text font is replaced by network assets.
+    ApplyCompactBarStyle(lvgl_theme);
 
     // If we have the chat message style, update all message bubbles
 #if CONFIG_USE_WECHAT_MESSAGE_STYLE

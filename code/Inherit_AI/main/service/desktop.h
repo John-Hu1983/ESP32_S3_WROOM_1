@@ -1,18 +1,25 @@
 #pragma once
 
 #include <esp_err.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
-#include <freertos/task.h>
-
 #include <esp_log.h>
 #include <esp_lvgl_port.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 #include <lvgl.h>
 #include <material_symbols.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define DESKTOP_LOG_TAG "desktop"
+
+#define SERVICE_APP_COUNT 13
 
 #define DESKTOP_PRIMARY_KEY 0
 #define DESKTOP_SECONDARY_KEY 1
@@ -33,23 +40,19 @@
 #define UBUNTU_ACCENT_HEX 0xE95420
 #define UBUNTU_TEXT_HEX 0xF7F7F7
 
-LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
-LV_FONT_DECLARE(BUILTIN_ICON_FONT);
-
 #define DESKTOP_SELECT_NOTIFICATION_MS 800
 #define DESKTOP_ACTION_NOTIFICATION_MS 900
 #define DESKTOP_DUAL_CLICK_WINDOW_MS 260
+#define DESKTOP_SELECTION_TIMEOUT_MS 3000
 
 #define DESKTOP_KEY_QUEUE_DEPTH 16
 #define DESKTOP_TASK_STACK_SIZE 4096
 #define DESKTOP_TASK_PRIORITY 4
 
+#define DESKTOP_LVGL_LOCK_TIMEOUT_MS 30000
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#define SERVICE_APP_COUNT 13
+LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
+LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 
 typedef enum {
     SERVICE_KEY_EVENT_PRESS_DOWN = 0,
@@ -95,12 +98,6 @@ typedef struct {
 } desktop_key_event_t;
 
 typedef struct {
-    int current_service_index;
-    int selected_service_index;
-    uint64_t last_click_ms[2];
-} desktop_state_t;
-
-typedef struct {
     void* ctx;
     void (*enter_service)(void* ctx, int service_index);
     void (*enter_desktop)(void* ctx, bool show_notification);
@@ -112,7 +109,12 @@ typedef struct {
     QueueHandle_t key_queue;
     TaskHandle_t task_handle;
     desktop_ops_t ops;
-    desktop_state_t state;
+    struct {
+        int current_service_index;
+        int selected_service_index;
+        uint64_t selected_since_ms;
+        uint64_t last_click_ms[2];
+    } state;
     void* desktop_layer;
     void* desktop_tiles[SERVICE_APP_COUNT - 1];
     uint8_t desktop_tile_count;
@@ -122,9 +124,9 @@ extern const service_item_t g_desktop;
 
 void desktop_runtime_init(desktop_runtime_t* runtime);
 esp_err_t desktop_task_start(desktop_runtime_t* runtime,
-                                     const desktop_ops_t* ops);
+                             const desktop_ops_t* ops);
 bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index,
-                                    uint8_t event_type);
+                            uint8_t event_type);
 
 int desktop_get_count(void);
 const service_item_t* desktop_get_item(int service_index);
