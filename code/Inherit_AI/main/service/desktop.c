@@ -1,4 +1,5 @@
 #include "service/desktop.h"
+#include "service/ui_pidm.h"
 
 extern const service_item_t g_service_ai;
 extern const service_item_t g_service_wifi;
@@ -10,14 +11,16 @@ extern const service_item_t g_service_signal;
 extern const service_item_t g_service_node;
 extern const service_item_t g_service_debug;
 extern const service_item_t g_service_tools;
-extern const service_item_t g_service_mute;
+extern const service_item_t g_service_pidm;
 extern const service_item_t g_service_power;
 
 static const service_item_t* k_services[SERVICE_APP_COUNT] = {
     &g_desktop, &g_service_ai,   &g_service_wifi,   &g_service_scan, &g_service_link,
     &g_service_offline, &g_service_cell, &g_service_signal, &g_service_node, &g_service_debug,
-    &g_service_tools,   &g_service_mute, &g_service_power,
+    &g_service_tools,   &g_service_pidm, &g_service_power,
 };
+
+#define PIDM_SERVICE_INDEX 11
 
 static const char* k_desktop_icons[DESKTOP_CONTROL_COUNT] = {
     MATERIAL_SYMBOLS_PHOTO_CAMERA, MATERIAL_SYMBOLS_IMAGE,    MATERIAL_SYMBOLS_MUSIC_NOTE,
@@ -713,6 +716,10 @@ static void desktop_switch_to_home(desktop_runtime_t* runtime) {
         return;
     }
 
+    if (runtime->state.current_service_index == PIDM_SERVICE_INDEX) {
+        ui_pidm_on_leave();
+    }
+
     runtime->state.current_service_index = -1;
     normalize_selected(runtime);
     desktop_mark_selection_activity(runtime);
@@ -830,6 +837,11 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
         runtime->state.last_click_ms[0] = 0;
         runtime->state.last_click_ms[1] = 0;
         desktop_set_visible(runtime, false);
+
+        if (runtime->state.current_service_index == PIDM_SERVICE_INDEX) {
+            ui_pidm_on_enter();
+        }
+
         if (runtime->ops.enter_service != 0) {
             runtime->ops.enter_service(runtime->ops.ctx, runtime->state.current_service_index);
         }
@@ -857,6 +869,10 @@ static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index,
 
     result = handle_service_key(runtime->state.current_service_index, key_index, event_type);
     if (result.consumed) {
+        if (runtime->state.current_service_index == PIDM_SERVICE_INDEX) {
+            ui_pidm_on_key_event(key_index, event_type);
+        }
+
         if (result.command == SERVICE_CMD_ENTER_DESKTOP) {
             desktop_switch_to_home(runtime);
         }
