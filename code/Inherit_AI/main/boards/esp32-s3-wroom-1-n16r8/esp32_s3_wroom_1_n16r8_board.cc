@@ -171,8 +171,8 @@ private:
         ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
-        display_ = new St7365pLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH,
-                         LCD_DEFAULT_HEIGHT, 0, 0, mirror_x, mirror_y, swap_xy);
+        display_ = new St7365pLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH, LCD_DEFAULT_HEIGHT,
+                                         0, 0, mirror_x, mirror_y, swap_xy);
     }
 
     void InitializeBspEnv() {
@@ -183,9 +183,9 @@ private:
         };
 
         configure_output(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, true);
-        configure_output(PDM_EN_PORT, PDM_EN_PIN, false);
-        configure_output(I2S_EN_PORT, I2S_EN_PIN, false);
-        configure_output(PIDM_EN_PORT, PIDM_EN_PIN, false);
+        configure_output(PDM_EN_PORT, PDM_EN_PIN, true);
+        configure_output(I2S_EN_PORT, I2S_EN_PIN, true);
+        configure_output(PIDM_EN_PORT, PIDM_EN_PIN, true);
         configure_output(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, true);
 
 #if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \
@@ -201,7 +201,8 @@ private:
         configure_output(RC522_RST_PORT, RC522_RST_PIN, true);
 #endif
 
-        ESP_ERROR_CHECK(gpba02b_pwm_set_clock_div(PWM_GPBA02B_PA_CLOCK_DIV, PWM_GPBA02B_PC_CLOCK_DIV));
+        ESP_ERROR_CHECK(
+            gpba02b_pwm_set_clock_div(PWM_GPBA02B_PA_CLOCK_DIV, PWM_GPBA02B_PC_CLOCK_DIV));
 
         const uint8_t pwm_mask_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
         const uint8_t pwm_mask_c = static_cast<uint8_t>(
@@ -250,7 +251,8 @@ public:
     virtual AudioCodec* GetAudioCodec() override {
         static NoAudioCodecSimplexPdm audio_codec(USER_AUDIO_SAMPLE_RATE_HZ,
                                                   USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO,
-                                                  I2S_DO_IO, PDM_CLK_IO, PDM_DATA_IO);
+                                                  I2S_DO_IO, I2S_STD_SLOT_BOTH, PDM_CLK_IO,
+                                                  PDM_DATA_IO);
         return &audio_codec;
     }
 

@@ -1004,10 +1004,14 @@ set(LANG_JSON "${CMAKE_CURRENT_SOURCE_DIR}/assets/locales/${LANG_DIR}/language.j
 set(LANG_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/assets/lang_config.h")
 
 # Collect current language audio files
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+           "${CMAKE_CURRENT_SOURCE_DIR}/assets/locales/${LANG_DIR}/*.ogg")
 file(GLOB LANG_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/locales/${LANG_DIR}/*.ogg)
 
 # If not en-US, collect en-US audio files as fallback for missing files
 if(NOT LANG_DIR STREQUAL "en-US")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                 "${CMAKE_CURRENT_SOURCE_DIR}/assets/locales/en-US/*.ogg")
     file(GLOB EN_US_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/locales/en-US/*.ogg)
 
     # Extract filenames (without path) from current language
@@ -1027,6 +1031,8 @@ if(NOT LANG_DIR STREQUAL "en-US")
     endforeach()
 endif()
 
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+           "${CMAKE_CURRENT_SOURCE_DIR}/assets/common/*.ogg")
 file(GLOB COMMON_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/common/*.ogg)
 
 # If target chip is ESP32, exclude specific files to avoid build errors
@@ -1146,6 +1152,8 @@ add_custom_command(
             --output "${LANG_HEADER}"
     DEPENDS
         ${LANG_JSON}
+        ${LANG_SOUNDS}
+        ${COMMON_SOUNDS}
         ${PROJECT_DIR}/scripts/gen_lang.py
     COMMENT "Generating ${LANG_DIR} language config"
 )

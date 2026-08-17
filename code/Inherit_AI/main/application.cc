@@ -894,6 +894,8 @@ void Application::DesktopRunCommandCallback(void* ctx, service_command_t command
 }
 
 void Application::PushDesktopKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
+    // Schedule([this]() { PlaySound(Lang::Sounds::OGG_DI); });
+
     if (!desktop_post_key_event(&desktop_runtime_, key_index,
                                         ToServiceEventType(event_type))) {
         ESP_LOGW(TAG, "Drop key event: key=%u type=%d", key_index, static_cast<int>(event_type));
