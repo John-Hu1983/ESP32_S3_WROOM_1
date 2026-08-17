@@ -46,48 +46,6 @@
 #endif
 
 namespace {
-bsp_env_config_t CreateBspEnvConfig() {
-    bsp_env_config_t config = {};
-    bsp_env_get_default_config(&config);
-
-    config.power_lock_pin = {POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN};
-    config.pdm_enable_pin = {PDM_EN_PORT, PDM_EN_PIN};
-    config.i2s_enable_pin = {I2S_EN_PORT, I2S_EN_PIN};
-    config.pidm_enable_pin = {PIDM_EN_PORT, PIDM_EN_PIN};
-    config.button_up_pin = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
-    config.button_down_pin = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
-    config.lcd_reset_pin = {LCD_IO_RESET_PORT, LCD_IO_RESET_PIN};
-
-#if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \
-    defined(CAM_IO_PWDN_PIN)
-    config.camera_present = true;
-    config.camera_reset_pin = {CAM_IO_RESET_PORT, CAM_IO_RESET_PIN};
-    config.camera_pwdn_pin = {CAM_IO_PWDN_PORT, CAM_IO_PWDN_PIN};
-#if defined(CAM_IO_LIGHT_PORT) && defined(CAM_IO_LIGHT_PIN)
-    config.camera_light_pin = {CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN};
-#endif
-#endif
-
-#if defined(RC522_RST_PORT) && defined(RC522_RST_PIN)
-    config.rc522_present = true;
-    config.rc522_reset_pin = {RC522_RST_PORT, RC522_RST_PIN};
-#endif
-
-#if defined(RC522_ENABLE_PORT) && defined(RC522_ENABLE_PIN)
-    config.rc522_enable_pin = {RC522_ENABLE_PORT, RC522_ENABLE_PIN};
-#endif
-
-    config.pwm_enable_mask_port_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
-    config.pwm_enable_mask_port_c =
-        static_cast<uint8_t>((1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) |
-                             (1U << PWM_GPBA02B_10_PIN) | (1U << PWM_GPBA02B_11_PIN) |
-                             (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
-    config.pwm_clock_div_port_a = PWM_GPBA02B_PA_CLOCK_DIV;
-    config.pwm_clock_div_port_c = PWM_GPBA02B_PC_CLOCK_DIV;
-    config.pwm_duty = PWM_GPBA02B_DUTY_10_PERCENT;
-
-    return config;
-}
 }  // namespace
 
 class Esp32S3Wroom1N8r2Board : public WifiBoard {
@@ -95,7 +53,6 @@ private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
-    bsp_env_t bsp_env_;
     Button boot_button_;
     Button touch_button_;
     Button volume_up_button_;
@@ -112,7 +69,7 @@ private:
         gpba02b_config.clock_hz = GPBA02B_DEFAULT_CLOCK_HZ;
         gpba02b_config.device_id = GPBA02B_DEVICE_ID;
 
-        esp_err_t err = gpba02b_init(gpba02b_instance(), &gpba02b_config);
+        esp_err_t err = gpba02b_init(&gpba02b_config);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to initialize GPBA02B: %s", esp_err_to_name(err));
             return;
@@ -175,6 +132,13 @@ private:
                                      0, mirror_x, mirror_y, swap_xy);
     }
 
+    void InitializeBspEnv() {
+        ESP_ERROR_CHECK(bsp_env_initialize());
+        ESP_ERROR_CHECK(bsp_env_lcd_init());
+        ESP_ERROR_CHECK(bsp_env_camera_init());
+        ESP_ERROR_CHECK(bsp_env_pwm_init());
+    }
+
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
@@ -233,10 +197,8 @@ public:
         touch_button_(TOUCH_BUTTON_GPIO),
         volume_up_button_(VOLUME_UP_BUTTON_GPIO),
         volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
-        bsp_env_config_t bsp_env_config = CreateBspEnvConfig();
-        bsp_env_init(&bsp_env_, &bsp_env_config);
         InitializeGpba02b();
-        ESP_ERROR_CHECK(bsp_env_initialize(&bsp_env_));
+        InitializeBspEnv();
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
         InitializeButtons();

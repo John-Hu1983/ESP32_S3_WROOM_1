@@ -34,6 +34,12 @@
 #define PIDM_WAVE_POINT_COUNT 96U
 #define PIDM_TEXTEDIT_COUNT 9U
 
+/* Chart rendering tuning for large slope values. */
+#define PIDM_CHART_MIN_SPAN 20
+#define PIDM_CHART_MAX_SPAN 3000
+#define PIDM_SLOPE_CHART_SCALE 20U
+#define PIDM_SLOPE_CHART_CLIP_MAX 2000
+
 typedef struct
 {
 	lv_obj_t *screen;

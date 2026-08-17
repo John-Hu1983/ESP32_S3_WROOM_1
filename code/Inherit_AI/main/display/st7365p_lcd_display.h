@@ -28,10 +28,14 @@ public:
                           std::vector<lv_obj_t*>* out_tiles = nullptr);
 
     void SetupUI() override;
+    void SetTheme(Theme* theme) override;
     void SetChatMessage(const char* role, const char* content) override;
     void ClearChatMessages() override;
     void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
     void SetEmotion(const char* emotion) override;
+
+private:
+    void ApplyDesktopChromeLocked();
 };
 
 // Keep compatibility with existing LCD code while removing desktop-specific implementation.

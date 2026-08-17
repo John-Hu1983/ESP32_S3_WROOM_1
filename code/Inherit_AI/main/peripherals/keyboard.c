@@ -36,13 +36,13 @@ esp_err_t keyboard_init_obj(keyboard_t* keyboard, const keyboard_config_t* confi
     input_mode = keyboard->config.active_low ? GPBA02B_IO_INPUT_PULL_HIGH
                                              : GPBA02B_IO_INPUT_PULL_LOW;
 
-    if (gpba02b_config_io_input_mode(gpba02b_instance(), keyboard->config.up_key.port,
-                                     keyboard->config.up_key.pin, input_mode) != ESP_OK) {
+    if (gpba02b_config_io_input_mode(keyboard->config.up_key.port, keyboard->config.up_key.pin,
+                                     input_mode) != ESP_OK) {
         keyboard->initialized = false;
         return ESP_FAIL;
     }
 
-    if (gpba02b_config_io_input_mode(gpba02b_instance(), keyboard->config.down_key.port,
+    if (gpba02b_config_io_input_mode(keyboard->config.down_key.port,
                                      keyboard->config.down_key.pin, input_mode) != ESP_OK) {
         keyboard->initialized = false;
         return ESP_FAIL;
@@ -62,13 +62,13 @@ bool keyboard_read_level(const keyboard_t* keyboard, btn_level_e* level) {
         return false;
     }
 
-    if (gpba02b_read_io(gpba02b_instance(), keyboard->config.up_key.port,
-                        keyboard->config.up_key.pin, &up_level) != ESP_OK) {
+    if (gpba02b_read_io(keyboard->config.up_key.port, keyboard->config.up_key.pin, &up_level) !=
+        ESP_OK) {
         return false;
     }
 
-    if (gpba02b_read_io(gpba02b_instance(), keyboard->config.down_key.port,
-                        keyboard->config.down_key.pin, &down_level) != ESP_OK) {
+    if (gpba02b_read_io(keyboard->config.down_key.port, keyboard->config.down_key.pin,
+                        &down_level) != ESP_OK) {
         return false;
     }
 

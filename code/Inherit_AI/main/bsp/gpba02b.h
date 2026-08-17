@@ -7,6 +7,9 @@
 #include <driver/spi_master.h>
 #include <esp_err.h>
 
+#include <esp_log.h>
+#include <esp_rom_sys.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -57,54 +60,41 @@ typedef struct {
 
 typedef void (*gpba02b_host_irq_callback_t)(void* user_ctx);
 
-typedef struct gpba02b gpba02b_t;
-
-gpba02b_t* gpba02b_instance(void);
-
 void gpba02b_get_default_config(gpba02b_config_t* config);
 
-esp_err_t gpba02b_init(gpba02b_t* dev, const gpba02b_config_t* config);
-void gpba02b_deinit(gpba02b_t* dev);
+esp_err_t gpba02b_init(const gpba02b_config_t* config);
+void gpba02b_deinit(void);
 
-esp_err_t gpba02b_io_write(gpba02b_t* dev, gpba02b_port_t port, gpba02b_io_reg_t reg,
-                           uint8_t value);
-esp_err_t gpba02b_io_read(gpba02b_t* dev, gpba02b_port_t port, gpba02b_io_reg_t reg,
-                          uint8_t* value);
-esp_err_t gpba02b_write_io(gpba02b_t* dev, gpba02b_port_t port, uint8_t pin, bool level);
-esp_err_t gpba02b_read_io(gpba02b_t* dev, gpba02b_port_t port, uint8_t pin, bool* level);
-esp_err_t gpba02b_config_io_input_mode(gpba02b_t* dev, gpba02b_port_t port, uint8_t pin,
+esp_err_t gpba02b_write_io(gpba02b_port_t port, uint8_t pin, bool level);
+esp_err_t gpba02b_read_io(gpba02b_port_t port, uint8_t pin, bool* level);
+esp_err_t gpba02b_config_io_input_mode(gpba02b_port_t port, uint8_t pin,
                                        gpba02b_io_input_mode_t mode);
-esp_err_t gpba02b_config_io_output_mode(gpba02b_t* dev, gpba02b_port_t port, uint8_t pin,
+esp_err_t gpba02b_config_io_output_mode(gpba02b_port_t port, uint8_t pin,
                                         gpba02b_io_output_mode_t mode, bool level);
 
-esp_err_t gpba02b_config_io_input(gpba02b_t* dev, gpba02b_port_t port, uint8_t pin,
-                                  bool pull_up);
-esp_err_t gpba02b_config_io_output(gpba02b_t* dev, gpba02b_port_t port, uint8_t pin,
-                                   bool open_collector, bool level);
+esp_err_t gpba02b_config_io_input(gpba02b_port_t port, uint8_t pin, bool pull_up);
+esp_err_t gpba02b_config_io_output(gpba02b_port_t port, uint8_t pin, bool open_collector,
+                                   bool level);
 
-esp_err_t gpba02b_read_port_input(gpba02b_t* dev, gpba02b_port_t port, uint8_t* value);
+esp_err_t gpba02b_read_port_input(gpba02b_port_t port, uint8_t* value);
 
-esp_err_t gpba02b_enable_new_functions(gpba02b_t* dev);
-esp_err_t gpba02b_set_software_reset_disabled(gpba02b_t* dev, bool disabled);
+esp_err_t gpba02b_enable_new_functions(void);
+esp_err_t gpba02b_set_software_reset_disabled(bool disabled);
 
-esp_err_t gpba02b_pwm_set_clock_div(gpba02b_t* dev, uint8_t pa_div, uint8_t pc_div);
-esp_err_t gpba02b_pwm_enable_channels(gpba02b_t* dev, gpba02b_port_t port, uint8_t channel_mask);
-esp_err_t gpba02b_pwm_set_channel_duty(gpba02b_t* dev, gpba02b_port_t port, uint8_t channel,
-                                       uint8_t duty);
-esp_err_t gpba02b_current_sink_set(gpba02b_t* dev, gpba02b_port_t port, bool enable,
-                                   uint8_t current_level);
-esp_err_t gpba02b_pwm_with_current_sink_setup(gpba02b_t* dev, gpba02b_port_t port,
-                                              uint8_t channel_mask, uint8_t current_level);
+esp_err_t gpba02b_pwm_set_clock_div(uint8_t pa_div, uint8_t pc_div);
+esp_err_t gpba02b_pwm_enable_channels(gpba02b_port_t port, uint8_t channel_mask);
+esp_err_t gpba02b_pwm_set_channel_duty(gpba02b_port_t port, uint8_t channel, uint8_t duty);
+esp_err_t gpba02b_current_sink_set(gpba02b_port_t port, bool enable, uint8_t current_level);
+esp_err_t gpba02b_pwm_with_current_sink_setup(gpba02b_port_t port, uint8_t channel_mask,
+                                              uint8_t current_level);
 
-esp_err_t gpba02b_interrupt_configure(gpba02b_t* dev, uint8_t enable_mask,
-                                      uint8_t falling_edge_mask);
-esp_err_t gpba02b_interrupt_read(gpba02b_t* dev, uint8_t* flags, uint8_t* enable_mask);
-esp_err_t gpba02b_interrupt_clear(gpba02b_t* dev, uint8_t flags_mask);
+esp_err_t gpba02b_interrupt_configure(uint8_t enable_mask, uint8_t falling_edge_mask);
+esp_err_t gpba02b_interrupt_read(uint8_t* flags, uint8_t* enable_mask);
+esp_err_t gpba02b_interrupt_clear(uint8_t flags_mask);
 
-esp_err_t gpba02b_host_irq_install(gpba02b_t* dev,
-                                   const gpba02b_host_irq_gpio_config_t* config,
+esp_err_t gpba02b_host_irq_install(const gpba02b_host_irq_gpio_config_t* config,
                                    gpba02b_host_irq_callback_t callback, void* user_ctx);
-esp_err_t gpba02b_host_irq_uninstall(gpba02b_t* dev);
+esp_err_t gpba02b_host_irq_uninstall(void);
 
 #ifdef __cplusplus
 }

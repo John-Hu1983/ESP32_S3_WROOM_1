@@ -1,5 +1,4 @@
-﻿#include "bsp/bsp_env.h"
-#include "bsp/gpba02b.h"
+﻿#include "bsp/gpba02b.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
 #include "display/lcd_display.h"
@@ -25,44 +24,6 @@
 static constexpr uint32_t kKeyboardTaskStackSize = 3072;
 static constexpr UBaseType_t kKeyboardTaskPriority = 2;
 
-static bsp_env_config_t CreateBspEnvConfig() {
-    bsp_env_config_t config = {};
-    bsp_env_get_default_config(&config);
-
-    config.power_lock_pin = {POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN};
-    config.pdm_enable_pin = {PDM_EN_PORT, PDM_EN_PIN};
-    config.i2s_enable_pin = {I2S_EN_PORT, I2S_EN_PIN};
-    config.pidm_enable_pin = {PIDM_EN_PORT, PIDM_EN_PIN};
-    config.button_up_pin = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
-    config.button_down_pin = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
-    config.lcd_reset_pin = {LCD_IO_RESET_PORT, LCD_IO_RESET_PIN};
-
-#if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \
-    defined(CAM_IO_PWDN_PIN)
-    config.camera_present = true;
-    config.camera_reset_pin = {CAM_IO_RESET_PORT, CAM_IO_RESET_PIN};
-    config.camera_pwdn_pin = {CAM_IO_PWDN_PORT, CAM_IO_PWDN_PIN};
-#if defined(CAM_IO_LIGHT_PORT) && defined(CAM_IO_LIGHT_PIN)
-    config.camera_light_pin = {CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN};
-#endif
-#endif
-
-#if defined(RC522_RST_PORT) && defined(RC522_RST_PIN)
-    config.rc522_present = true;
-    config.rc522_reset_pin = {RC522_RST_PORT, RC522_RST_PIN};
-#endif
-
-    config.pwm_enable_mask_port_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
-    config.pwm_enable_mask_port_c = static_cast<uint8_t>(
-        (1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) | (1U << PWM_GPBA02B_10_PIN) |
-        (1U << PWM_GPBA02B_11_PIN) | (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
-    config.pwm_clock_div_port_a = PWM_GPBA02B_PA_CLOCK_DIV;
-    config.pwm_clock_div_port_c = PWM_GPBA02B_PC_CLOCK_DIV;
-    config.pwm_duty = PWM_GPBA02B_DUTY_10_PERCENT;
-
-    return config;
-}
-
 static keyboard_config_t CreateKeyboardConfig() {
     keyboard_config_t config = {};
     keyboard_get_default_config(&config);
@@ -78,8 +39,6 @@ private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
-    gpba02b_t* gpba02b_ = gpba02b_instance();
-    bsp_env_t bsp_env_;
     keyboard_t keyboard_ = {};
     btn_scan_s keyboard_scan_ = {};
     TaskHandle_t keyboard_task_handle_ = nullptr;
@@ -152,7 +111,7 @@ private:
         gpba02b_config.clock_hz = GPBA02B_DEFAULT_CLOCK_HZ;
         gpba02b_config.device_id = GPBA02B_DEVICE_ID;
 
-        esp_err_t err = gpba02b_init(gpba02b_, &gpba02b_config);
+        esp_err_t err = gpba02b_init(&gpba02b_config);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to initialize GPBA02B: %s", esp_err_to_name(err));
             return err;
@@ -217,9 +176,48 @@ private:
     }
 
     void InitializeBspEnv() {
-        bsp_env_config_t bsp_env_config = CreateBspEnvConfig();
-        bsp_env_init(&bsp_env_, &bsp_env_config);
-        ESP_ERROR_CHECK(bsp_env_initialize(&bsp_env_));
+        auto configure_output = [](gpba02b_port_t port, uint8_t pin, bool level) {
+            ESP_ERROR_CHECK(
+                gpba02b_config_io_output_mode(port, pin, GPBA02B_IO_OUTPUT_PUSH_PULL, level));
+            ESP_ERROR_CHECK(gpba02b_write_io(port, pin, level));
+        };
+
+        configure_output(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, true);
+        configure_output(PDM_EN_PORT, PDM_EN_PIN, false);
+        configure_output(I2S_EN_PORT, I2S_EN_PIN, false);
+        configure_output(PIDM_EN_PORT, PIDM_EN_PIN, false);
+        configure_output(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, true);
+
+#if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \
+    defined(CAM_IO_PWDN_PIN)
+        configure_output(CAM_IO_RESET_PORT, CAM_IO_RESET_PIN, true);
+        configure_output(CAM_IO_PWDN_PORT, CAM_IO_PWDN_PIN, true);
+#if defined(CAM_IO_LIGHT_PORT) && defined(CAM_IO_LIGHT_PIN)
+        configure_output(CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN, false);
+#endif
+#endif
+
+#if defined(RC522_RST_PORT) && defined(RC522_RST_PIN)
+        configure_output(RC522_RST_PORT, RC522_RST_PIN, true);
+#endif
+
+        ESP_ERROR_CHECK(gpba02b_pwm_set_clock_div(PWM_GPBA02B_PA_CLOCK_DIV, PWM_GPBA02B_PC_CLOCK_DIV));
+
+        const uint8_t pwm_mask_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
+        const uint8_t pwm_mask_c = static_cast<uint8_t>(
+            (1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) | (1U << PWM_GPBA02B_10_PIN) |
+            (1U << PWM_GPBA02B_11_PIN) | (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
+
+        for (uint8_t channel = 0; channel < 8; ++channel) {
+            if ((pwm_mask_a & (1U << channel)) != 0) {
+                ESP_ERROR_CHECK(gpba02b_pwm_set_channel_duty(GPBA02B_PORT_A, channel,
+                                                             PWM_GPBA02B_DUTY_10_PERCENT));
+            }
+            if ((pwm_mask_c & (1U << channel)) != 0) {
+                ESP_ERROR_CHECK(gpba02b_pwm_set_channel_duty(GPBA02B_PORT_C, channel,
+                                                             PWM_GPBA02B_DUTY_10_PERCENT));
+            }
+        }
     }
 
     void InitializeKeyboard() {

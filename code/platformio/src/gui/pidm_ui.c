@@ -451,6 +451,24 @@ static void _pidm_push_point(int16_t *points, int32_t sample)
 }
 
 /*
+ * brief: Scale and clip raw slope value for chart readability.
+ * input: slope_raw - raw rise slope in ADC/ms.
+ * output: scaled/clipped slope sample for line chart.
+ */
+static int32_t _pidm_scale_slope_for_chart(uint32_t slope_raw)
+{
+    uint32_t scaled;
+
+    scaled = (slope_raw + (PIDM_SLOPE_CHART_SCALE / 2U)) / PIDM_SLOPE_CHART_SCALE;
+    if (scaled > PIDM_SLOPE_CHART_CLIP_MAX)
+    {
+        scaled = PIDM_SLOPE_CHART_CLIP_MAX;
+    }
+
+    return (int32_t)scaled;
+}
+
+/*
  * brief: Apply adaptive Y-axis range for chart based on current points.
  * input: chart - target chart; points - point array backing the series.
  * output: None.
@@ -490,15 +508,23 @@ static void _pidm_apply_chart_range(lv_obj_t *chart, const int16_t *points)
     }
 
     span = max_value - min_value;
-    if (span < 8)
+    if (span < PIDM_CHART_MIN_SPAN)
     {
         center = (max_value + min_value) / 2;
-        min_value = center - 4;
-        max_value = center + 4;
+        min_value = center - (PIDM_CHART_MIN_SPAN / 2);
+        max_value = center + (PIDM_CHART_MIN_SPAN / 2);
+        span = max_value - min_value;
+    }
+    else if (span > PIDM_CHART_MAX_SPAN)
+    {
+        /* Keep window centered near latest point when one spike dominates range. */
+        center = points[PIDM_WAVE_POINT_COUNT - 1U];
+        min_value = center - (PIDM_CHART_MAX_SPAN / 2);
+        max_value = center + (PIDM_CHART_MAX_SPAN / 2);
         span = max_value - min_value;
     }
 
-    margin = span / 5;
+    margin = span / 8;
     if (margin < 2)
     {
         margin = 2;
@@ -621,13 +647,16 @@ static void _pidm_refresh_metrics(pidm_app_ctx_t *ctx, const pidm_det_feature_s 
  */
 static void _pidm_refresh_charts(pidm_app_ctx_t *ctx, const pidm_det_feature_s *feature)
 {
+    int32_t slope_chart_sample;
+
     if ((ctx == NULL) || (feature == NULL))
     {
         return;
     }
 
     _pidm_push_point(ctx->dpk_points, feature->peak_delta_raw);
-    _pidm_push_point(ctx->slope_points, (int32_t)feature->rise_slope_adc_per_ms);
+    slope_chart_sample = _pidm_scale_slope_for_chart(feature->rise_slope_adc_per_ms);
+    _pidm_push_point(ctx->slope_points, slope_chart_sample);
 
     _pidm_apply_chart_range(ctx->chart_dpk, ctx->dpk_points);
     _pidm_apply_chart_range(ctx->chart_slope, ctx->slope_points);
@@ -1131,7 +1160,7 @@ lv_obj_t *pidm_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 
     if (!_pidm_create_wave_card(chart_grid,
                                 1,
-                                "SLOPE",
+                                "SLOPE/20",
                                 lv_color_hex(PIDM_CHART_SLOPE_COLOR_HEX),
                                 ctx->slope_points,
                                 &ctx->chart_slope,

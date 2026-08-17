@@ -4,6 +4,7 @@
 #include <esp_lvgl_port.h>
 #include <esp_timer.h>
 #include <lvgl.h>
+#include <material_symbols.h>
 #include <string.h>
 
 #define TAG "service_desktop"
@@ -11,14 +12,23 @@
 #define DESKTOP_PRIMARY_KEY 0
 #define DESKTOP_SECONDARY_KEY 1
 #define DESKTOP_AI_SERVICE_INDEX 1
+#define DESKTOP_NO_SELECTION -1
 
 #define DESKTOP_GRID_COLS 3
 #define DESKTOP_GRID_ROWS 4
 #define DESKTOP_CONTROL_COUNT (DESKTOP_GRID_COLS * DESKTOP_GRID_ROWS)
 
-#define DESKTOP_LAYER_MARGIN_X 8
-#define DESKTOP_LAYER_TOP_Y 28
-#define DESKTOP_LAYER_BOTTOM_RESERVED 30
+#define DESKTOP_LAYER_MARGIN_X 0
+#define DESKTOP_LAYER_PAD 2
+#define DESKTOP_GRID_GAP 8
+#define DESKTOP_TILE_MARGIN 3
+
+#define UBUNTU_SURFACE_HEX 0x1D1526
+#define UBUNTU_CARD_HEX 0x5A3A57
+#define UBUNTU_ACCENT_HEX 0xE95420
+#define UBUNTU_TEXT_HEX 0xF7F7F7
+
+LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 
 #define DESKTOP_SELECT_NOTIFICATION_MS 800
 #define DESKTOP_ACTION_NOTIFICATION_MS 900
@@ -48,9 +58,10 @@ static const service_item_t* k_services[SERVICE_APP_COUNT] = {
 };
 
 static const char* k_desktop_icons[DESKTOP_CONTROL_COUNT] = {
-    LV_SYMBOL_VOLUME_MID, LV_SYMBOL_IMAGE,      LV_SYMBOL_AUDIO,   LV_SYMBOL_VIDEO,
-    LV_SYMBOL_WIFI,       LV_SYMBOL_BLUETOOTH,  LV_SYMBOL_SD_CARD, LV_SYMBOL_VOLUME_MAX,
-    LV_SYMBOL_BELL,       LV_SYMBOL_REFRESH,    LV_SYMBOL_SETTINGS, LV_SYMBOL_POWER,
+    MATERIAL_SYMBOLS_PHOTO_CAMERA, MATERIAL_SYMBOLS_IMAGE,   MATERIAL_SYMBOLS_MUSIC_NOTE,
+    MATERIAL_SYMBOLS_EXPLORE,      MATERIAL_SYMBOLS_WIFI,    MATERIAL_SYMBOLS_BLUETOOTH,
+    MATERIAL_SYMBOLS_SD_CARD,      MATERIAL_SYMBOLS_MIC,     MATERIAL_SYMBOLS_MEMORY,
+    MATERIAL_SYMBOLS_REFRESH,      MATERIAL_SYMBOLS_SETTINGS, MATERIAL_SYMBOLS_POWER_SETTINGS_NEW,
 };
 
 static lv_coord_t k_desktop_col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
@@ -62,11 +73,13 @@ const service_item_t g_service_desktop = {
     0, "Desktop", "Desktop", "System ready. Select app.", 0, 0,
 };
 
-static int first_app_index(void) { return service_desktop_get_count() > 1 ? 1 : 0; }
+static int first_app_index(void) {
+    return service_desktop_get_count() > 1 ? 1 : DESKTOP_NO_SELECTION;
+}
 
 static int last_app_index(void) {
     int count = service_desktop_get_count();
-    return count > 0 ? count - 1 : 0;
+    return count > 1 ? count - 1 : DESKTOP_NO_SELECTION;
 }
 
 static int service_index_to_tile_index(int service_index) {
@@ -83,9 +96,19 @@ static void normalize_selected(service_desktop_runtime_t* runtime) {
 
     first_index = first_app_index();
     last_index = last_app_index();
+
+    if (first_index == DESKTOP_NO_SELECTION || last_index == DESKTOP_NO_SELECTION) {
+        runtime->state.selected_service_index = DESKTOP_NO_SELECTION;
+        return;
+    }
+
+    if (runtime->state.selected_service_index == DESKTOP_NO_SELECTION) {
+        return;
+    }
+
     if (runtime->state.selected_service_index < first_index ||
         runtime->state.selected_service_index > last_index) {
-        runtime->state.selected_service_index = first_index;
+        runtime->state.selected_service_index = DESKTOP_NO_SELECTION;
     }
 }
 
@@ -100,7 +123,11 @@ static void desktop_apply_selection_locked(service_desktop_runtime_t* runtime) {
     }
 
     normalize_selected(runtime);
-    selected_tile_index = service_index_to_tile_index(runtime->state.selected_service_index);
+    selected_tile_index = -1;
+    if (runtime->state.selected_service_index != DESKTOP_NO_SELECTION) {
+        selected_tile_index = service_index_to_tile_index(runtime->state.selected_service_index);
+    }
+
     for (i = 0; i < runtime->desktop_tile_count; ++i) {
         lv_obj_t* tile = (lv_obj_t*)runtime->desktop_tiles[i];
         if (tile == 0 || !lv_obj_is_valid(tile)) {
@@ -150,6 +177,52 @@ static void desktop_set_visible(service_desktop_runtime_t* runtime, bool visible
     lvgl_port_unlock();
 }
 
+static void desktop_resolve_bar_reserve(lv_obj_t* screen, lv_coord_t screen_width,
+                                        lv_coord_t screen_height, lv_coord_t* top_reserved,
+                                        lv_coord_t* bottom_reserved) {
+    lv_coord_t top = 0;
+    lv_coord_t bottom = 0;
+    uint32_t child_count;
+    uint32_t i;
+
+    if (screen == 0 || top_reserved == 0 || bottom_reserved == 0) {
+        return;
+    }
+
+    child_count = lv_obj_get_child_cnt(screen);
+    for (i = 0; i < child_count; ++i) {
+        lv_obj_t* child = lv_obj_get_child(screen, i);
+        lv_coord_t w;
+        lv_coord_t h;
+        lv_coord_t y;
+
+        if (child == 0 || !lv_obj_is_valid(child) || lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) {
+            continue;
+        }
+
+        w = lv_obj_get_width(child);
+        h = lv_obj_get_height(child);
+        y = lv_obj_get_y(child);
+
+        if (w < (screen_width * 3) / 4) {
+            continue;
+        }
+        if (h <= 0 || h >= (screen_height / 2)) {
+            continue;
+        }
+
+        if (y <= 1 && h > top) {
+            top = h;
+        }
+        if ((y + h) >= (screen_height - 1) && h > bottom) {
+            bottom = h;
+        }
+    }
+
+    *top_reserved = top;
+    *bottom_reserved = bottom;
+}
+
 static void desktop_create_controls(service_desktop_runtime_t* runtime) {
     lv_display_t* display;
     lv_obj_t* layer;
@@ -157,6 +230,9 @@ static void desktop_create_controls(service_desktop_runtime_t* runtime) {
     lv_coord_t screen_height;
     lv_coord_t layer_width;
     lv_coord_t layer_height;
+    lv_obj_t* screen;
+    lv_coord_t top_reserved;
+    lv_coord_t bottom_reserved;
     int i;
     int control_count;
 
@@ -191,28 +267,38 @@ static void desktop_create_controls(service_desktop_runtime_t* runtime) {
 
     screen_width = lv_display_get_horizontal_resolution(display);
     screen_height = lv_display_get_vertical_resolution(display);
+    screen = lv_screen_active();
+    top_reserved = 0;
+    bottom_reserved = 0;
+    desktop_resolve_bar_reserve(screen, screen_width, screen_height, &top_reserved, &bottom_reserved);
+
     layer_width = screen_width - (DESKTOP_LAYER_MARGIN_X * 2);
-    layer_height = screen_height - DESKTOP_LAYER_TOP_Y - DESKTOP_LAYER_BOTTOM_RESERVED;
+    layer_height = screen_height - top_reserved - bottom_reserved;
     if (layer_width < 80) {
         layer_width = screen_width;
     }
-    if (layer_height < 80) {
-        layer_height = screen_height / 2;
+    if (layer_height < 96) {
+        layer_height = screen_height;
+        top_reserved = 0;
+        bottom_reserved = 0;
     }
 
-    layer = lv_obj_create(lv_screen_active());
+    layer = lv_obj_create(screen);
     runtime->desktop_layer = layer;
     runtime->desktop_tile_count = 0;
     memset(runtime->desktop_tiles, 0, sizeof(runtime->desktop_tiles));
 
     lv_obj_set_size(layer, layer_width, layer_height);
-    lv_obj_set_pos(layer, DESKTOP_LAYER_MARGIN_X, DESKTOP_LAYER_TOP_Y);
-    lv_obj_set_style_bg_opa(layer, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(layer, 0, 0);
-    lv_obj_set_style_radius(layer, 0, 0);
-    lv_obj_set_style_pad_all(layer, 4, 0);
-    lv_obj_set_style_pad_row(layer, 4, 0);
-    lv_obj_set_style_pad_column(layer, 4, 0);
+    lv_obj_set_pos(layer, DESKTOP_LAYER_MARGIN_X, top_reserved);
+    lv_obj_set_style_bg_opa(layer, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(layer, lv_color_hex(UBUNTU_SURFACE_HEX), 0);
+    lv_obj_set_style_border_width(layer, 1, 0);
+    lv_obj_set_style_border_color(layer, lv_color_hex(UBUNTU_ACCENT_HEX), 0);
+    lv_obj_set_style_border_opa(layer, LV_OPA_30, 0);
+    lv_obj_set_style_radius(layer, 8, 0);
+    lv_obj_set_style_pad_all(layer, DESKTOP_LAYER_PAD, 0);
+    lv_obj_set_style_pad_row(layer, DESKTOP_GRID_GAP, 0);
+    lv_obj_set_style_pad_column(layer, DESKTOP_GRID_GAP, 0);
     lv_obj_set_scrollbar_mode(layer, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(layer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_grid_dsc_array(layer, k_desktop_col_dsc, k_desktop_row_dsc);
@@ -233,25 +319,27 @@ static void desktop_create_controls(service_desktop_runtime_t* runtime) {
 
         lv_obj_set_grid_cell(tile, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
         lv_obj_set_style_radius(tile, 10, 0);
-        lv_obj_set_style_bg_color(tile, lv_color_hex(0x23272A), LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(tile, lv_color_hex(0x406A8F), LV_STATE_CHECKED);
+        lv_obj_set_style_bg_color(tile, lv_color_hex(UBUNTU_CARD_HEX), LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(tile, lv_color_hex(UBUNTU_ACCENT_HEX), LV_STATE_CHECKED);
         lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(tile, 1, LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(tile, lv_color_hex(0x9AA3AB), LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(tile, lv_color_hex(UBUNTU_ACCENT_HEX), LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(tile, lv_color_hex(0xFFFFFF), LV_STATE_CHECKED);
-        lv_obj_set_style_border_opa(tile, LV_OPA_30, LV_STATE_DEFAULT);
+        lv_obj_set_style_border_opa(tile, LV_OPA_40, LV_STATE_DEFAULT);
         lv_obj_set_style_border_opa(tile, LV_OPA_COVER, LV_STATE_CHECKED);
-        lv_obj_set_style_pad_all(tile, 4, 0);
+        lv_obj_set_style_margin_all(tile, DESKTOP_TILE_MARGIN, 0);
+        lv_obj_set_style_pad_all(tile, 2, 0);
         lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
 
         icon_label = lv_label_create(tile);
         lv_label_set_text(icon_label, k_desktop_icons[i]);
-        lv_obj_set_style_text_color(icon_label, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_color(icon_label, lv_color_hex(UBUNTU_TEXT_HEX), 0);
+        lv_obj_set_style_text_font(icon_label, &BUILTIN_ICON_FONT, 0);
         lv_obj_align(icon_label, LV_ALIGN_TOP_MID, 0, 2);
 
         text_label = lv_label_create(tile);
         lv_label_set_text(text_label, name);
-        lv_obj_set_style_text_color(text_label, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_color(text_label, lv_color_hex(UBUNTU_TEXT_HEX), 0);
         lv_obj_set_style_text_align(text_label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_align(text_label, LV_ALIGN_BOTTOM_MID, 0, -2);
 
@@ -376,7 +464,9 @@ static void process_home_key(service_desktop_runtime_t* runtime, uint8_t key_ind
     last_index = last_app_index();
 
     if (key_index == DESKTOP_PRIMARY_KEY && event_type == SERVICE_KEY_EVENT_CLICK) {
-        if (runtime->state.selected_service_index <= first_index) {
+        if (runtime->state.selected_service_index == DESKTOP_NO_SELECTION) {
+            runtime->state.selected_service_index = first_index;
+        } else if (runtime->state.selected_service_index <= first_index) {
             runtime->state.selected_service_index = last_index;
         } else {
             runtime->state.selected_service_index--;
@@ -386,7 +476,9 @@ static void process_home_key(service_desktop_runtime_t* runtime, uint8_t key_ind
     }
 
     if (key_index == DESKTOP_SECONDARY_KEY && event_type == SERVICE_KEY_EVENT_CLICK) {
-        if (runtime->state.selected_service_index >= last_index) {
+        if (runtime->state.selected_service_index == DESKTOP_NO_SELECTION) {
+            runtime->state.selected_service_index = first_index;
+        } else if (runtime->state.selected_service_index >= last_index) {
             runtime->state.selected_service_index = first_index;
         } else {
             runtime->state.selected_service_index++;
@@ -397,6 +489,9 @@ static void process_home_key(service_desktop_runtime_t* runtime, uint8_t key_ind
 
     if ((key_index == DESKTOP_PRIMARY_KEY || key_index == DESKTOP_SECONDARY_KEY) &&
         event_type == SERVICE_KEY_EVENT_LONG_PRESS) {
+        if (runtime->state.selected_service_index == DESKTOP_NO_SELECTION) {
+            return;
+        }
         runtime->state.current_service_index = runtime->state.selected_service_index;
         runtime->state.last_click_ms[0] = 0;
         runtime->state.last_click_ms[1] = 0;
@@ -479,7 +574,7 @@ void service_desktop_runtime_init(service_desktop_runtime_t* runtime) {
 
     memset(runtime, 0, sizeof(*runtime));
     runtime->state.current_service_index = -1;
-    runtime->state.selected_service_index = first_app_index();
+    runtime->state.selected_service_index = DESKTOP_NO_SELECTION;
 }
 
 esp_err_t service_desktop_task_start(service_desktop_runtime_t* runtime,
