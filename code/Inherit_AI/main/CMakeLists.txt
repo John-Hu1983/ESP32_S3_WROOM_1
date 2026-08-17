@@ -20,19 +20,19 @@ set(SOURCES "audio/audio_codec.cc"
             "display/text_glyph.cc"
             "display/lcd_display.cc"
             "display/st7365p_lcd_display.cc"
-            "service/service_desktop.c"
-            "service/service_ai.c"
-            "service/service_wifi.c"
-            "service/service_scan.c"
-            "service/service_link.c"
-            "service/service_offline.c"
-            "service/service_cell.c"
-            "service/service_signal.c"
-            "service/service_node.c"
-            "service/service_debug.c"
-            "service/service_tools.c"
-            "service/service_mute.c"
-            "service/service_power.c"
+            "service/desktop.c"
+            "service/ui_ai.c"
+            "service/ui_wifi.c"
+            "service/ui_scan.c"
+            "service/ui_link.c"
+            "service/ui_offline.c"
+            "service/ui_cell.c"
+            "service/ui_signal.c"
+            "service/ui_node.c"
+            "service/ui_debug.c"
+            "service/ui_tools.c"
+            "service/ui_mute.c"
+            "service/ui_power.c"
             "display/oled_display.cc"
             "display/lvgl_display/lvgl_display.cc"
             "display/emote_display.cc"
@@ -113,12 +113,12 @@ if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI)
     set(BUILTIN_ICON_FONT font_material_symbols_14_1)
 elseif(CONFIG_BOARD_TYPE_ESP32_S3_WROOM_1_N16R8)
     set(BOARD_DIR "esp32-s3-wroom-1-n16r8")
-    set(BUILTIN_TEXT_FONT font_noto_sans_basic_14_1)
-    set(BUILTIN_ICON_FONT font_material_symbols_14_1)
+    set(BUILTIN_TEXT_FONT font_noto_sans_basic_20_4)
+    set(BUILTIN_ICON_FONT font_material_symbols_20_4)
 elseif(CONFIG_BOARD_TYPE_ESP32_S3_WROOM_1_N8R2)
     set(BOARD_DIR "esp32-s3-wroom-1-n8r2")
-    set(BUILTIN_TEXT_FONT font_noto_sans_basic_14_1)
-    set(BUILTIN_ICON_FONT font_material_symbols_14_1)
+    set(BUILTIN_TEXT_FONT font_noto_sans_basic_20_4)
+    set(BUILTIN_ICON_FONT font_material_symbols_20_4)
 elseif(CONFIG_BOARD_TYPE_BREAD_COMPACT_ML307)
     set(BOARD_DIR "bread-compact-ml307")
     set(BUILTIN_TEXT_FONT font_noto_sans_basic_14_1)

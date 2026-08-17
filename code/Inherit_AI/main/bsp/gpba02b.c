@@ -80,12 +80,32 @@ static esp_err_t gpba02b_host_irq_install_with_dev(gpba02b_t* dev,
                                                    void* user_ctx);
 static esp_err_t gpba02b_host_irq_uninstall_with_dev(gpba02b_t* dev);
 
+/* ==================== private functions (static) ==================== */
+
+/*
+ * brief  : Validate whether the port enum is supported by GPBA02B.
+ * input  : port - Candidate IO port value.
+ * output : true if the port is valid; otherwise false.
+ * type   : private
+ */
 static bool gpba02b_is_port_valid(gpba02b_port_t port) { return port <= GPBA02B_PORT_C; }
 
+/*
+ * brief  : Check whether a port supports PWM channels.
+ * input  : port - Candidate IO port value.
+ * output : true for PWM-capable ports; otherwise false.
+ * type   : private
+ */
 static bool gpba02b_is_pwm_port(gpba02b_port_t port) {
     return port == GPBA02B_PORT_A || port == GPBA02B_PORT_C;
 }
 
+/*
+ * brief  : Ensure the singleton device has been initialized.
+ * input  : dev - Device context pointer.
+ * output : ESP_OK if initialized; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_ensure_initialized(gpba02b_t* dev) {
     if (dev == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -96,14 +116,33 @@ static esp_err_t gpba02b_ensure_initialized(gpba02b_t* dev) {
     return ESP_OK;
 }
 
+/*
+ * brief  : Build a write command byte for one register access.
+ * input  : dev - Device context pointer; reg_addr - 6-bit register address.
+ * output : Encoded SPI command byte for write operation.
+ * type   : private
+ */
 static uint8_t gpba02b_make_write_command(const gpba02b_t* dev, uint8_t reg_addr) {
     return (uint8_t)(0x80 | ((dev->device_id & 0x01) << 6) | (reg_addr & 0x3F));
 }
 
+/*
+ * brief  : Build a read command byte for one register access.
+ * input  : dev - Device context pointer; reg_addr - 6-bit register address.
+ * output : Encoded SPI command byte for read operation.
+ * type   : private
+ */
 static uint8_t gpba02b_make_read_command(const gpba02b_t* dev, uint8_t reg_addr) {
     return (uint8_t)(((dev->device_id & 0x01) << 6) | (reg_addr & 0x3F));
 }
 
+/*
+ * brief  : Transfer one 2-byte command/data frame over SPI.
+ * input  : dev - Device context; command - SPI command byte; write_data - data to send;
+ *          read_data - optional output pointer for received byte.
+ * output : ESP_OK on success; SPI error code on failure.
+ * type   : private
+ */
 static esp_err_t gpba02b_transfer_frame(gpba02b_t* dev, uint8_t command, uint8_t write_data,
                                         uint8_t* read_data) {
     uint8_t tx_buffer[2] = {command, write_data};
@@ -125,6 +164,12 @@ static esp_err_t gpba02b_transfer_frame(gpba02b_t* dev, uint8_t command, uint8_t
     return ESP_OK;
 }
 
+/*
+ * brief  : Map abstract IO register kind to GPBA02B register base address.
+ * input  : reg - Logical IO register group.
+ * output : Register base address or 0xFF if unsupported.
+ * type   : private
+ */
 static uint8_t gpba02b_io_register_base(gpba02b_io_reg_t reg) {
     switch (reg) {
         case GPBA02B_IO_REG_BUFFER:
@@ -138,6 +183,12 @@ static uint8_t gpba02b_io_register_base(gpba02b_io_reg_t reg) {
     }
 }
 
+/*
+ * brief  : ISR trampoline that forwards host GPIO interrupt callback.
+ * input  : arg - Device context passed when installing ISR.
+ * output : None.
+ * type   : private
+ */
 static void IRAM_ATTR gpba02b_host_irq_handler(void* arg) {
     gpba02b_t* dev = (gpba02b_t*)arg;
     if (dev != NULL && dev->host_irq_callback != NULL) {
@@ -145,6 +196,12 @@ static void IRAM_ATTR gpba02b_host_irq_handler(void* arg) {
     }
 }
 
+/*
+ * brief  : Write one GPBA02B register.
+ * input  : dev - Device context; reg_addr - register address; value - data byte.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_write_reg(gpba02b_t* dev, uint8_t reg_addr, uint8_t value) {
     esp_err_t err = gpba02b_ensure_initialized(dev);
     if (err != ESP_OK) {
@@ -154,6 +211,12 @@ static esp_err_t gpba02b_write_reg(gpba02b_t* dev, uint8_t reg_addr, uint8_t val
     return gpba02b_transfer_frame(dev, gpba02b_make_write_command(dev, reg_addr), value, NULL);
 }
 
+/*
+ * brief  : Read one GPBA02B register.
+ * input  : dev - Device context; reg_addr - register address; value - output byte pointer.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_read_reg(gpba02b_t* dev, uint8_t reg_addr, uint8_t* value) {
     if (value == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -167,6 +230,13 @@ static esp_err_t gpba02b_read_reg(gpba02b_t* dev, uint8_t reg_addr, uint8_t* val
     return gpba02b_transfer_frame(dev, gpba02b_make_read_command(dev, reg_addr), 0x00, value);
 }
 
+/*
+ * brief  : Apply bitwise IO operation (write/and/or) on one IO register bank.
+ * input  : dev - Device context; port - Port id; reg - IO register group;
+ *          operation - operation opcode offset; value - operation mask.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_io_update(gpba02b_t* dev, gpba02b_port_t port, gpba02b_io_reg_t reg,
                                    uint8_t operation, uint8_t value) {
     if (!gpba02b_is_port_valid(port)) {
@@ -181,16 +251,35 @@ static esp_err_t gpba02b_io_update(gpba02b_t* dev, gpba02b_port_t port, gpba02b_
     return gpba02b_write_reg(dev, (uint8_t)(base + operation + port), value);
 }
 
+/*
+ * brief  : Clear selected bits in one IO register group.
+ * input  : dev - Device context; port - Port id; reg - IO register group; value - clear mask.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_io_and(gpba02b_t* dev, gpba02b_port_t port, gpba02b_io_reg_t reg,
                                 uint8_t value) {
     return gpba02b_io_update(dev, port, reg, kDefaultRegs.kOpAnd, value);
 }
 
+/*
+ * brief  : Set selected bits in one IO register group.
+ * input  : dev - Device context; port - Port id; reg - IO register group; value - set mask.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_io_or(gpba02b_t* dev, gpba02b_port_t port, gpba02b_io_reg_t reg,
                                uint8_t value) {
     return gpba02b_io_update(dev, port, reg, kDefaultRegs.kOpOr, value);
 }
 
+/*
+ * brief  : Set or clear one bit in a selected IO register group.
+ * input  : dev - Device context; port - Port id; reg - IO register group;
+ *          pin - Pin index 0..7; bit_value - target bit value.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_config_io_reg_bit(gpba02b_t* dev, gpba02b_port_t port,
                                            gpba02b_io_reg_t reg, uint8_t pin, bool bit_value) {
     if (pin > 7) {
@@ -205,6 +294,14 @@ static esp_err_t gpba02b_config_io_reg_bit(gpba02b_t* dev, gpba02b_port_t port,
     return gpba02b_io_and(dev, port, reg, (uint8_t)(~bit_mask));
 }
 
+/* ==================== public functions ==================== */
+
+/*
+ * brief  : Fill a GPBA02B config structure with default values.
+ * input  : config - Output configuration structure pointer.
+ * output : None.
+ * type   : public
+ */
 void gpba02b_get_default_config(gpba02b_config_t* config) {
     if (config == NULL) {
         return;
@@ -220,6 +317,12 @@ void gpba02b_get_default_config(gpba02b_config_t* config) {
     config->queue_size = 4;
 }
 
+/*
+ * brief  : Initialize GPBA02B singleton and attach it to SPI bus.
+ * input  : config - Initialization parameters.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_init(const gpba02b_config_t* config) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -288,6 +391,12 @@ esp_err_t gpba02b_init(const gpba02b_config_t* config) {
     return ESP_OK;
 }
 
+/*
+ * brief  : Deinitialize GPBA02B singleton and release SPI resources.
+ * input  : None.
+ * output : None.
+ * type   : public
+ */
 void gpba02b_deinit(void) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -314,6 +423,12 @@ void gpba02b_deinit(void) {
     dev->od_pmos_mask[2] = 0;
 }
 
+/*
+ * brief  : Write logic level to a single IO pin.
+ * input  : port - Port id; pin - Pin index 0..7; level - Output level.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_write_io(gpba02b_port_t port, uint8_t pin, bool level) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -334,6 +449,12 @@ esp_err_t gpba02b_write_io(gpba02b_port_t port, uint8_t pin, bool level) {
     return gpba02b_config_io_reg_bit(dev, port, GPBA02B_IO_REG_BUFFER, pin, level);
 }
 
+/*
+ * brief  : Read logic level from a single IO pin.
+ * input  : port - Port id; pin - Pin index 0..7; level - Output level pointer.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_read_io(gpba02b_port_t port, uint8_t pin, bool* level) {
     if (level == NULL || pin > 7 || !gpba02b_is_port_valid(port)) {
         return ESP_ERR_INVALID_ARG;
@@ -349,6 +470,12 @@ esp_err_t gpba02b_read_io(gpba02b_port_t port, uint8_t pin, bool* level) {
     return ESP_OK;
 }
 
+/*
+ * brief  : Configure one IO pin as input with selected pull mode.
+ * input  : port - Port id; pin - Pin index 0..7; mode - Input mode enum.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_config_io_input_mode(gpba02b_port_t port, uint8_t pin,
                                        gpba02b_io_input_mode_t mode) {
     gpba02b_t* dev = &s_gpba02b;
@@ -396,6 +523,13 @@ esp_err_t gpba02b_config_io_input_mode(gpba02b_port_t port, uint8_t pin,
     }
 }
 
+/*
+ * brief  : Configure one IO pin as output with selected output mode.
+ * input  : port - Port id; pin - Pin index 0..7; mode - Output mode enum;
+ *          level - Initial output level.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_config_io_output_mode(gpba02b_port_t port, uint8_t pin,
                                         gpba02b_io_output_mode_t mode, bool level) {
     gpba02b_t* dev = &s_gpba02b;
@@ -458,11 +592,24 @@ esp_err_t gpba02b_config_io_output_mode(gpba02b_port_t port, uint8_t pin,
     }
 }
 
+/*
+ * brief  : Configure one IO pin as input using compatibility API.
+ * input  : port - Port id; pin - Pin index 0..7; pull_up - true for pull-high.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_config_io_input(gpba02b_port_t port, uint8_t pin, bool pull_up) {
     return gpba02b_config_io_input_mode(
         port, pin, pull_up ? GPBA02B_IO_INPUT_PULL_HIGH : GPBA02B_IO_INPUT_PULL_LOW);
 }
 
+/*
+ * brief  : Configure one IO pin as output using compatibility API.
+ * input  : port - Port id; pin - Pin index 0..7; open_collector - compatibility flag;
+ *          level - Initial output level.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_config_io_output(gpba02b_port_t port, uint8_t pin, bool open_collector,
                                    bool level) {
     return gpba02b_config_io_output_mode(
@@ -470,6 +617,12 @@ esp_err_t gpba02b_config_io_output(gpba02b_port_t port, uint8_t pin, bool open_c
         level);
 }
 
+/*
+ * brief  : Read full input register byte of one port.
+ * input  : port - Port id; value - Output byte pointer.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_read_port_input(gpba02b_port_t port, uint8_t* value) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -480,6 +633,12 @@ esp_err_t gpba02b_read_port_input(gpba02b_port_t port, uint8_t* value) {
     return gpba02b_read_reg(dev, (uint8_t)(kDefaultRegs.kRegDataBase + port), value);
 }
 
+/*
+ * brief  : Unlock GPBA02B extended function registers.
+ * input  : None.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_enable_new_functions(void) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -513,6 +672,12 @@ esp_err_t gpba02b_enable_new_functions(void) {
     return ESP_OK;
 }
 
+/*
+ * brief  : Enable or disable software reset function in chip register.
+ * input  : disabled - true to disable software reset.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_set_software_reset_disabled(bool disabled) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -536,6 +701,12 @@ esp_err_t gpba02b_set_software_reset_disabled(bool disabled) {
     return gpba02b_write_reg(dev, kDefaultRegs.kRegCurrentSink, value);
 }
 
+/*
+ * brief  : Configure PWM clock divider for port A and port C domains.
+ * input  : pa_div - Divider 0..7 for port A; pc_div - Divider 0..7 for port C.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_pwm_set_clock_div(uint8_t pa_div, uint8_t pc_div) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -552,6 +723,12 @@ esp_err_t gpba02b_pwm_set_clock_div(uint8_t pa_div, uint8_t pc_div) {
     return gpba02b_write_reg(dev, kDefaultRegs.kRegPwmClock, value);
 }
 
+/*
+ * brief  : Enable PWM channels on a PWM-capable port.
+ * input  : port - PWM port id; channel_mask - 8-bit enable mask.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_pwm_enable_channels(gpba02b_port_t port, uint8_t channel_mask) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -569,6 +746,12 @@ esp_err_t gpba02b_pwm_enable_channels(gpba02b_port_t port, uint8_t channel_mask)
     return gpba02b_write_reg(dev, reg, channel_mask);
 }
 
+/*
+ * brief  : Set PWM duty for one channel.
+ * input  : port - PWM port id; channel - Channel index 0..7; duty - Duty byte.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_pwm_set_channel_duty(gpba02b_port_t port, uint8_t channel, uint8_t duty) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -586,6 +769,12 @@ esp_err_t gpba02b_pwm_set_channel_duty(gpba02b_port_t port, uint8_t channel, uin
     return gpba02b_write_reg(dev, reg, duty);
 }
 
+/*
+ * brief  : Configure current sink mode and level for one PWM port.
+ * input  : port - PWM port id; enable - Enable sink mode; current_level - 2-bit level.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_current_sink_set(gpba02b_port_t port, bool enable, uint8_t current_level) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -623,6 +812,12 @@ esp_err_t gpba02b_current_sink_set(gpba02b_port_t port, bool enable, uint8_t cur
     return gpba02b_write_reg(dev, kDefaultRegs.kRegCurrentSink, value);
 }
 
+/*
+ * brief  : Helper to set current sink then enable PWM channels safely.
+ * input  : port - PWM port id; channel_mask - Channels to enable; current_level - Sink level.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_pwm_with_current_sink_setup(gpba02b_port_t port, uint8_t channel_mask,
                                               uint8_t current_level) {
     esp_err_t err = gpba02b_current_sink_set(port, true, current_level);
@@ -636,6 +831,12 @@ esp_err_t gpba02b_pwm_with_current_sink_setup(gpba02b_port_t port, uint8_t chann
     return gpba02b_pwm_enable_channels(port, channel_mask);
 }
 
+/*
+ * brief  : Configure interrupt enable bits and edge polarity bits.
+ * input  : enable_mask - Interrupt enable mask; falling_edge_mask - Edge selection mask.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_interrupt_configure(uint8_t enable_mask, uint8_t falling_edge_mask) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -658,6 +859,12 @@ esp_err_t gpba02b_interrupt_configure(uint8_t enable_mask, uint8_t falling_edge_
     return gpba02b_write_reg(dev, kDefaultRegs.kRegIntFlagEnable, dev->interrupt_enable_mask);
 }
 
+/*
+ * brief  : Read interrupt flags and current enable mask.
+ * input  : flags - Optional output flags pointer; enable_mask - Optional output enable pointer.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_interrupt_read(uint8_t* flags, uint8_t* enable_mask) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -678,6 +885,12 @@ esp_err_t gpba02b_interrupt_read(uint8_t* flags, uint8_t* enable_mask) {
     return ESP_OK;
 }
 
+/*
+ * brief  : Clear selected interrupt flags while preserving enable bits.
+ * input  : flags_mask - Flags to clear (low 4 bits used).
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_interrupt_clear(uint8_t flags_mask) {
     gpba02b_t* dev = &s_gpba02b;
 
@@ -686,6 +899,13 @@ esp_err_t gpba02b_interrupt_clear(uint8_t flags_mask) {
     return gpba02b_write_reg(dev, kDefaultRegs.kRegIntFlagEnable, value);
 }
 
+/*
+ * brief  : Install host GPIO ISR and bind callback to device context.
+ * input  : dev - Device context; config - Host IRQ GPIO config;
+ *          callback - IRQ callback; user_ctx - Callback context.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_host_irq_install_with_dev(gpba02b_t* dev,
                                                    const gpba02b_host_irq_gpio_config_t* config,
                                                    gpba02b_host_irq_callback_t callback,
@@ -723,6 +943,12 @@ static esp_err_t gpba02b_host_irq_install_with_dev(gpba02b_t* dev,
     return gpio_isr_handler_add(dev->host_irq_gpio, gpba02b_host_irq_handler, dev);
 }
 
+/*
+ * brief  : Remove host GPIO ISR binding from device context.
+ * input  : dev - Device context pointer.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : private
+ */
 static esp_err_t gpba02b_host_irq_uninstall_with_dev(gpba02b_t* dev) {
     if (dev == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -738,11 +964,23 @@ static esp_err_t gpba02b_host_irq_uninstall_with_dev(gpba02b_t* dev) {
     return ESP_OK;
 }
 
+/*
+ * brief  : Public wrapper to install host IRQ callback on singleton device.
+ * input  : config - Host IRQ GPIO config; callback - IRQ callback; user_ctx - callback context.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_host_irq_install(const gpba02b_host_irq_gpio_config_t* config,
                                    gpba02b_host_irq_callback_t callback, void* user_ctx) {
     return gpba02b_host_irq_install_with_dev(&s_gpba02b, config, callback, user_ctx);
 }
 
+/*
+ * brief  : Public wrapper to uninstall host IRQ callback on singleton device.
+ * input  : None.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
 esp_err_t gpba02b_host_irq_uninstall(void) {
     return gpba02b_host_irq_uninstall_with_dev(&s_gpba02b);
 }

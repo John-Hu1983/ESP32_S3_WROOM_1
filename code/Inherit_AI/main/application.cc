@@ -7,7 +7,7 @@
 #include "mcp_server.h"
 #include "mqtt_protocol.h"
 #include "settings.h"
-#include "service/service_desktop.h"
+#include "service/desktop.h"
 #include "system_info.h"
 #include "text_glyph_payload.h"
 #include "websocket_protocol.h"
@@ -100,16 +100,16 @@ void Application::Initialize() {
     };
     audio_service_.SetCallbacks(callbacks);
 
-    service_desktop_runtime_init(&desktop_runtime_);
+    desktop_runtime_init(&desktop_runtime_);
     EnterDesktopHome(false);
 
-    service_desktop_ops_t desktop_ops = {};
+    desktop_ops_t desktop_ops = {};
     desktop_ops.ctx = this;
     desktop_ops.enter_service = DesktopEnterServiceCallback;
     desktop_ops.enter_desktop = DesktopEnterHomeCallback;
     desktop_ops.show_notification = DesktopShowNotificationCallback;
     desktop_ops.run_command = DesktopRunCommandCallback;
-    ESP_ERROR_CHECK(service_desktop_task_start(&desktop_runtime_, &desktop_ops));
+    ESP_ERROR_CHECK(desktop_task_start(&desktop_runtime_, &desktop_ops));
 
     board.SetKeyEventCallback(
         [this](uint8_t key_index, BoardKeyEventType event_type) {
@@ -894,7 +894,7 @@ void Application::DesktopRunCommandCallback(void* ctx, service_command_t command
 }
 
 void Application::PushDesktopKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
-    if (!service_desktop_post_key_event(&desktop_runtime_, key_index,
+    if (!desktop_post_key_event(&desktop_runtime_, key_index,
                                         ToServiceEventType(event_type))) {
         ESP_LOGW(TAG, "Drop key event: key=%u type=%d", key_index, static_cast<int>(event_type));
     }
@@ -923,7 +923,7 @@ void Application::RunServiceCommand(service_command_t command) {
 }
 
 void Application::EnterDesktopHome(bool show_notification) {
-    const service_item_t* desktop_item = service_desktop_get_item(kDesktopServiceIndex);
+    const service_item_t* desktop_item = desktop_get_item(kDesktopServiceIndex);
     auto display = Board::GetInstance().GetDisplay();
     if (display != nullptr) {
         if (show_notification) {
@@ -959,11 +959,11 @@ void Application::EnterDesktopHome(bool show_notification) {
 }
 
 void Application::EnterService(int service_index) {
-    if (service_index < 0 || service_index >= service_desktop_get_count()) {
+    if (service_index < 0 || service_index >= desktop_get_count()) {
         return;
     }
 
-    const service_item_t* item = service_desktop_get_item(service_index);
+    const service_item_t* item = desktop_get_item(service_index);
     if (item == nullptr) {
         return;
     }

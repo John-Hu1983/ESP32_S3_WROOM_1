@@ -18,7 +18,7 @@
 #include "device_state.h"
 #include "device_state_machine.h"
 #include "board.h"
-#include "service/service_desktop.h"
+#include "service/desktop.h"
 
 // Main event bits
 #define MAIN_EVENT_SCHEDULE             (1 << 0)
@@ -146,7 +146,7 @@ private:
     bool has_server_time_ = false;
     bool aborted_ = false;
     bool assets_version_checked_ = false;
-    service_desktop_runtime_t desktop_runtime_ = {};
+    desktop_runtime_t desktop_runtime_ = {};
     bool ai_app_active_ = true;
     bool play_popup_on_listening_ = false;  // Flag to play popup sound after state changes to listening
     bool pending_listening_start_ = false;  // Waiting for playback to drain before starting listening (auto mode)

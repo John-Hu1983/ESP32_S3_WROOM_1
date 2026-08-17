@@ -1,12 +1,12 @@
 #pragma once
 
-#include "service_types.h"
+#include "service/desktop.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern const service_item_t g_service_mute;
+extern const service_item_t g_service_node;
 
 #ifdef __cplusplus
 }

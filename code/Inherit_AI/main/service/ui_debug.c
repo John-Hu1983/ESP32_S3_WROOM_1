@@ -1,4 +1,4 @@
-#include "service/service_debug.h"
+#include "service/ui_debug.h"
 
 static const service_key_binding_t k_bindings[] = {
     {0, SERVICE_KEY_EVENT_CLICK, SERVICE_CMD_NONE, "Debug: previous"},

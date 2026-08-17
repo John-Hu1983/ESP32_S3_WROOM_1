@@ -1,4 +1,4 @@
-#include "service/service_link.h"
+#include "service/ui_link.h"
 
 static const service_key_binding_t k_bindings[] = {
     {0, SERVICE_KEY_EVENT_CLICK, SERVICE_CMD_NONE, "Link: previous"},
