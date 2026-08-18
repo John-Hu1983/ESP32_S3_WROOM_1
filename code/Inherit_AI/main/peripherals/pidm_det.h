@@ -1,9 +1,9 @@
 #pragma once
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <limits.h>
 #include <string.h>
 
 #include "bsp/gpba02b.h"
@@ -12,14 +12,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
-
-#include "../esp32-s3-wroom-1-n16r8/config.h"
-
-#if defined(__has_include)
-#if __has_include("config.h")
 #include "config.h"
-#endif
-#endif
 
 #ifdef __cplusplus
 extern "C" {

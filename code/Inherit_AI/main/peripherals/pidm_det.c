@@ -1,4 +1,4 @@
-#include "peripherals/pidm_det.h"
+#include "pidm_det.h"
 
 #define TAG "PIDM_DET"
 
@@ -63,13 +63,9 @@ static pidm_det_feature_cfg_s s_pidm_feature_cfg = {
     .release_count = PIDM_DET_RELEASE_COUNT_DEFAULT,
 };
 
-static int pidm_abs_int(int value) {
-    return value < 0 ? -value : value;
-}
+static int pidm_abs_int(int value) { return value < 0 ? -value : value; }
 
-static void pidm_reset_runtime(void) {
-    memset(&s_pidm_runtime, 0, sizeof(s_pidm_runtime));
-}
+static void pidm_reset_runtime(void) { memset(&s_pidm_runtime, 0, sizeof(s_pidm_runtime)); }
 
 static bool pidm_cfg_is_valid(const pidm_det_feature_cfg_s* cfg) {
     if (cfg == NULL) {
@@ -118,10 +114,8 @@ static void pidm_update_reference(const pidm_det_feature_cfg_s* cfg, uint32_t pe
             s_pidm_runtime.peak_ref_q8 = peak_q8;
             s_pidm_runtime.slope_ref_q8 = slope_q8;
         } else {
-            s_pidm_runtime.peak_ref_q8 =
-                (s_pidm_runtime.peak_ref_q8 + peak_q8) / 2U;
-            s_pidm_runtime.slope_ref_q8 =
-                (s_pidm_runtime.slope_ref_q8 + slope_q8) / 2U;
+            s_pidm_runtime.peak_ref_q8 = (s_pidm_runtime.peak_ref_q8 + peak_q8) / 2U;
+            s_pidm_runtime.slope_ref_q8 = (s_pidm_runtime.slope_ref_q8 + slope_q8) / 2U;
         }
 
         s_pidm_runtime.learn_count++;
@@ -215,8 +209,8 @@ esp_err_t pidm_det_init(void) {
         return ESP_OK;
     }
 
-    ret = gpba02b_config_io_output_mode(PIDM_EN_PORT, PIDM_EN_PIN, GPBA02B_IO_OUTPUT_PUSH_PULL,
-                                        true);
+    ret =
+        gpba02b_config_io_output_mode(PIDM_EN_PORT, PIDM_EN_PIN, GPBA02B_IO_OUTPUT_PUSH_PULL, true);
     if (ret != ESP_OK) {
         return ret;
     }
@@ -293,9 +287,7 @@ esp_err_t pidm_det_deinit(void) {
 #endif
 }
 
-bool pidm_det_is_ready(void) {
-    return s_pidm_ready;
-}
+bool pidm_det_is_ready(void) { return s_pidm_ready; }
 
 esp_err_t pidm_det_set_enable(bool enable) {
 #if !PIDM_DET_SUPPORTED
@@ -393,9 +385,7 @@ esp_err_t pidm_det_feature_cfg_set(const pidm_det_feature_cfg_s* cfg) {
     return ESP_OK;
 }
 
-pidm_det_feature_cfg_s pidm_det_feature_cfg_get(void) {
-    return s_pidm_feature_cfg;
-}
+pidm_det_feature_cfg_s pidm_det_feature_cfg_get(void) { return s_pidm_feature_cfg; }
 
 esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s* feature) {
 #if !PIDM_DET_SUPPORTED
@@ -534,8 +524,7 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s* feature)
     }
 
     if (peak_raw > baseline_raw) {
-        rise_slope_adc_per_ms =
-            ((uint32_t)(peak_raw - baseline_raw) * 1000U) / peak_time_us;
+        rise_slope_adc_per_ms = ((uint32_t)(peak_raw - baseline_raw) * 1000U) / peak_time_us;
     } else {
         rise_slope_adc_per_ms = 0;
     }
@@ -574,8 +563,8 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s* feature)
 
     feature->slope_hit = (rise_slope_adc_per_ms >= cfg.slope_min_adc_per_ms);
     if (feature->ref_ready) {
-        feature->slope_hit = feature->slope_hit &&
-                             (slope_delta_adc_per_ms >= cfg.slope_delta_min_adc_per_ms);
+        feature->slope_hit =
+            feature->slope_hit && (slope_delta_adc_per_ms >= cfg.slope_delta_min_adc_per_ms);
     }
 
     feature->hold_hit = (high_hold_us >= cfg.high_hold_min_us);
@@ -588,8 +577,7 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s* feature)
             s_pidm_runtime.assert_streak++;
         }
         s_pidm_runtime.release_streak = 0;
-        if (!s_pidm_runtime.metal_present &&
-            s_pidm_runtime.assert_streak >= cfg.assert_count) {
+        if (!s_pidm_runtime.metal_present && s_pidm_runtime.assert_streak >= cfg.assert_count) {
             s_pidm_runtime.metal_present = true;
         }
     } else {
@@ -597,8 +585,7 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s* feature)
             s_pidm_runtime.release_streak++;
         }
         s_pidm_runtime.assert_streak = 0;
-        if (s_pidm_runtime.metal_present &&
-            s_pidm_runtime.release_streak >= cfg.release_count) {
+        if (s_pidm_runtime.metal_present && s_pidm_runtime.release_streak >= cfg.release_count) {
             s_pidm_runtime.metal_present = false;
         }
     }
@@ -608,6 +595,4 @@ esp_err_t pidm_det_probe_feature(uint32_t pulse_us, pidm_det_feature_s* feature)
 #endif
 }
 
-bool pidm_det_is_metal_present(void) {
-    return s_pidm_runtime.metal_present;
-}
+bool pidm_det_is_metal_present(void) { return s_pidm_runtime.metal_present; }
