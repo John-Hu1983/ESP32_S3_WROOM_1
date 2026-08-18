@@ -740,8 +740,22 @@ static bool handle_dual_click_exit(desktop_runtime_t* runtime, uint8_t key_index
     uint64_t now;
     uint8_t other_key;
 
-    if (runtime == 0 || runtime->state.current_service_index < 0 ||
-        event_type != SERVICE_KEY_EVENT_CLICK) {
+    if (runtime == 0 || runtime->state.current_service_index < 0) {
+        return false;
+    }
+
+    if (event_type == SERVICE_KEY_EVENT_DUAL_CLICK) {
+        runtime->state.last_click_ms[0] = 0;
+        runtime->state.last_click_ms[1] = 0;
+        desktop_switch_to_home(runtime);
+
+        if (runtime->ops.enter_desktop != 0) {
+            runtime->ops.enter_desktop(runtime->ops.ctx, true);
+        }
+        return true;
+    }
+
+    if (event_type != SERVICE_KEY_EVENT_CLICK) {
         return false;
     }
 

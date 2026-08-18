@@ -907,6 +907,25 @@ file(GLOB BOARD_SOURCES
 list(APPEND SOURCES ${BOARD_SOURCES})
 list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR})
 
+# Create a unique board config header for editor-friendly navigation.
+# Skip this in early expansion where BOARD_DIR is not resolved yet.
+if(BOARD_DIR AND NOT CMAKE_BUILD_EARLY_EXPANSION)
+    set(ACTIVE_BOARD_CONFIG_SOURCE_HEADER "${CMAKE_CURRENT_LIST_DIR}/boards/${BOARD_DIR}/config.h")
+    if(EXISTS "${ACTIVE_BOARD_CONFIG_SOURCE_HEADER}")
+        set(ACTIVE_BOARD_CONFIG_HEADER_DIR "${CMAKE_BINARY_DIR}/config")
+        set(ACTIVE_BOARD_CONFIG_HEADER "${ACTIVE_BOARD_CONFIG_HEADER_DIR}/active_board_config_gen.h")
+        file(MAKE_DIRECTORY "${ACTIVE_BOARD_CONFIG_HEADER_DIR}")
+        configure_file(
+            "${ACTIVE_BOARD_CONFIG_SOURCE_HEADER}"
+            "${ACTIVE_BOARD_CONFIG_HEADER}"
+            COPYONLY
+        )
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            "${ACTIVE_BOARD_CONFIG_SOURCE_HEADER}"
+        )
+    endif()
+endif()
+
 # Select one audio engine for each chip family
 if(CONFIG_IDF_TARGET_ESP32S3 OR CONFIG_IDF_TARGET_ESP32P4 OR CONFIG_IDF_TARGET_ESP32S31)
     list(APPEND SOURCES "audio/engines/afe_audio_engine.cc")

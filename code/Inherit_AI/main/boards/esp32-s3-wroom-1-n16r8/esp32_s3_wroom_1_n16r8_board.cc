@@ -13,26 +13,9 @@
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include "esp_lcd_st7796.h"
 
-#include <utility>
-
 #define TAG "Esp32S3Wroom1N16r8Board"
-
-static constexpr uint32_t kKeyboardTaskStackSize = 3072;
-static constexpr UBaseType_t kKeyboardTaskPriority = 2;
-
-static keyboard_config_t CreateKeyboardConfig() {
-    keyboard_config_t config = {};
-    keyboard_get_default_config(&config);
-    config.up_key = {BUTTON_UP_IO_PORT, BUTTON_UP_IO_PIN};
-    config.down_key = {BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN};
-    config.active_low = true;
-    config.poll_interval_ms = 10;
-    return config;
-}
 
 class Esp32S3Wroom1N16r8Board : public WifiBoard {
 private:
@@ -40,65 +23,6 @@ private:
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
     keyboard_t keyboard_ = {};
-    btn_scan_s keyboard_scan_ = {};
-    TaskHandle_t keyboard_task_handle_ = nullptr;
-    BoardKeyEventCallback key_event_callback_ = nullptr;
-
-    static void KeyboardTaskEntry(void* arg) {
-        auto* board = static_cast<Esp32S3Wroom1N16r8Board*>(arg);
-        board->KeyboardTaskLoop();
-    }
-
-    void KeyboardTaskLoop() {
-        while (true) {
-            btn_status_e status =
-                keyboard_scan_event(&keyboard_, &keyboard_scan_,
-                                    static_cast<uint8_t>(keyboard_.config.poll_interval_ms));
-
-            switch (status) {
-                case Btn_Up_Click:
-                    NotifyKeyEvent(0, BoardKeyEventType::Click);
-                    break;
-                case Btn_Down_Click:
-                    NotifyKeyEvent(1, BoardKeyEventType::Click);
-                    break;
-                case Btn_Up_Hold_Enter:
-                    NotifyKeyEvent(0, BoardKeyEventType::LongPress);
-                    break;
-                case Btn_Down_Hold_Enter:
-                    NotifyKeyEvent(1, BoardKeyEventType::LongPress);
-                    break;
-                case Btn_Both_Click:
-                    NotifyKeyEvent(0, BoardKeyEventType::Click);
-                    NotifyKeyEvent(1, BoardKeyEventType::Click);
-                    break;
-                case Btn_Both_Hold_Enter:
-                    NotifyKeyEvent(0, BoardKeyEventType::LongPress);
-                    break;
-                case Btn_Idle:
-                case Btn_Up_Double:
-                case Btn_Up_Hold_Continue:
-                case Btn_Down_Double:
-                case Btn_Down_Hold_Continue:
-                case Btn_Both_Double:
-                case Btn_Both_Hold_Continue:
-                default:
-                    break;
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(keyboard_.config.poll_interval_ms));
-        }
-    }
-
-    void NotifyKeyEvent(uint8_t key_index, BoardKeyEventType event_type) {
-        if (key_event_callback_) {
-            key_event_callback_(key_index, event_type);
-            return;
-        }
-
-        ESP_LOGW(TAG, "Drop key event: key=%u type=%d (callback not set)", key_index,
-                 static_cast<int>(event_type));
-    }
 
     esp_err_t InitializeGpba02b() {
         gpba02b_config_t gpba02b_config = {};
@@ -221,18 +145,7 @@ private:
         }
     }
 
-    void InitializeKeyboard() {
-        keyboard_config_t keyboard_config = CreateKeyboardConfig();
-        ESP_ERROR_CHECK(keyboard_init_obj(&keyboard_, &keyboard_config));
-        keyboard_scan_ = {};
-
-        BaseType_t created = xTaskCreate(KeyboardTaskEntry, "keyboard_poll", kKeyboardTaskStackSize,
-                                         this, kKeyboardTaskPriority, &keyboard_task_handle_);
-        if (created != pdPASS) {
-            ESP_LOGE(TAG, "Failed to create keyboard task");
-            ESP_ERROR_CHECK(ESP_FAIL);
-        }
-    }
+    void InitializeKeyboard() { ESP_ERROR_CHECK(start_keyboard(&keyboard_, nullptr)); }
 
 public:
     Esp32S3Wroom1N16r8Board() {
@@ -243,16 +156,17 @@ public:
         InitializeKeyboard();
     }
 
-    virtual void SetKeyEventCallback(BoardKeyEventCallback callback) override {
-        key_event_callback_ = std::move(callback);
+    virtual ~Esp32S3Wroom1N16r8Board() override { stop_keyboard(&keyboard_); }
+
+    virtual void SetKeyEventCallback(BoardKeyEventCallback callback, void* user_ctx) override {
+        keyboard_set_app_event_callback(&keyboard_, callback, user_ctx);
     }
 
     // Speaker uses standard I2S, microphone uses PDM.
     virtual AudioCodec* GetAudioCodec() override {
-        static NoAudioCodecSimplexPdm audio_codec(USER_AUDIO_SAMPLE_RATE_HZ,
-                                                  USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO,
-                                                  I2S_DO_IO, I2S_STD_SLOT_BOTH, PDM_CLK_IO,
-                                                  PDM_DATA_IO);
+        static NoAudioCodecSimplexPdm audio_codec(
+            USER_AUDIO_SAMPLE_RATE_HZ, USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO, I2S_DO_IO,
+            I2S_STD_SLOT_BOTH, PDM_CLK_IO, PDM_DATA_IO);
         return &audio_codec;
     }
 

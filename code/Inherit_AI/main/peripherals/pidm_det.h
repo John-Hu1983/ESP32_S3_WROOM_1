@@ -12,7 +12,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
-#include "config.h"
+#include "active_board_config.h"
 
 #ifdef __cplusplus
 extern "C" {

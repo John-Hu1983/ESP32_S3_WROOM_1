@@ -112,9 +112,14 @@ void Application::Initialize() {
     ESP_ERROR_CHECK(desktop_task_start(&desktop_runtime_, &desktop_ops));
 
     board.SetKeyEventCallback(
-        [this](uint8_t key_index, BoardKeyEventType event_type) {
-            PushDesktopKeyEvent(key_index, event_type);
-        });
+        [](uint8_t key_index, uint8_t event_type, void* user_ctx) {
+            auto* app = static_cast<Application*>(user_ctx);
+            if (app == nullptr) {
+                return;
+            }
+            app->PushDesktopKeyEvent(key_index, static_cast<BoardKeyEventType>(event_type));
+        },
+        this);
 
     // Add state change listeners
     state_machine_.AddStateChangeListener([this](DeviceState old_state, DeviceState new_state) {

@@ -1,7 +1,7 @@
 #include "bsp/bsp_env.h"
 
 #include "bsp/gpba02b.h"
-#include "boards/usr_config.h"
+#include "active_board_config.h"
 
 static esp_err_t bsp_env_config_output(gpba02b_port_t port, uint8_t pin, bool level) {
     esp_err_t err =

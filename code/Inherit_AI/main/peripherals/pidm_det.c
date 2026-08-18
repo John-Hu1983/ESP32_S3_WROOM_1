@@ -2,12 +2,7 @@
 
 #define TAG "PIDM_DET"
 
-#if defined(PIDM_IO_PULSE) && defined(PIDM_IO_ADC) && defined(PIDM_ADC_CHANNEL) && \
-    defined(PIDM_EN_PORT) && defined(PIDM_EN_PIN)
 #define PIDM_DET_SUPPORTED 1
-#else
-#define PIDM_DET_SUPPORTED 0
-#endif
 
 typedef struct {
     bool ref_ready;

@@ -9,6 +9,7 @@
     "--query-driver=**",
     "--compile-commands-dir=d:\\JohnHu\\Github_private\\ESP32_S3_WROOM_1\\code\\Inherit_AI\\build"
   ],
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "files.exclude": {
     "build": true,
     "sdkconfig.defaults.esp32": true,

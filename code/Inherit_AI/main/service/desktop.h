@@ -59,6 +59,7 @@ typedef enum {
     SERVICE_KEY_EVENT_PRESS_UP = 1,
     SERVICE_KEY_EVENT_CLICK = 2,
     SERVICE_KEY_EVENT_LONG_PRESS = 3,
+    SERVICE_KEY_EVENT_DUAL_CLICK = 4,
 } service_key_event_t;
 
 typedef enum {
