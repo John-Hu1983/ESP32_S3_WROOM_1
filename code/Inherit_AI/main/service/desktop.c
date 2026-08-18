@@ -21,6 +21,8 @@ static const service_item_t* k_services[SERVICE_APP_COUNT] = {
 };
 
 #define PIDM_SERVICE_INDEX 11
+#define DESKTOP_HOME_SERVICE_INDEX 0
+#define DESKTOP_ENTER_NOTIFICATION_MS 1000
 
 static const char* k_desktop_icons[DESKTOP_CONTROL_COUNT] = {
     MATERIAL_SYMBOLS_PHOTO_CAMERA, MATERIAL_SYMBOLS_IMAGE,    MATERIAL_SYMBOLS_MUSIC_NOTE,
@@ -33,6 +35,10 @@ static lv_coord_t k_desktop_col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_F
                                          LV_GRID_TEMPLATE_LAST};
 static lv_coord_t k_desktop_row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                          LV_GRID_TEMPLATE_LAST};
+
+static desktop_runtime_t g_desktop_service_runtime = {0};
+static desktop_host_ops_t g_desktop_service_host_ops = {0};
+static bool g_desktop_service_started = false;
 
 static void desktop_apply_selection(desktop_runtime_t* runtime);
 
@@ -683,6 +689,212 @@ static service_key_result_t handle_service_key(int service_index, uint8_t key_in
 }
 
 /*
+ * brief  : Desktop host adapter: forward status update to host callback.
+ * input  : ctx - desktop_host_ops_t pointer; status - status text.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_set_status_adapter(void* ctx, const char* status) {
+    desktop_host_ops_t* host_ops = (desktop_host_ops_t*)ctx;
+
+    if (host_ops == 0 || status == 0 || host_ops->set_status == 0) {
+        return;
+    }
+
+    host_ops->set_status(host_ops->ctx, status);
+}
+
+/*
+ * brief  : Desktop host adapter: forward prompt update to host callback.
+ * input  : ctx - desktop_host_ops_t pointer; prompt - prompt text.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_set_prompt_adapter(void* ctx, const char* prompt) {
+    desktop_host_ops_t* host_ops = (desktop_host_ops_t*)ctx;
+
+    if (host_ops == 0 || host_ops->set_prompt == 0) {
+        return;
+    }
+
+    host_ops->set_prompt(host_ops->ctx, prompt);
+}
+
+/*
+ * brief  : Desktop host adapter: forward notification to host callback.
+ * input  : ctx - desktop_host_ops_t pointer; text - notification text;
+ *          duration_ms - display duration.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_show_notification_adapter(void* ctx, const char* text,
+                                                   uint32_t duration_ms) {
+    desktop_host_ops_t* host_ops = (desktop_host_ops_t*)ctx;
+
+    if (host_ops == 0 || text == 0 || host_ops->show_notification == 0) {
+        return;
+    }
+
+    host_ops->show_notification(host_ops->ctx, text, duration_ms);
+}
+
+/*
+ * brief  : Desktop host adapter: forward toggle-chat command.
+ * input  : ctx - desktop_host_ops_t pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_toggle_chat_adapter(void* ctx) {
+    desktop_host_ops_t* host_ops = (desktop_host_ops_t*)ctx;
+
+    if (host_ops == 0 || host_ops->toggle_chat == 0) {
+        return;
+    }
+
+    host_ops->toggle_chat(host_ops->ctx);
+}
+
+/*
+ * brief  : Desktop host adapter: forward start-listening command.
+ * input  : ctx - desktop_host_ops_t pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_start_listening_adapter(void* ctx) {
+    desktop_host_ops_t* host_ops = (desktop_host_ops_t*)ctx;
+
+    if (host_ops == 0 || host_ops->start_listening == 0) {
+        return;
+    }
+
+    host_ops->start_listening(host_ops->ctx);
+}
+
+/*
+ * brief  : Desktop host adapter: forward stop-listening command.
+ * input  : ctx - desktop_host_ops_t pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_stop_listening_adapter(void* ctx) {
+    desktop_host_ops_t* host_ops = (desktop_host_ops_t*)ctx;
+
+    if (host_ops == 0 || host_ops->stop_listening == 0) {
+        return;
+    }
+
+    host_ops->stop_listening(host_ops->ctx);
+}
+
+/*
+ * brief  : Desktop host adapter: forward enter-network-config command.
+ * input  : ctx - desktop_host_ops_t pointer.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_enter_network_config_adapter(void* ctx) {
+    desktop_host_ops_t* host_ops = (desktop_host_ops_t*)ctx;
+
+    if (host_ops == 0 || host_ops->enter_network_config == 0) {
+        return;
+    }
+
+    host_ops->enter_network_config(host_ops->ctx);
+}
+
+/*
+ * brief  : Update host status text when callback is available.
+ * input  : runtime - Desktop runtime state pointer; status - status text.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_set_status(desktop_runtime_t* runtime, const char* status) {
+    if (runtime == 0 || runtime->ops.set_status == 0 || status == 0) {
+        return;
+    }
+
+    runtime->ops.set_status(runtime->ops.ctx, status);
+}
+
+/*
+ * brief  : Update host prompt text when callback is available.
+ * input  : runtime - Desktop runtime state pointer; prompt - prompt text.
+ * output : None.
+ * type   : private
+ */
+static void desktop_host_set_prompt(desktop_runtime_t* runtime, const char* prompt) {
+    if (runtime == 0 || runtime->ops.set_prompt == 0 || prompt == 0) {
+        return;
+    }
+
+    runtime->ops.set_prompt(runtime->ops.ctx, prompt);
+}
+
+/*
+ * brief  : Apply desktop-home status/prompt and optional notification.
+ * input  : runtime - Desktop runtime state pointer; show_notification - true to notify.
+ * output : None.
+ * type   : private
+ */
+static void desktop_enter_home_view(desktop_runtime_t* runtime, bool show_notification) {
+    const service_item_t* item;
+    const char* desktop_name = "Desktop";
+    const char* desktop_prompt = "System ready. Select app.";
+
+    if (runtime == 0) {
+        return;
+    }
+
+    item = desktop_get_item(DESKTOP_HOME_SERVICE_INDEX);
+    if (item != 0) {
+        if (item->name != 0) {
+            desktop_name = item->name;
+        }
+        if (item->status != 0) {
+            desktop_host_set_status(runtime, item->status);
+        }
+        if (item->prompt != 0) {
+            desktop_prompt = item->prompt;
+        }
+    }
+
+    if (show_notification && runtime->ops.show_notification != 0) {
+        runtime->ops.show_notification(runtime->ops.ctx, desktop_name, DESKTOP_ENTER_NOTIFICATION_MS);
+    }
+
+    desktop_host_set_prompt(runtime, desktop_prompt);
+}
+
+/*
+ * brief  : Apply selected service status/prompt and enter notification.
+ * input  : runtime - Desktop runtime state pointer; service_index - selected service index.
+ * output : None.
+ * type   : private
+ */
+static void desktop_enter_service_view(desktop_runtime_t* runtime, int service_index) {
+    const service_item_t* item;
+
+    if (runtime == 0 || service_index < 0 || service_index >= desktop_get_count()) {
+        return;
+    }
+
+    item = desktop_get_item(service_index);
+    if (item == 0) {
+        return;
+    }
+
+    if (item->status != 0) {
+        desktop_host_set_status(runtime, item->status);
+    }
+    if (item->prompt != 0) {
+        desktop_host_set_prompt(runtime, item->prompt);
+    }
+    if (item->name != 0 && runtime->ops.show_notification != 0) {
+        runtime->ops.show_notification(runtime->ops.ctx, item->name, DESKTOP_ENTER_NOTIFICATION_MS);
+    }
+}
+
+/*
  * brief  : Apply selection and show selected app name notification.
  * input  : runtime - Desktop runtime state pointer.
  * output : None.
@@ -706,12 +918,12 @@ static void show_selected_service(desktop_runtime_t* runtime) {
 }
 
 /*
- * brief  : Switch runtime back to desktop home mode.
+ * brief  : Switch runtime back to desktop home mode and refresh host view.
  * input  : runtime - Desktop runtime state pointer.
  * output : None.
  * type   : private
  */
-static void desktop_switch_to_home(desktop_runtime_t* runtime) {
+static void desktop_switch_to_home(desktop_runtime_t* runtime, bool show_notification) {
     if (runtime == 0) {
         return;
     }
@@ -726,6 +938,7 @@ static void desktop_switch_to_home(desktop_runtime_t* runtime) {
     desktop_create_controls(runtime);
     desktop_apply_selection(runtime);
     desktop_set_visible(runtime, true);
+    desktop_enter_home_view(runtime, show_notification);
 }
 
 /*
@@ -747,11 +960,7 @@ static bool handle_dual_click_exit(desktop_runtime_t* runtime, uint8_t key_index
     if (event_type == SERVICE_KEY_EVENT_DUAL_CLICK) {
         runtime->state.last_click_ms[0] = 0;
         runtime->state.last_click_ms[1] = 0;
-        desktop_switch_to_home(runtime);
-
-        if (runtime->ops.enter_desktop != 0) {
-            runtime->ops.enter_desktop(runtime->ops.ctx, true);
-        }
+        desktop_switch_to_home(runtime, true);
         return true;
     }
 
@@ -774,11 +983,7 @@ static bool handle_dual_click_exit(desktop_runtime_t* runtime, uint8_t key_index
 
     runtime->state.last_click_ms[0] = 0;
     runtime->state.last_click_ms[1] = 0;
-    desktop_switch_to_home(runtime);
-
-    if (runtime->ops.enter_desktop != 0) {
-        runtime->ops.enter_desktop(runtime->ops.ctx, true);
-    }
+    desktop_switch_to_home(runtime, true);
     return true;
 }
 
@@ -789,10 +994,35 @@ static bool handle_dual_click_exit(desktop_runtime_t* runtime, uint8_t key_index
  * type   : private
  */
 static void run_service_command(desktop_runtime_t* runtime, service_command_t command) {
-    if (runtime == 0 || runtime->ops.run_command == 0) {
+    if (runtime == 0) {
         return;
     }
-    runtime->ops.run_command(runtime->ops.ctx, command);
+
+    switch (command) {
+        case SERVICE_CMD_NONE:
+        case SERVICE_CMD_ENTER_DESKTOP:
+            break;
+        case SERVICE_CMD_TOGGLE_CHAT:
+            if (runtime->ops.toggle_chat != 0) {
+                runtime->ops.toggle_chat(runtime->ops.ctx);
+            }
+            break;
+        case SERVICE_CMD_START_LISTENING:
+            if (runtime->ops.start_listening != 0) {
+                runtime->ops.start_listening(runtime->ops.ctx);
+            }
+            break;
+        case SERVICE_CMD_STOP_LISTENING:
+            if (runtime->ops.stop_listening != 0) {
+                runtime->ops.stop_listening(runtime->ops.ctx);
+            }
+            break;
+        case SERVICE_CMD_ENTER_NETWORK_CONFIG:
+            if (runtime->ops.enter_network_config != 0) {
+                runtime->ops.enter_network_config(runtime->ops.ctx);
+            }
+            break;
+    }
 }
 
 /*
@@ -856,9 +1086,7 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
             ui_pidm_on_enter();
         }
 
-        if (runtime->ops.enter_service != 0) {
-            runtime->ops.enter_service(runtime->ops.ctx, runtime->state.current_service_index);
-        }
+        desktop_enter_service_view(runtime, runtime->state.current_service_index);
     }
 }
 
@@ -888,7 +1116,7 @@ static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index,
         }
 
         if (result.command == SERVICE_CMD_ENTER_DESKTOP) {
-            desktop_switch_to_home(runtime);
+            desktop_switch_to_home(runtime, true);
         }
 
         if (result.notification != 0 && result.notification[0] != '\0' &&
@@ -979,6 +1207,28 @@ void desktop_runtime_init(desktop_runtime_t* runtime) {
 }
 
 /*
+ * brief  : Build desktop ops callbacks from host operation table.
+ * input  : ops - output desktop ops; host_ops - host operation table.
+ * output : None.
+ * type   : public
+ */
+void desktop_build_ops(desktop_ops_t* ops, desktop_host_ops_t* host_ops) {
+    if (ops == 0 || host_ops == 0) {
+        return;
+    }
+
+    memset(ops, 0, sizeof(*ops));
+    ops->ctx = host_ops;
+    ops->set_status = desktop_host_set_status_adapter;
+    ops->set_prompt = desktop_host_set_prompt_adapter;
+    ops->show_notification = desktop_host_show_notification_adapter;
+    ops->toggle_chat = desktop_host_toggle_chat_adapter;
+    ops->start_listening = desktop_host_start_listening_adapter;
+    ops->stop_listening = desktop_host_stop_listening_adapter;
+    ops->enter_network_config = desktop_host_enter_network_config_adapter;
+}
+
+/*
  * brief  : Start desktop task and initialize desktop control layer.
  * input  : runtime - Desktop runtime pointer; ops - Callback table.
  * output : ESP_OK on success; error code otherwise.
@@ -1021,6 +1271,16 @@ esp_err_t desktop_task_start(desktop_runtime_t* runtime, const desktop_ops_t* op
 }
 
 /*
+ * brief  : Enter desktop home mode and refresh status/prompt presentation.
+ * input  : runtime - Desktop runtime pointer; show_notification - true to show home notice.
+ * output : None.
+ * type   : public
+ */
+void desktop_enter_home(desktop_runtime_t* runtime, bool show_notification) {
+    desktop_switch_to_home(runtime, show_notification);
+}
+
+/*
  * brief  : Post one key event into desktop queue.
  * input  : runtime - Desktop runtime pointer; key_index - Physical key id;
  *          event_type - Key event type.
@@ -1038,6 +1298,85 @@ bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index, uint8
     event.event_type = event_type;
     return xQueueSend(runtime->key_queue, &event, 0) == pdTRUE;
 }
+
+/*
+ * brief  : Start desktop singleton service with host operation callbacks.
+ * input  : host_ops - host callback table.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
+esp_err_t desktop_service_start(desktop_host_ops_t* host_ops) {
+    desktop_ops_t ops = {0};
+    desktop_host_ops_t effective_host_ops = {0};
+    esp_err_t err;
+
+    if (host_ops == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    effective_host_ops = *host_ops;
+    desktop_service_fill_default_host_ops(&effective_host_ops);
+    if (effective_host_ops.ctx == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    g_desktop_service_host_ops = effective_host_ops;
+    desktop_build_ops(&ops, &g_desktop_service_host_ops);
+
+    if (!g_desktop_service_started) {
+        desktop_runtime_init(&g_desktop_service_runtime);
+    }
+
+    err = desktop_task_start(&g_desktop_service_runtime, &ops);
+    if (err == ESP_OK) {
+        g_desktop_service_started = true;
+    }
+    return err;
+}
+
+/*
+ * brief  : Enter desktop home on singleton service runtime.
+ * input  : show_notification - true to show home notification.
+ * output : None.
+ * type   : public
+ */
+void desktop_service_enter_home(bool show_notification) {
+    if (!g_desktop_service_started) {
+        return;
+    }
+
+    desktop_enter_home(&g_desktop_service_runtime, show_notification);
+}
+
+/*
+ * brief  : Post one key event to singleton desktop runtime queue.
+ * input  : key_index - physical key id; event_type - key event type.
+ * output : true when queued; otherwise false.
+ * type   : public
+ */
+bool desktop_service_post_key_event(uint8_t key_index, uint8_t event_type) {
+    if (!g_desktop_service_started) {
+        return false;
+    }
+
+    return desktop_post_key_event(&g_desktop_service_runtime, key_index, event_type);
+}
+
+/*
+ * brief  : Check whether desktop singleton runtime has started.
+ * input  : None.
+ * output : true if started; otherwise false.
+ * type   : public
+ */
+bool desktop_service_is_started(void) { return g_desktop_service_started; }
+
+/*
+ * brief  : Return pointer to singleton started flag for shared routing checks.
+ * input  : None.
+ * output : Pointer to started flag.
+ * type   : public
+ */
+bool* desktop_service_started_flag(void) { return &g_desktop_service_started; }
 
 /*
  * brief  : Get number of service items in desktop list.

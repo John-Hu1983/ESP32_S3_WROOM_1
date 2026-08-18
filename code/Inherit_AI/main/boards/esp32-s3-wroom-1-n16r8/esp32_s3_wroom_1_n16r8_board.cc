@@ -1,10 +1,12 @@
-﻿#include "bsp/gpba02b.h"
+﻿#include "application.h"
+#include "bsp/gpba02b.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
 #include "display/lcd_display.h"
 #include "display/st7365p_lcd_display.h"
 #include "mcp_server.h"
 #include "peripherals/keyboard.h"
+#include "service/desktop.h"
 #include "system_reset.h"
 #include "wifi_board.h"
 
@@ -22,7 +24,6 @@ private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
-    keyboard_t keyboard_ = {};
 
     esp_err_t InitializeGpba02b() {
         gpba02b_config_t gpba02b_config = {};
@@ -145,7 +146,22 @@ private:
         }
     }
 
-    void InitializeKeyboard() { ESP_ERROR_CHECK(start_keyboard(&keyboard_, nullptr)); }
+    void InitializeDesktop() {
+        desktop_host_ops_t host_ops = {};
+        host_ops.ctx = this;
+        ESP_ERROR_CHECK(desktop_service_start(&host_ops));
+    }
+
+    void ScheduleDesktopBootstrap() {
+        Application::GetInstance().Schedule([this]() {
+            InitializeDesktop();
+            desktop_service_enter_home(false);
+        });
+    }
+
+    void InitializeKeyboard() {
+        ESP_ERROR_CHECK(keyboard_service_start_for_desktop(nullptr));
+    }
 
 public:
     Esp32S3Wroom1N16r8Board() {
@@ -154,12 +170,13 @@ public:
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
         InitializeKeyboard();
+        ScheduleDesktopBootstrap();
     }
 
-    virtual ~Esp32S3Wroom1N16r8Board() override { stop_keyboard(&keyboard_); }
+    virtual ~Esp32S3Wroom1N16r8Board() override { keyboard_service_stop(); }
 
     virtual void SetKeyEventCallback(BoardKeyEventCallback callback, void* user_ctx) override {
-        keyboard_set_app_event_callback(&keyboard_, callback, user_ctx);
+        keyboard_service_set_app_event_callback(callback, user_ctx);
     }
 
     // Speaker uses standard I2S, microphone uses PDM.

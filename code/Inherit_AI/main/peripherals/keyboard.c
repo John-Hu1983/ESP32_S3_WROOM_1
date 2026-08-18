@@ -1,4 +1,5 @@
 #include "keyboard.h"
+#include "service/desktop.h"
 
 #include <esp_log.h>
 
@@ -10,6 +11,15 @@ static btn_status_e keyboard_scan_event(keyboard_t* keyboard, btn_scan_s* scan, 
 static void keyboard_set_notify_callback(keyboard_t* keyboard,
                                          keyboard_notify_callback_t notify_callback,
                                          void* user_ctx);
+
+static keyboard_t g_keyboard_service = {0};
+static keyboard_event_router_t g_keyboard_service_router = {0};
+static bool g_keyboard_service_started = false;
+
+static bool keyboard_service_post_to_desktop(void* runtime, uint8_t key_index, uint8_t event_type) {
+    (void)runtime;
+    return desktop_service_post_key_event(key_index, event_type);
+}
 
 /* ==================== private functions (static) ==================== */
 
@@ -403,6 +413,126 @@ void keyboard_set_app_event_callback(keyboard_t* keyboard,
 
     keyboard->app_event_callback = app_event_callback;
     keyboard->app_event_ctx = user_ctx;
+}
+
+/*
+ * brief  : Initialize keyboard event router context.
+ * input  : router - router output pointer; event_runtime - runtime object;
+ *          post_event - event post callback; enabled_flag - enable switch pointer.
+ * output : None.
+ * type   : public
+ */
+void keyboard_event_router_init(keyboard_event_router_t* router, void* event_runtime,
+                                keyboard_event_post_fn_t post_event, bool* enabled_flag) {
+    if (router == NULL) {
+        return;
+    }
+
+    router->event_runtime = event_runtime;
+    router->post_event = post_event;
+    router->enabled_flag = enabled_flag;
+    router->app_event_callback = NULL;
+    router->app_event_ctx = NULL;
+}
+
+/*
+ * brief  : Set secondary app callback for keyboard event router.
+ * input  : router - router pointer; app_event_callback - callback; app_event_ctx - user context.
+ * output : None.
+ * type   : public
+ */
+void keyboard_event_router_set_app_callback(keyboard_event_router_t* router,
+                                            keyboard_app_event_callback_t app_event_callback,
+                                            void* app_event_ctx) {
+    if (router == NULL) {
+        return;
+    }
+
+    router->app_event_callback = app_event_callback;
+    router->app_event_ctx = app_event_ctx;
+}
+
+/*
+ * brief  : Dispatch one key event to desktop queue and optional app callback.
+ * input  : key_index/event_type - event payload; user_ctx - keyboard_event_router_t pointer.
+ * output : None.
+ * type   : public
+ */
+void keyboard_event_router_callback(uint8_t key_index, uint8_t event_type, void* user_ctx) {
+    keyboard_event_router_t* router = (keyboard_event_router_t*)user_ctx;
+    bool enabled = true;
+
+    if (router == NULL) {
+        return;
+    }
+
+    if (router->enabled_flag != NULL) {
+        enabled = *router->enabled_flag;
+    }
+
+    if (enabled && router->post_event != NULL) {
+        if (!router->post_event(router->event_runtime, key_index, event_type)) {
+            ESP_LOGW(TAG, "Drop key event: key=%u type=%u", key_index, (unsigned int)event_type);
+        }
+    }
+
+    if (router->app_event_callback != NULL) {
+        router->app_event_callback(key_index, event_type, router->app_event_ctx);
+    }
+}
+
+/*
+ * brief  : Start keyboard singleton service and route events to desktop service.
+ * input  : config - optional keyboard config, uses defaults when null.
+ * output : ESP_OK on success; error code otherwise.
+ * type   : public
+ */
+esp_err_t keyboard_service_start_for_desktop(const keyboard_config_t* config) {
+    esp_err_t err;
+
+    if (g_keyboard_service_started && g_keyboard_service.running) {
+        return ESP_OK;
+    }
+
+    keyboard_event_router_init(&g_keyboard_service_router, NULL, keyboard_service_post_to_desktop,
+                               desktop_service_started_flag());
+
+    err = start_keyboard(&g_keyboard_service, config);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    keyboard_set_app_event_callback(&g_keyboard_service, keyboard_event_router_callback,
+                                    &g_keyboard_service_router);
+    g_keyboard_service_started = true;
+    return ESP_OK;
+}
+
+/*
+ * brief  : Set optional app callback for keyboard singleton service.
+ * input  : app_event_callback - callback; app_event_ctx - callback context.
+ * output : None.
+ * type   : public
+ */
+void keyboard_service_set_app_event_callback(keyboard_app_event_callback_t app_event_callback,
+                                             void* app_event_ctx) {
+    keyboard_event_router_set_app_callback(&g_keyboard_service_router, app_event_callback,
+                                           app_event_ctx);
+}
+
+/*
+ * brief  : Stop keyboard singleton service.
+ * input  : None.
+ * output : None.
+ * type   : public
+ */
+void keyboard_service_stop(void) {
+    if (!g_keyboard_service_started) {
+        return;
+    }
+
+    stop_keyboard(&g_keyboard_service);
+    g_keyboard_service_started = false;
 }
 
 /*

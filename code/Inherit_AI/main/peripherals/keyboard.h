@@ -111,10 +111,31 @@ typedef struct {
     bool running;
 } keyboard_t;
 
+typedef bool (*keyboard_event_post_fn_t)(void* runtime, uint8_t key_index, uint8_t event_type);
+
+typedef struct {
+    void* event_runtime;
+    keyboard_event_post_fn_t post_event;
+    bool* enabled_flag;
+    keyboard_app_event_callback_t app_event_callback;
+    void* app_event_ctx;
+} keyboard_event_router_t;
+
 esp_err_t start_keyboard(keyboard_t* keyboard, const keyboard_config_t* config);
 void keyboard_set_app_event_callback(keyboard_t* keyboard,
                                      keyboard_app_event_callback_t app_event_callback,
                                      void* user_ctx);
+void keyboard_event_router_init(keyboard_event_router_t* router, void* event_runtime,
+                                keyboard_event_post_fn_t post_event, bool* enabled_flag);
+void keyboard_event_router_set_app_callback(keyboard_event_router_t* router,
+                                            keyboard_app_event_callback_t app_event_callback,
+                                            void* app_event_ctx);
+void keyboard_event_router_callback(uint8_t key_index, uint8_t event_type, void* user_ctx);
+
+esp_err_t keyboard_service_start_for_desktop(const keyboard_config_t* config);
+void keyboard_service_set_app_event_callback(keyboard_app_event_callback_t app_event_callback,
+                                             void* app_event_ctx);
+void keyboard_service_stop(void);
 void stop_keyboard(keyboard_t* keyboard);
 
 #ifdef __cplusplus
