@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <atomic>
+#include <array>
 #include <deque>
 #include <condition_variable>
 #include <chrono>
@@ -50,6 +51,7 @@
 #define AS_EVENT_AUDIO_TESTING_RUNNING      (1 << 0)
 #define AS_EVENT_WAKE_WORD_RUNNING          (1 << 1)
 #define AS_EVENT_AUDIO_PROCESSOR_RUNNING    (1 << 2)
+#define AS_EVENT_MIC_MONITOR_RUNNING        (1 << 3)
 #define AS_EVENT_AUDIO_INPUT_STOP_REQUEST   (1 << 4)
 
 #define AS_OPUS_GET_FRAME_DRU_ENUM(duration_ms)                   \
@@ -105,6 +107,18 @@ struct DebugStatistics {
     uint32_t encode_drop_count = 0;
 };
 
+struct MicMonitorSnapshot {
+    std::array<int16_t, 160> samples = {};
+    uint32_t sample_count = 0;
+    uint32_t sample_rate = 0;
+    int32_t min_value = 0;
+    int32_t max_value = 0;
+    uint32_t avg_abs = 0;
+    uint32_t rms = 0;
+    uint64_t update_ms = 0;
+    bool valid = false;
+};
+
 class AudioService {
 public:
     AudioService();
@@ -126,6 +140,7 @@ public:
     void EnableWakeWordDetection(bool enable);
     void EnableVoiceProcessing(bool enable);
     void EnableAudioTesting(bool enable);
+    void EnableMicMonitor(bool enable);
     void EnableDeviceAec(bool enable);
 
     void SetCallbacks(AudioServiceCallbacks& callbacks);
@@ -134,6 +149,10 @@ public:
     std::unique_ptr<AudioStreamPacket> PopPacketFromSendQueue();
     void PlaySound(const std::string_view& sound);
     bool ReadAudioData(std::vector<int16_t>& data, int sample_rate, int samples);
+    bool GetMicMonitorSnapshot(MicMonitorSnapshot& snapshot) const;
+    bool IsMicMonitorRunning() const {
+        return xEventGroupGetBits(event_group_) & AS_EVENT_MIC_MONITOR_RUNNING;
+    }
     void ResetDecoder();
     void SetModelsList(srmodel_list_t* models_list);
 
@@ -191,6 +210,9 @@ private:
     std::atomic<bool> service_stopped_{true};
     std::atomic<bool> audio_input_need_warmup_{false};
 
+    mutable std::mutex mic_monitor_mutex_;
+    MicMonitorSnapshot mic_monitor_snapshot_;
+
     esp_timer_handle_t audio_power_timer_ = nullptr;
     std::chrono::steady_clock::time_point last_input_time_;
     std::chrono::steady_clock::time_point last_output_time_;
@@ -200,6 +222,7 @@ private:
     void OpusCodecTask();
     void PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t>&& pcm);
     bool InitializeAudioEngine();
+    void UpdateMicMonitorSnapshot(const std::vector<int16_t>& data, int sample_rate);
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckAndUpdateAudioPowerState();
     bool IsPlaybackDrainedLocked() const;

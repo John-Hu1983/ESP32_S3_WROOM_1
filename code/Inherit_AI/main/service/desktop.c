@@ -1,5 +1,6 @@
 #include "service/desktop.h"
 #include "service/ui_pidm.h"
+#include "ui_tryme.h"
 
 extern const service_item_t g_service_ai;
 extern const service_item_t g_service_wifi;
@@ -9,17 +10,20 @@ extern const service_item_t g_service_offline;
 extern const service_item_t g_service_cell;
 extern const service_item_t g_service_signal;
 extern const service_item_t g_service_node;
-extern const service_item_t g_service_debug;
+extern const service_item_t g_service_tryme;
 extern const service_item_t g_service_tools;
 extern const service_item_t g_service_pidm;
 extern const service_item_t g_service_power;
 
+static const service_item_t g_desktop;
+
 static const service_item_t* k_services[SERVICE_APP_COUNT] = {
-    &g_desktop, &g_service_ai,   &g_service_wifi,   &g_service_scan, &g_service_link,
-    &g_service_offline, &g_service_cell, &g_service_signal, &g_service_node, &g_service_debug,
+    &g_desktop,         &g_service_ai,   &g_service_wifi,   &g_service_scan, &g_service_link,
+    &g_service_offline, &g_service_cell, &g_service_signal, &g_service_node, &g_service_tryme,
     &g_service_tools,   &g_service_pidm, &g_service_power,
 };
 
+#define TRYME_SERVICE_INDEX 9
 #define PIDM_SERVICE_INDEX 11
 #define DESKTOP_HOME_SERVICE_INDEX 0
 #define DESKTOP_ENTER_NOTIFICATION_MS 1000
@@ -41,9 +45,20 @@ static desktop_host_ops_t g_desktop_service_host_ops = {0};
 static bool g_desktop_service_started = false;
 
 static void desktop_apply_selection(desktop_runtime_t* runtime);
+static void desktop_runtime_init(desktop_runtime_t* runtime);
+static void desktop_build_ops(desktop_ops_t* ops, desktop_host_ops_t* host_ops);
+static esp_err_t desktop_task_start(desktop_runtime_t* runtime, const desktop_ops_t* ops);
+static void desktop_enter_home(desktop_runtime_t* runtime, bool show_notification);
+static bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index,
+                                   uint8_t event_type);
+static int desktop_get_count(void);
+static const service_item_t* desktop_get_item(int service_index);
+static bool desktop_is_home(const desktop_runtime_t* runtime);
 
 /* ==================== private functions (static) ==================== */
-
+static const service_item_t g_desktop = {
+    0, "Desktop", "Desktop", "System ready. Select app.", 0, 0,
+};
 /*
  * brief  : Find the best parent layer to host desktop controls.
  * input  : screen - Active screen object; screen_width - Display width;
@@ -165,9 +180,7 @@ static void desktop_resolve_bar_reserve_walk(lv_obj_t* node, lv_coord_t screen_w
  * output : First selectable service index or DESKTOP_NO_SELECTION.
  * type   : private
  */
-static int first_app_index(void) {
-    return desktop_get_count() > 1 ? 1 : DESKTOP_NO_SELECTION;
-}
+static int first_app_index(void) { return desktop_get_count() > 1 ? 1 : DESKTOP_NO_SELECTION; }
 
 /*
  * brief  : Return last selectable app index in desktop list.
@@ -859,7 +872,8 @@ static void desktop_enter_home_view(desktop_runtime_t* runtime, bool show_notifi
     }
 
     if (show_notification && runtime->ops.show_notification != 0) {
-        runtime->ops.show_notification(runtime->ops.ctx, desktop_name, DESKTOP_ENTER_NOTIFICATION_MS);
+        runtime->ops.show_notification(runtime->ops.ctx, desktop_name,
+                                       DESKTOP_ENTER_NOTIFICATION_MS);
     }
 
     desktop_host_set_prompt(runtime, desktop_prompt);
@@ -926,6 +940,10 @@ static void show_selected_service(desktop_runtime_t* runtime) {
 static void desktop_switch_to_home(desktop_runtime_t* runtime, bool show_notification) {
     if (runtime == 0) {
         return;
+    }
+
+    if (runtime->state.current_service_index == TRYME_SERVICE_INDEX) {
+        ui_tryme_on_leave();
     }
 
     if (runtime->state.current_service_index == PIDM_SERVICE_INDEX) {
@@ -1032,8 +1050,7 @@ static void run_service_command(desktop_runtime_t* runtime, service_command_t co
  * output : None.
  * type   : private
  */
-static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
-                             uint8_t event_type) {
+static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index, uint8_t event_type) {
     int first_index;
     int last_index;
 
@@ -1085,6 +1102,9 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
         if (runtime->state.current_service_index == PIDM_SERVICE_INDEX) {
             ui_pidm_on_enter();
         }
+        if (runtime->state.current_service_index == TRYME_SERVICE_INDEX) {
+            ui_tryme_on_enter();
+        }
 
         desktop_enter_service_view(runtime, runtime->state.current_service_index);
     }
@@ -1097,8 +1117,7 @@ static void process_home_key(desktop_runtime_t* runtime, uint8_t key_index,
  * output : None.
  * type   : private
  */
-static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index,
-                                uint8_t event_type) {
+static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index, uint8_t event_type) {
     service_key_result_t result;
 
     if (runtime == 0) {
@@ -1113,6 +1132,9 @@ static void process_service_key(desktop_runtime_t* runtime, uint8_t key_index,
     if (result.consumed) {
         if (runtime->state.current_service_index == PIDM_SERVICE_INDEX) {
             ui_pidm_on_key_event(key_index, event_type);
+        }
+        if (runtime->state.current_service_index == TRYME_SERVICE_INDEX) {
+            ui_tryme_on_key_event(key_index, event_type);
         }
 
         if (result.command == SERVICE_CMD_ENTER_DESKTOP) {
@@ -1183,19 +1205,44 @@ static void desktop_task_loop(void* arg) {
     }
 }
 
-/* ==================== public functions ==================== */
+/*
+ * brief  : Get number of service items in desktop list.
+ * input  : None.
+ * output : Total item count.
+ * type   : private
+ */
+static int desktop_get_count(void) { return (int)(sizeof(k_services) / sizeof(k_services[0])); }
 
-const service_item_t g_desktop = {
-    0, "Desktop", "Desktop", "System ready. Select app.", 0, 0,
-};
+/*
+ * brief  : Get service item metadata by index.
+ * input  : service_index - Service index in list.
+ * output : service_item_t pointer when valid; null pointer otherwise.
+ * type   : private
+ */
+static const service_item_t* desktop_get_item(int service_index) {
+    if (service_index < 0 || service_index >= desktop_get_count()) {
+        return 0;
+    }
+    return k_services[service_index];
+}
+
+/*
+ * brief  : Check whether runtime is currently in desktop home mode.
+ * input  : runtime - Desktop runtime pointer.
+ * output : true when home mode; otherwise false.
+ * type   : private
+ */
+static bool desktop_is_home(const desktop_runtime_t* runtime) {
+    return runtime != 0 && runtime->state.current_service_index < 0;
+}
 
 /*
  * brief  : Initialize desktop runtime with default state.
  * input  : runtime - Desktop runtime output pointer.
  * output : None.
- * type   : public
+ * type   : private
  */
-void desktop_runtime_init(desktop_runtime_t* runtime) {
+static void desktop_runtime_init(desktop_runtime_t* runtime) {
     if (runtime == 0) {
         return;
     }
@@ -1210,9 +1257,9 @@ void desktop_runtime_init(desktop_runtime_t* runtime) {
  * brief  : Build desktop ops callbacks from host operation table.
  * input  : ops - output desktop ops; host_ops - host operation table.
  * output : None.
- * type   : public
+ * type   : private
  */
-void desktop_build_ops(desktop_ops_t* ops, desktop_host_ops_t* host_ops) {
+static void desktop_build_ops(desktop_ops_t* ops, desktop_host_ops_t* host_ops) {
     if (ops == 0 || host_ops == 0) {
         return;
     }
@@ -1232,9 +1279,9 @@ void desktop_build_ops(desktop_ops_t* ops, desktop_host_ops_t* host_ops) {
  * brief  : Start desktop task and initialize desktop control layer.
  * input  : runtime - Desktop runtime pointer; ops - Callback table.
  * output : ESP_OK on success; error code otherwise.
- * type   : public
+ * type   : private
  */
-esp_err_t desktop_task_start(desktop_runtime_t* runtime, const desktop_ops_t* ops) {
+static esp_err_t desktop_task_start(desktop_runtime_t* runtime, const desktop_ops_t* ops) {
     BaseType_t created;
 
     if (runtime == 0 || ops == 0 || ops->ctx == 0) {
@@ -1274,9 +1321,9 @@ esp_err_t desktop_task_start(desktop_runtime_t* runtime, const desktop_ops_t* op
  * brief  : Enter desktop home mode and refresh status/prompt presentation.
  * input  : runtime - Desktop runtime pointer; show_notification - true to show home notice.
  * output : None.
- * type   : public
+ * type   : private
  */
-void desktop_enter_home(desktop_runtime_t* runtime, bool show_notification) {
+static void desktop_enter_home(desktop_runtime_t* runtime, bool show_notification) {
     desktop_switch_to_home(runtime, show_notification);
 }
 
@@ -1285,9 +1332,10 @@ void desktop_enter_home(desktop_runtime_t* runtime, bool show_notification) {
  * input  : runtime - Desktop runtime pointer; key_index - Physical key id;
  *          event_type - Key event type.
  * output : true if queued; otherwise false.
- * type   : public
+ * type   : private
  */
-bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index, uint8_t event_type) {
+static bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index,
+                                   uint8_t event_type) {
     desktop_key_event_t event;
 
     if (runtime == 0 || runtime->key_queue == 0) {
@@ -1298,6 +1346,8 @@ bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index, uint8
     event.event_type = event_type;
     return xQueueSend(runtime->key_queue, &event, 0) == pdTRUE;
 }
+
+/* ==================== public functions ==================== */
 
 /*
  * brief  : Start desktop singleton service with host operation callbacks.
@@ -1377,34 +1427,3 @@ bool desktop_service_is_started(void) { return g_desktop_service_started; }
  * type   : public
  */
 bool* desktop_service_started_flag(void) { return &g_desktop_service_started; }
-
-/*
- * brief  : Get number of service items in desktop list.
- * input  : None.
- * output : Total item count.
- * type   : public
- */
-int desktop_get_count(void) { return (int)(sizeof(k_services) / sizeof(k_services[0])); }
-
-/*
- * brief  : Get service item metadata by index.
- * input  : service_index - Service index in list.
- * output : service_item_t pointer when valid; null pointer otherwise.
- * type   : public
- */
-const service_item_t* desktop_get_item(int service_index) {
-    if (service_index < 0 || service_index >= desktop_get_count()) {
-        return 0;
-    }
-    return k_services[service_index];
-}
-
-/*
- * brief  : Check whether runtime is currently in desktop home mode.
- * input  : runtime - Desktop runtime pointer.
- * output : true when home mode; otherwise false.
- * type   : public
- */
-bool desktop_is_home(const desktop_runtime_t* runtime) {
-    return runtime != 0 && runtime->state.current_service_index < 0;
-}

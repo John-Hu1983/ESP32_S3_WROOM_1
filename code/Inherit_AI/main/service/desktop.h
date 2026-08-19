@@ -135,26 +135,12 @@ typedef struct {
     uint8_t desktop_tile_count;
 } desktop_runtime_t;
 
-extern const service_item_t g_desktop;
-
-void desktop_runtime_init(desktop_runtime_t* runtime);
-void desktop_build_ops(desktop_ops_t* ops, desktop_host_ops_t* host_ops);
-esp_err_t desktop_task_start(desktop_runtime_t* runtime,
-                             const desktop_ops_t* ops);
-void desktop_enter_home(desktop_runtime_t* runtime, bool show_notification);
-bool desktop_post_key_event(desktop_runtime_t* runtime, uint8_t key_index,
-                            uint8_t event_type);
-
 void desktop_service_fill_default_host_ops(desktop_host_ops_t* host_ops);
 esp_err_t desktop_service_start(desktop_host_ops_t* host_ops);
 void desktop_service_enter_home(bool show_notification);
 bool desktop_service_post_key_event(uint8_t key_index, uint8_t event_type);
 bool desktop_service_is_started(void);
 bool* desktop_service_started_flag(void);
-
-int desktop_get_count(void);
-const service_item_t* desktop_get_item(int service_index);
-bool desktop_is_home(const desktop_runtime_t* runtime);
 
 #ifdef __cplusplus
 }

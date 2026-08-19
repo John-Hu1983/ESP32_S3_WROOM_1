@@ -63,7 +63,7 @@ private:
         io_config.dc_gpio_num = LCD_IO_RS;
         io_config.spi_mode = 0;
         io_config.pclk_hz = LCD_DEFAULT_CLOCK_HZ;
-        io_config.trans_queue_depth = 10;
+        io_config.trans_queue_depth = 20;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(LCD_SPI_HOST, &io_config, &panel_io_));
@@ -183,11 +183,12 @@ public:
     virtual AudioCodec* GetAudioCodec() override {
         static NoAudioCodecSimplexPdm audio_codec(
             USER_AUDIO_SAMPLE_RATE_HZ, USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO, I2S_DO_IO,
-            I2S_STD_SLOT_BOTH, PDM_CLK_IO, PDM_DATA_IO);
+            I2S_STD_SLOT_BOTH, PDM_CLK_IO, PDM_DATA_IO,
+            1 /* MIC L/R tied high: valid data on RIGHT slot */);
         return &audio_codec;
     }
 
     virtual Display* GetDisplay() override { return display_; }
 };
-
+    
 DECLARE_BOARD(Esp32S3Wroom1N16r8Board);

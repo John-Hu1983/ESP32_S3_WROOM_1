@@ -33,9 +33,23 @@ public:
 
 class NoAudioCodecSimplexPdm : public NoAudioCodec {
 public:
-    NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, gpio_num_t mic_sck,  gpio_num_t mic_din);
-    NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, i2s_std_slot_mask_t spk_slot_mask, gpio_num_t mic_sck,  gpio_num_t mic_din);
+    NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, gpio_num_t mic_sck,  gpio_num_t mic_din, int fixed_pdm_channel = -1);
+    NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, i2s_std_slot_mask_t spk_slot_mask, gpio_num_t mic_sck,  gpio_num_t mic_din, int fixed_pdm_channel = -1);
     int Read(int16_t* dest, int samples);
+
+private:
+    int pdm_selected_channel_ = 0;
+    int pdm_fixed_channel_ = -1;
+    std::vector<int16_t> pdm_stereo_buffer_;
+    uint64_t pdm_diag_last_log_ms_ = 0;
+    uint64_t pdm_diag_left_sq_sum_ = 0;
+    uint64_t pdm_diag_right_sq_sum_ = 0;
+    uint64_t pdm_diag_out_sq_sum_ = 0;
+    uint64_t pdm_diag_out_abs_sum_ = 0;
+    uint32_t pdm_diag_sample_count_ = 0;
+    int32_t pdm_diag_out_min_ = 0;
+    int32_t pdm_diag_out_max_ = 0;
+    bool pdm_diag_has_sample_ = false;
 };
 
 #endif // _NO_AUDIO_CODEC_H

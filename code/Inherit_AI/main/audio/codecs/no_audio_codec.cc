@@ -1,6 +1,7 @@
 #include "no_audio_codec.h"
 
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -282,15 +283,19 @@ void NoAudioCodec::EnableOutput(bool enable) {
 }
 
 // Delegating constructor: calls the main constructor with default slot mask
-NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, gpio_num_t mic_sck, gpio_num_t mic_din) 
-    : NoAudioCodecSimplexPdm(input_sample_rate, output_sample_rate, spk_bclk, spk_ws, spk_dout, I2S_STD_SLOT_LEFT, mic_sck, mic_din) {
+NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, gpio_num_t mic_sck, gpio_num_t mic_din, int fixed_pdm_channel) 
+    : NoAudioCodecSimplexPdm(input_sample_rate, output_sample_rate, spk_bclk, spk_ws, spk_dout, I2S_STD_SLOT_LEFT, mic_sck, mic_din, fixed_pdm_channel) {
     // All initialization is handled by the delegated constructor
 }
 
-NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, i2s_std_slot_mask_t spk_slot_mask, gpio_num_t mic_sck, gpio_num_t mic_din) {
+NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output_sample_rate, gpio_num_t spk_bclk, gpio_num_t spk_ws, gpio_num_t spk_dout, i2s_std_slot_mask_t spk_slot_mask, gpio_num_t mic_sck, gpio_num_t mic_din, int fixed_pdm_channel) {
     duplex_ = false;
     input_sample_rate_ = input_sample_rate;
     output_sample_rate_ = output_sample_rate;
+    if (fixed_pdm_channel == 0 || fixed_pdm_channel == 1) {
+        pdm_fixed_channel_ = fixed_pdm_channel;
+        pdm_selected_channel_ = fixed_pdm_channel;
+    }
 
     // Create a new channel for speaker
     i2s_chan_config_t tx_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(XIAOZHI_I2S_PORT(1), I2S_ROLE_MASTER);
@@ -348,7 +353,7 @@ NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output
     i2s_pdm_rx_config_t pdm_rx_cfg = {
         .clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG((uint32_t)input_sample_rate_),
         /* The data bit-width of PDM mode is fixed to 16 */
-        .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .clk = mic_sck,
             .din = mic_din,
@@ -362,19 +367,87 @@ NoAudioCodecSimplexPdm::NoAudioCodecSimplexPdm(int input_sample_rate, int output
 #else
     ESP_LOGE(TAG, "PDM is not supported");
 #endif
+    if (pdm_fixed_channel_ >= 0) {
+        ESP_LOGI(TAG, "PDM mic slot fixed to %s", pdm_fixed_channel_ == 0 ? "LEFT" : "RIGHT");
+    } else {
+        ESP_LOGI(TAG, "PDM mic slot auto-select enabled");
+    }
     ESP_LOGI(TAG, "Simplex channels created");
 }
 
 int NoAudioCodecSimplexPdm::Read(int16_t* dest, int samples) {
     size_t bytes_read;
 
-    // PDM 解调后的数据位宽为 16 位，直接读取到目标缓冲区
-    if (i2s_channel_read(rx_handle_, dest, samples * sizeof(int16_t), &bytes_read, portMAX_DELAY) != ESP_OK) {
+    if (samples <= 0) {
+        return 0;
+    }
+
+    size_t required_words = (size_t)samples * 2;
+    if (pdm_stereo_buffer_.size() < required_words) {
+        pdm_stereo_buffer_.resize(required_words);
+    }
+
+    // Read stereo slots so mono microphones wired as LEFT/RIGHT are both covered.
+    if (i2s_channel_read(rx_handle_, pdm_stereo_buffer_.data(), required_words * sizeof(int16_t), &bytes_read, portMAX_DELAY) != ESP_OK) {
         ESP_LOGE(TAG, "Read Failed!");
         return 0;
     }
 
-    samples = bytes_read / sizeof(int16_t);
+    size_t read_words = bytes_read / sizeof(int16_t);
+    samples = (int)(read_words / 2);
+    if (samples <= 0) {
+        return 0;
+    }
+
+    int64_t left_energy = 0;
+    int64_t right_energy = 0;
+    for (int i = 0; i < samples; ++i) {
+        int32_t left = pdm_stereo_buffer_[i * 2];
+        int32_t right = pdm_stereo_buffer_[i * 2 + 1];
+        left_energy += (int64_t)left * left;
+        right_energy += (int64_t)right * right;
+    }
+
+    int new_channel = pdm_selected_channel_;
+    if (pdm_fixed_channel_ == 0 || pdm_fixed_channel_ == 1) {
+        new_channel = pdm_fixed_channel_;
+    } else {
+        if (right_energy > (left_energy * 3) / 2) {
+            new_channel = 1;
+        } else if (left_energy > (right_energy * 3) / 2) {
+            new_channel = 0;
+        }
+    }
+
+    if (new_channel != pdm_selected_channel_) {
+        ESP_LOGW(TAG, "PDM mic channel switched to %s (L:%lld R:%lld)",
+                 new_channel == 0 ? "LEFT" : "RIGHT",
+                 (long long)left_energy, (long long)right_energy);
+        pdm_selected_channel_ = new_channel;
+    }
+
+    int32_t out_min = 0;
+    int32_t out_max = 0;
+    uint64_t out_abs_sum = 0;
+    uint64_t out_sq_sum = 0;
+    for (int i = 0; i < samples; ++i) {
+        int32_t out = pdm_stereo_buffer_[i * 2 + pdm_selected_channel_];
+        dest[i] = (int16_t)out;
+        if (i == 0) {
+            out_min = out;
+            out_max = out;
+        } else {
+            if (out < out_min) {
+                out_min = out;
+            }
+            if (out > out_max) {
+                out_max = out;
+            }
+        }
+        out_abs_sum += (uint64_t)(out < 0 ? -out : out);
+        out_sq_sum += (uint64_t)((int64_t)out * (int64_t)out);
+    }
+
     if (input_gain_ > 0) {
         int gain_factor = (int)input_gain_;
         for (int i = 0; i < samples; i++) {
@@ -382,5 +455,58 @@ int NoAudioCodecSimplexPdm::Read(int16_t* dest, int samples) {
             dest[i] = (amplified > INT16_MAX) ? INT16_MAX : (amplified < -INT16_MAX) ? -INT16_MAX : (int16_t)amplified;
         }
     }
+
+    if (samples > 0) {
+        if (!pdm_diag_has_sample_) {
+            pdm_diag_out_min_ = out_min;
+            pdm_diag_out_max_ = out_max;
+            pdm_diag_has_sample_ = true;
+        } else {
+            if (out_min < pdm_diag_out_min_) {
+                pdm_diag_out_min_ = out_min;
+            }
+            if (out_max > pdm_diag_out_max_) {
+                pdm_diag_out_max_ = out_max;
+            }
+        }
+
+        pdm_diag_left_sq_sum_ += (uint64_t)left_energy;
+        pdm_diag_right_sq_sum_ += (uint64_t)right_energy;
+        pdm_diag_out_sq_sum_ += out_sq_sum;
+        pdm_diag_out_abs_sum_ += out_abs_sum;
+        pdm_diag_sample_count_ += (uint32_t)samples;
+
+        uint64_t now_ms = (uint64_t)(esp_timer_get_time() / 1000);
+        if (pdm_diag_last_log_ms_ == 0) {
+            pdm_diag_last_log_ms_ = now_ms;
+        }
+
+        if (now_ms - pdm_diag_last_log_ms_ >= 1000 && pdm_diag_sample_count_ > 0) {
+            uint32_t left_rms = (uint32_t)std::sqrt((double)pdm_diag_left_sq_sum_ / (double)pdm_diag_sample_count_);
+            uint32_t right_rms = (uint32_t)std::sqrt((double)pdm_diag_right_sq_sum_ / (double)pdm_diag_sample_count_);
+            uint32_t out_rms = (uint32_t)std::sqrt((double)pdm_diag_out_sq_sum_ / (double)pdm_diag_sample_count_);
+            uint32_t out_avg = (uint32_t)(pdm_diag_out_abs_sum_ / pdm_diag_sample_count_);
+            int32_t out_pp = pdm_diag_out_max_ - pdm_diag_out_min_;
+            ESP_LOGI(TAG,
+                     "PDM diag slot=%s fixed=%d Lrms=%lu Rrms=%lu Orms=%lu Opp=%ld Oavg=%lu n=%lu",
+                     pdm_selected_channel_ == 0 ? "LEFT" : "RIGHT",
+                     pdm_fixed_channel_,
+                     (unsigned long)left_rms,
+                     (unsigned long)right_rms,
+                     (unsigned long)out_rms,
+                     (long)out_pp,
+                     (unsigned long)out_avg,
+                     (unsigned long)pdm_diag_sample_count_);
+
+            pdm_diag_last_log_ms_ = now_ms;
+            pdm_diag_left_sq_sum_ = 0;
+            pdm_diag_right_sq_sum_ = 0;
+            pdm_diag_out_sq_sum_ = 0;
+            pdm_diag_out_abs_sum_ = 0;
+            pdm_diag_sample_count_ = 0;
+            pdm_diag_has_sample_ = false;
+        }
+    }
+
     return samples;
 }

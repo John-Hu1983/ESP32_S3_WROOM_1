@@ -1,5 +1,6 @@
 #include "audio_service.h"
 #include <esp_log.h>
+#include <cmath>
 #include <cstring>
 
 #define RATE_CVT_CFG(_src_rate, _dest_rate, _channel)        \
@@ -122,7 +123,8 @@ void AudioService::Initialize(AudioCodec* codec) {
 void AudioService::Start() {
     service_stopped_.store(false);
     xEventGroupClearBits(event_group_, AS_EVENT_AUDIO_TESTING_RUNNING | AS_EVENT_WAKE_WORD_RUNNING |
-        AS_EVENT_AUDIO_PROCESSOR_RUNNING | AS_EVENT_AUDIO_INPUT_STOP_REQUEST);
+        AS_EVENT_AUDIO_PROCESSOR_RUNNING | AS_EVENT_MIC_MONITOR_RUNNING |
+        AS_EVENT_AUDIO_INPUT_STOP_REQUEST);
 
     esp_timer_start_periodic(audio_power_timer_, 1000000);
 
@@ -169,7 +171,8 @@ void AudioService::Stop() {
     service_stopped_.store(true);
     xEventGroupSetBits(event_group_, AS_EVENT_AUDIO_TESTING_RUNNING |
         AS_EVENT_WAKE_WORD_RUNNING |
-        AS_EVENT_AUDIO_PROCESSOR_RUNNING);
+        AS_EVENT_AUDIO_PROCESSOR_RUNNING |
+        AS_EVENT_MIC_MONITOR_RUNNING);
 
     bool notify_drained = false;
     {
@@ -230,12 +233,15 @@ bool AudioService::ReadAudioData(std::vector<int16_t>& data, int sample_rate, in
     audio_debugger_->Feed(data);
 #endif
 
+    UpdateMicMonitorSnapshot(data, sample_rate);
+
     return true;
 }
 
 void AudioService::AudioInputTask() {
     constexpr EventBits_t kAudioInputActiveBits = AS_EVENT_AUDIO_TESTING_RUNNING |
-        AS_EVENT_WAKE_WORD_RUNNING | AS_EVENT_AUDIO_PROCESSOR_RUNNING;
+        AS_EVENT_WAKE_WORD_RUNNING | AS_EVENT_AUDIO_PROCESSOR_RUNNING |
+        AS_EVENT_MIC_MONITOR_RUNNING;
 
     while (true) {
         EventBits_t bits = xEventGroupWaitBits(event_group_, kAudioInputActiveBits |
@@ -300,6 +306,14 @@ void AudioService::AudioInputTask() {
             std::vector<int16_t> data;
             if (ReadAudioData(data, 16000, samples)) {
                 audio_engine_->Feed(std::move(data));
+                continue;
+            }
+        }
+
+        if (bits & AS_EVENT_MIC_MONITOR_RUNNING) {
+            int samples = 160; // 10ms
+            std::vector<int16_t> data;
+            if (ReadAudioData(data, 16000, samples)) {
                 continue;
             }
         }
@@ -692,6 +706,25 @@ void AudioService::EnableAudioTesting(bool enable) {
     }
 }
 
+void AudioService::EnableMicMonitor(bool enable) {
+    ESP_LOGI(TAG, "%s mic monitor", enable ? "Enabling" : "Disabling");
+    if (enable) {
+        xEventGroupSetBits(event_group_, AS_EVENT_MIC_MONITOR_RUNNING);
+    } else {
+        xEventGroupClearBits(event_group_, AS_EVENT_MIC_MONITOR_RUNNING);
+    }
+}
+
+bool AudioService::GetMicMonitorSnapshot(MicMonitorSnapshot& snapshot) const {
+    std::lock_guard<std::mutex> lock(mic_monitor_mutex_);
+    if (!mic_monitor_snapshot_.valid) {
+        return false;
+    }
+
+    snapshot = mic_monitor_snapshot_;
+    return true;
+}
+
 void AudioService::EnableDeviceAec(bool enable) {
     ESP_LOGI(TAG, "%s device AEC", enable ? "Enabling" : "Disabling");
     device_aec_enabled_ = enable;
@@ -821,4 +854,74 @@ bool AudioService::InitializeAudioEngine() {
     audio_engine_initialized_ = true;
     audio_engine_->EnableDeviceAec(device_aec_enabled_);
     return true;
+}
+
+void AudioService::UpdateMicMonitorSnapshot(const std::vector<int16_t>& data, int sample_rate) {
+    MicMonitorSnapshot snapshot;
+    uint32_t channels;
+    uint32_t total_samples;
+    uint32_t copy_samples;
+    uint32_t start_index;
+    uint32_t i;
+    int32_t min_value = 32767;
+    int32_t max_value = -32768;
+    uint64_t abs_sum = 0;
+    uint64_t square_sum = 0;
+
+    if ((xEventGroupGetBits(event_group_) & AS_EVENT_MIC_MONITOR_RUNNING) == 0) {
+        return;
+    }
+
+    if (data.empty() || codec_ == nullptr) {
+        return;
+    }
+
+    channels = (uint32_t)codec_->input_channels();
+    if (channels == 0) {
+        channels = 1;
+    }
+
+    total_samples = (uint32_t)(data.size() / channels);
+    if (total_samples == 0) {
+        return;
+    }
+
+    copy_samples = total_samples;
+    if (copy_samples > snapshot.samples.size()) {
+        copy_samples = (uint32_t)snapshot.samples.size();
+    }
+    start_index = total_samples - copy_samples;
+
+    for (i = 0; i < copy_samples; ++i) {
+        int32_t sample = data[(start_index + i) * channels];
+
+        if (sample < min_value) {
+            min_value = sample;
+        }
+        if (sample > max_value) {
+            max_value = sample;
+        }
+
+        if (sample < 0) {
+            abs_sum += (uint64_t)(-sample);
+        } else {
+            abs_sum += (uint64_t)sample;
+        }
+        square_sum += (uint64_t)((int64_t)sample * (int64_t)sample);
+        snapshot.samples[i] = (int16_t)sample;
+    }
+
+    snapshot.sample_count = copy_samples;
+    snapshot.sample_rate = (uint32_t)sample_rate;
+    snapshot.min_value = min_value;
+    snapshot.max_value = max_value;
+    snapshot.avg_abs = (uint32_t)(abs_sum / copy_samples);
+    snapshot.rms = (uint32_t)std::sqrt((double)square_sum / (double)copy_samples);
+    snapshot.update_ms = (uint64_t)(esp_timer_get_time() / 1000);
+    snapshot.valid = true;
+
+    {
+        std::lock_guard<std::mutex> lock(mic_monitor_mutex_);
+        mic_monitor_snapshot_ = snapshot;
+    }
 }

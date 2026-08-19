@@ -6,8 +6,29 @@
 #include <stdio.h>
 #include <string.h>
 
+LV_FONT_DECLARE(font_noto_sans_basic_14_1);
+LV_FONT_DECLARE(font_noto_sans_basic_16_4);
+LV_FONT_DECLARE(font_noto_sans_basic_20_4);
+LV_FONT_DECLARE(font_noto_sans_basic_30_4);
+
 static bool s_pidm_enabled = false;
 static pidm_ui_ctx_t* s_pidm_ctx = NULL;
+
+static const lv_font_t* ui_pidm_get_metrics_font(void) {
+    const lv_font_t* base_font = &BUILTIN_TEXT_FONT;
+
+    if (base_font->line_height >= font_noto_sans_basic_30_4.line_height) {
+        return &font_noto_sans_basic_20_4;
+    }
+    if (base_font->line_height >= font_noto_sans_basic_20_4.line_height) {
+        return &font_noto_sans_basic_16_4;
+    }
+    if (base_font->line_height >= font_noto_sans_basic_16_4.line_height) {
+        return &font_noto_sans_basic_14_1;
+    }
+
+    return base_font;
+}
 
 static esp_err_t ui_pidm_ensure_ready(void) {
     if (pidm_det_is_ready()) {
@@ -295,11 +316,14 @@ static bool ui_pidm_create_metrics_grid(lv_obj_t* parent) {
     static const char* default_text[PIDM_UI_TEXT_COUNT] = {
         "run=0", "metal=0", "peak=0", "dpk=0", "slope=0", "dsl=0", "hold=0", "area=0", "base=0 thr=0",
     };
+    const lv_font_t* metrics_font;
     uint32_t i;
 
     if (parent == NULL || s_pidm_ctx == NULL) {
         return false;
     }
+
+    metrics_font = ui_pidm_get_metrics_font();
 
     for (i = 0; i < PIDM_UI_TEXT_COUNT; ++i) {
         lv_obj_t* textedit;
@@ -320,6 +344,7 @@ static bool ui_pidm_create_metrics_grid(lv_obj_t* parent) {
         lv_obj_set_style_border_color(textedit, lv_color_hex(PIDM_UI_BORDER_HEX), 0);
         lv_obj_set_style_radius(textedit, 4, 0);
         lv_obj_set_style_text_color(textedit, lv_color_hex(PIDM_UI_TEXT_HEX), 0);
+        lv_obj_set_style_text_font(textedit, metrics_font, 0);
         lv_obj_set_style_pad_all(textedit, 3, 0);
         lv_obj_set_scrollbar_mode(textedit, LV_SCROLLBAR_MODE_OFF);
         lv_textarea_set_one_line(textedit, true);

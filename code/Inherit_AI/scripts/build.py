@@ -55,7 +55,7 @@ def get_project_version() -> Optional[str]:
 
 
 def _run_idf(*args: str, preview: bool = False) -> None:
-    command = ["idf.py"]
+    command = ["idf.py.exe" if os.name == "nt" else "idf.py"]
     if preview:
         command.append("--preview")
     command.extend(args)

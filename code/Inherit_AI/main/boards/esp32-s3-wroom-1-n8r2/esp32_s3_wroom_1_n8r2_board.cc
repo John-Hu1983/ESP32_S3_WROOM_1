@@ -1,64 +1,31 @@
-﻿#include "wifi_board.h"
+﻿#include "application.h"
+#include "bsp/gpba02b.h"
 #include "codecs/no_audio_codec.h"
-#include "display/lcd_display.h"
-#include "system_reset.h"
-#include "application.h"
-#include "button.h"
 #include "config.h"
 #include "mcp_server.h"
-#include "lamp_controller.h"
-#include "led/single_led.h"
-#include "assets/lang_config.h"
-#include "bsp/bsp_env.h"
-#include "bsp/gpba02b.h"
+#include "display/lcd_display.h"
+#include "display/st7365p_lcd_display.h"
+#include "peripherals/keyboard.h"
+#include "service/desktop.h"
+#include "system_reset.h"
+#include "wifi_board.h"
 
-#include <esp_log.h>
 #include <driver/spi_common.h>
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
+#include <esp_log.h>
 #include "esp_lcd_st7796.h"
 
 #define TAG "Esp32S3Wroom1N8r2Board"
-
-#ifndef BOOT_BUTTON_GPIO
-#define BOOT_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef TOUCH_BUTTON_GPIO
-#define TOUCH_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef VOLUME_UP_BUTTON_GPIO
-#define VOLUME_UP_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef VOLUME_DOWN_BUTTON_GPIO
-#define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef BUILTIN_LED_GPIO
-#define BUILTIN_LED_GPIO GPIO_NUM_NC
-#endif
-
-#ifndef LAMP_GPIO
-#define LAMP_GPIO GPIO_NUM_NC
-#endif
-
-namespace {
-}  // namespace
 
 class Esp32S3Wroom1N8r2Board : public WifiBoard {
 private:
     esp_lcd_panel_io_handle_t panel_io_ = nullptr;
     esp_lcd_panel_handle_t panel_ = nullptr;
     Display* display_ = nullptr;
-    Button boot_button_;
-    Button touch_button_;
-    Button volume_up_button_;
-    Button volume_down_button_;
 
-    void InitializeGpba02b() {
+    esp_err_t InitializeGpba02b() {
         gpba02b_config_t gpba02b_config = {};
         gpba02b_get_default_config(&gpba02b_config);
         gpba02b_config.spi_host = GPBA02B_SPI_HOST;
@@ -72,10 +39,11 @@ private:
         esp_err_t err = gpba02b_init(&gpba02b_config);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to initialize GPBA02B: %s", esp_err_to_name(err));
-            return;
+            return err;
         }
 
         ESP_LOGI(TAG, "GPBA02B initialized");
+        return ESP_OK;
     }
 
     void InitializeDisplaySpiBus() {
@@ -95,7 +63,7 @@ private:
         io_config.dc_gpio_num = LCD_IO_RS;
         io_config.spi_mode = 0;
         io_config.pclk_hz = LCD_DEFAULT_CLOCK_HZ;
-        io_config.trans_queue_depth = 10;
+        io_config.trans_queue_depth = 20;
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(LCD_SPI_HOST, &io_config, &panel_io_));
@@ -128,99 +96,98 @@ private:
         ESP_LOGI(TAG, "Turning display on");
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
-        display_ = new SpiLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH, LCD_DEFAULT_HEIGHT, 0,
-                                     0, mirror_x, mirror_y, swap_xy);
+        display_ = new St7365pLcdDisplay(panel_io_, panel_, LCD_DEFAULT_WIDTH, LCD_DEFAULT_HEIGHT,
+                                         0, 0, mirror_x, mirror_y, swap_xy);
     }
 
     void InitializeBspEnv() {
-        ESP_ERROR_CHECK(bsp_env_initialize());
-        ESP_ERROR_CHECK(bsp_env_lcd_init());
-        ESP_ERROR_CHECK(bsp_env_camera_init());
-        ESP_ERROR_CHECK(bsp_env_pwm_init());
+        auto configure_output = [](gpba02b_port_t port, uint8_t pin, bool level) {
+            ESP_ERROR_CHECK(
+                gpba02b_config_io_output_mode(port, pin, GPBA02B_IO_OUTPUT_PUSH_PULL, level));
+            ESP_ERROR_CHECK(gpba02b_write_io(port, pin, level));
+        };
+
+        configure_output(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, true);
+        configure_output(PDM_EN_PORT, PDM_EN_PIN, true);
+        configure_output(I2S_EN_PORT, I2S_EN_PIN, true);
+        configure_output(PIDM_EN_PORT, PIDM_EN_PIN, true);
+        configure_output(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, true);
+
+#if defined(CAM_IO_RESET_PORT) && defined(CAM_IO_RESET_PIN) && defined(CAM_IO_PWDN_PORT) && \
+    defined(CAM_IO_PWDN_PIN)
+        configure_output(CAM_IO_RESET_PORT, CAM_IO_RESET_PIN, true);
+        configure_output(CAM_IO_PWDN_PORT, CAM_IO_PWDN_PIN, true);
+#if defined(CAM_IO_LIGHT_PORT) && defined(CAM_IO_LIGHT_PIN)
+        configure_output(CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN, false);
+#endif
+#endif
+
+#if defined(RC522_RST_PORT) && defined(RC522_RST_PIN)
+        configure_output(RC522_RST_PORT, RC522_RST_PIN, true);
+#endif
+
+        ESP_ERROR_CHECK(
+            gpba02b_pwm_set_clock_div(PWM_GPBA02B_PA_CLOCK_DIV, PWM_GPBA02B_PC_CLOCK_DIV));
+
+        const uint8_t pwm_mask_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
+        const uint8_t pwm_mask_c = static_cast<uint8_t>(
+            (1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) | (1U << PWM_GPBA02B_10_PIN) |
+            (1U << PWM_GPBA02B_11_PIN) | (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
+
+        for (uint8_t channel = 0; channel < 8; ++channel) {
+            if ((pwm_mask_a & (1U << channel)) != 0) {
+                ESP_ERROR_CHECK(gpba02b_pwm_set_channel_duty(GPBA02B_PORT_A, channel,
+                                                             PWM_GPBA02B_DUTY_10_PERCENT));
+            }
+            if ((pwm_mask_c & (1U << channel)) != 0) {
+                ESP_ERROR_CHECK(gpba02b_pwm_set_channel_duty(GPBA02B_PORT_C, channel,
+                                                             PWM_GPBA02B_DUTY_10_PERCENT));
+            }
+        }
     }
 
-    void InitializeButtons() {
-        boot_button_.OnClick([this]() {
-            auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting) {
-                EnterWifiConfigMode();
-                return;
-            }
-            app.ToggleChatState();
-        });
-        touch_button_.OnPressDown([this]() {
-            Application::GetInstance().StartListening();
-        });
-        touch_button_.OnPressUp([this]() {
-            Application::GetInstance().StopListening();
-        });
+    void InitializeDesktop() {
+        desktop_host_ops_t host_ops = {};
+        host_ops.ctx = this;
+        ESP_ERROR_CHECK(desktop_service_start(&host_ops));
+    }
 
-        volume_up_button_.OnClick([this]() {
-            auto codec = GetAudioCodec();
-            auto volume = codec->output_volume() + 10;
-            if (volume > 100) {
-                volume = 100;
-            }
-            codec->SetOutputVolume(volume);
-            GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume));
-        });
-
-        volume_up_button_.OnLongPress([this]() {
-            GetAudioCodec()->SetOutputVolume(100);
-            GetDisplay()->ShowNotification(Lang::Strings::MAX_VOLUME);
-        });
-
-        volume_down_button_.OnClick([this]() {
-            auto codec = GetAudioCodec();
-            auto volume = codec->output_volume() - 10;
-            if (volume < 0) {
-                volume = 0;
-            }
-            codec->SetOutputVolume(volume);
-            GetDisplay()->ShowNotification(Lang::Strings::VOLUME + std::to_string(volume));
-        });
-
-        volume_down_button_.OnLongPress([this]() {
-            GetAudioCodec()->SetOutputVolume(0);
-            GetDisplay()->ShowNotification(Lang::Strings::MUTED);
+    void ScheduleDesktopBootstrap() {
+        Application::GetInstance().Schedule([this]() {
+            InitializeDesktop();
+            desktop_service_enter_home(false);
         });
     }
 
-    void InitializeTools() {
-        static LampController lamp(LAMP_GPIO);
-        (void)lamp;
+    void InitializeKeyboard() {
+        ESP_ERROR_CHECK(keyboard_service_start_for_desktop(nullptr));
     }
 
 public:
-    Esp32S3Wroom1N8r2Board() :
-        boot_button_(BOOT_BUTTON_GPIO),
-        touch_button_(TOUCH_BUTTON_GPIO),
-        volume_up_button_(VOLUME_UP_BUTTON_GPIO),
-        volume_down_button_(VOLUME_DOWN_BUTTON_GPIO) {
+    Esp32S3Wroom1N8r2Board() {
         InitializeGpba02b();
         InitializeBspEnv();
         InitializeDisplaySpiBus();
         InitializeSt7365pDisplay();
-        InitializeButtons();
-        InitializeTools();
+        InitializeKeyboard();
+        ScheduleDesktopBootstrap();
     }
 
-    virtual Led* GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
-        return &led;
+    virtual ~Esp32S3Wroom1N8r2Board() override { keyboard_service_stop(); }
+
+    virtual void SetKeyEventCallback(BoardKeyEventCallback callback, void* user_ctx) override {
+        keyboard_service_set_app_event_callback(callback, user_ctx);
     }
 
     virtual AudioCodec* GetAudioCodec() override {
-        // Speaker uses standard I2S, microphone uses PDM.
         static NoAudioCodecSimplexPdm audio_codec(
-            USER_AUDIO_SAMPLE_RATE_HZ, USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO,
-            I2S_DO_IO, PDM_CLK_IO, PDM_DATA_IO);
+            USER_AUDIO_SAMPLE_RATE_HZ, USER_AUDIO_SAMPLE_RATE_HZ, I2S_BCK_IO, I2S_WS_IO, I2S_DO_IO,
+            I2S_STD_SLOT_BOTH, PDM_CLK_IO, PDM_DATA_IO,
+            1 /* MIC L/R tied high: valid data on RIGHT slot */);
         return &audio_codec;
     }
 
-    virtual Display* GetDisplay() override {
-        return display_;
-    }
+    virtual Display* GetDisplay() override { return display_; }
 };
 
 DECLARE_BOARD(Esp32S3Wroom1N8r2Board);

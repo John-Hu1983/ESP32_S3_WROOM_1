@@ -1,13 +1,22 @@
 #include "camera_ui.h"
 
+#if CONFIG_IDF_TARGET_ESP32S3
+#include "soc/lcd_cam_struct.h"
+#endif
+
 #define TAG "CAMERA"
-#define CAMERA_INIT_RETRY_MAX 5U
+#define CAMERA_INIT_RETRY_MAX 6U
 #define CAMERA_INIT_RETRY_DELAY_MS 220U
 #define CAMERA_HARD_RESET_HOLD_MS 260U
 #define CAMERA_REINIT_ROUND_MAX 2U
-#define CAMERA_FIRST_FRAME_RETRY_MAX 6U
+#define CAMERA_FIRST_FRAME_RETRY_MAX 10U
 #define CAMERA_FIRST_FRAME_RETRY_DELAY_MS 40U
-#define CAMERA_FIRST_FRAME_SUCCESS_MIN 3U
+#define CAMERA_FIRST_FRAME_SUCCESS_MIN 6U
+#define CAMERA_FRAME_INTERVAL_MIN_US 8000ULL
+#define CAMERA_BF20A6_PLL_CTRL_DEFAULT 0x12U
+#define CAMERA_BF20A6_PLL_CTRL_LOW 0x82U
+#define CAMERA_BF20A6_INTG_CTRL_DEFAULT 0x45U
+#define CAMERA_BF20A6_INTG_CTRL_LOW 0x44U
 #define CAMERA_RUNTIME_TIMEOUT_RECOVER_MAX 3U
 #define CAMERA_WORKER_TASK_STACK_SIZE 8192U
 #define CAMERA_WORKER_TASK_PRIORITY 4U
@@ -21,6 +30,56 @@
 static camera_app_ctx_t *s_camera_ctx = NULL;
 static TaskHandle_t s_camera_input_task_handle = NULL;
 static volatile bool s_camera_input_task_stop = false;
+
+#ifdef CAMERA_OBJECT
+static esp_err_t _camera_ensure_psram_dma_enabled(void)
+{
+#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
+    if (esp_camera_get_psram_mode())
+    {
+        return ESP_OK;
+    }
+
+    USER_RETURN_ON_ERROR(esp_camera_set_psram_mode(true),
+                         TAG,
+                         "enable PSRAM DMA mode failed");
+
+    if (!esp_camera_get_psram_mode())
+    {
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "PSRAM DMA mode enabled");
+#endif
+
+    return ESP_OK;
+}
+
+struct camera_bf20a6_sync_profile
+{
+    uint8_t host_clk_inv;
+    uint8_t host_hsync_inv;
+    uint8_t host_vsync_inv;
+    uint8_t com1;
+    uint8_t com2;
+    const char *name;
+};
+
+static const struct camera_bf20a6_sync_profile s_bf20a6_sync_profiles[] = {
+    {1U, 0U, 0U, 0x00U, 0x70U, "pclk_inv_default"},
+    {0U, 0U, 0U, 0x00U, 0x70U, "default"},
+    {1U, 1U, 0U, 0x00U, 0x70U, "pclk_inv_hsync_inv"},
+    {0U, 1U, 0U, 0x00U, 0x70U, "hsync_inv"},
+    {1U, 0U, 1U, 0x00U, 0x70U, "pclk_inv_vsync_inv"},
+    {0U, 0U, 1U, 0x00U, 0x70U, "vsync_inv"},
+    {1U, 1U, 1U, 0x00U, 0x70U, "pclk_inv_hv_inv"},
+    {0U, 1U, 1U, 0x00U, 0x70U, "hv_inv"},
+    {1U, 0U, 0U, 0x10U, 0x70U, "pclk_inv_com1_bit4"},
+    {0U, 0U, 0U, 0x10U, 0x70U, "com1_bit4"},
+    {1U, 0U, 0U, 0x80U, 0x70U, "pclk_inv_com1_bit7"},
+    {0U, 0U, 0U, 0x80U, 0x70U, "com1_bit7"},
+};
+#endif
 
 /*
  * brief: Ensure preview frame buffer has enough bytes for one RGB565 frame copy.
@@ -59,6 +118,78 @@ static esp_err_t _camera_ensure_frame_buffer(camera_app_ctx_t *ctx, size_t bytes
 }
 
 /*
+ * brief: Convert one YUV422 (YUYV) frame into RGB565 buffer for LVGL rendering.
+ * input: src/src_len - source YUV422 bytes; dst - destination RGB565 bytes.
+ * output: number of bytes written into destination buffer.
+ */
+static size_t _camera_convert_yuv422_to_rgb565(const uint8_t *src,
+                                               size_t src_len,
+                                               uint8_t *dst)
+{
+    size_t pair_count;
+    size_t i;
+    uint16_t *dst16;
+
+    if ((src == NULL) || (dst == NULL) || (src_len < 4U))
+    {
+        return 0U;
+    }
+
+    pair_count = src_len / 4U;
+    dst16 = (uint16_t *)dst;
+
+    for (i = 0U; i < pair_count; i++)
+    {
+        size_t si = i * 4U;
+        uint8_t y0 = src[si + 0U];
+        uint8_t u = src[si + 1U];
+        uint8_t y1 = src[si + 2U];
+        uint8_t v = src[si + 3U];
+        int32_t d = (int32_t)u - 128;
+        int32_t e = (int32_t)v - 128;
+        int32_t c;
+        int32_t r;
+        int32_t g;
+        int32_t b;
+        uint8_t r8;
+        uint8_t g8;
+        uint8_t b8;
+
+        c = (int32_t)y0 - 16;
+        if (c < 0)
+        {
+            c = 0;
+        }
+        r = (298 * c + 409 * e + 128) >> 8;
+        g = (298 * c - 100 * d - 208 * e + 128) >> 8;
+        b = (298 * c + 516 * d + 128) >> 8;
+        r8 = (uint8_t)((r < 0) ? 0 : ((r > 255) ? 255 : r));
+        g8 = (uint8_t)((g < 0) ? 0 : ((g > 255) ? 255 : g));
+        b8 = (uint8_t)((b < 0) ? 0 : ((b > 255) ? 255 : b));
+        dst16[(i * 2U) + 0U] = (uint16_t)(((uint16_t)(r8 & 0xF8U) << 8U) |
+                                          ((uint16_t)(g8 & 0xFCU) << 3U) |
+                                          ((uint16_t)b8 >> 3U));
+
+        c = (int32_t)y1 - 16;
+        if (c < 0)
+        {
+            c = 0;
+        }
+        r = (298 * c + 409 * e + 128) >> 8;
+        g = (298 * c - 100 * d - 208 * e + 128) >> 8;
+        b = (298 * c + 516 * d + 128) >> 8;
+        r8 = (uint8_t)((r < 0) ? 0 : ((r > 255) ? 255 : r));
+        g8 = (uint8_t)((g < 0) ? 0 : ((g > 255) ? 255 : g));
+        b8 = (uint8_t)((b < 0) ? 0 : ((b > 255) ? 255 : b));
+        dst16[(i * 2U) + 1U] = (uint16_t)(((uint16_t)(r8 & 0xF8U) << 8U) |
+                                          ((uint16_t)(g8 & 0xFCU) << 3U) |
+                                          ((uint16_t)b8 >> 3U));
+    }
+
+    return pair_count * 4U;
+}
+
+/*
  * brief: Stop camera driver and release runtime ownership flag.
  * input: ctx - camera app context pointer.
  * output: None.
@@ -82,7 +213,7 @@ static void _camera_stop_driver(camera_app_ctx_t *ctx)
 }
 
 /*
- * brief: Power down OV2640 and release private low-level resources on app exit.
+ * brief: Power down BF20A6 and release private low-level resources on app exit.
  * input: none.
  * output: none.
  */
@@ -91,10 +222,10 @@ static void _camera_shutdown_sensor(void)
 #ifdef CAMERA_OBJECT
     esp_err_t ret;
 
-    ret = ov2640_deinit_device();
+    ret = bf20a6_deinit_device();
     if ((ret != ESP_OK) && (ret != ESP_ERR_INVALID_STATE))
     {
-        ESP_LOGW(TAG, "ov2640_deinit_device failed: %d", (int)ret);
+        ESP_LOGW(TAG, "bf20a6_deinit_device failed: %d", (int)ret);
     }
 
     ret = gpba02b_pin_set_mode(CAM_IO_RESET_PORT,
@@ -133,7 +264,7 @@ static void _camera_shutdown_sensor(void)
 
 #ifdef CAMERA_OBJECT
 /*
- * brief: Prepare OV2640 control pins through GPBA and apply a hard-reset pulse.
+ * brief: Prepare camera control pins through GPBA and apply a hard-reset pulse.
  * input: none.
  * output: ESP_OK on success; otherwise GPBA pin control error.
  */
@@ -251,15 +382,19 @@ static esp_err_t _camera_force_hard_reset(void)
 
 /*
  * brief: Verify camera stream is alive immediately after esp_camera_init.
- * input: none.
+ * input: expected payload bytes and frame geometry.
  * output: true when at least one frame can be fetched and returned.
  */
-static bool _camera_probe_first_frame(void)
+static bool _camera_probe_first_frame(size_t expected_bytes,
+                                      uint16_t expected_width,
+                                      uint16_t expected_height)
 {
     uint32_t attempt;
     uint32_t success_count;
+    uint64_t last_ts_us;
 
     success_count = 0U;
+    last_ts_us = 0ULL;
 
     for (attempt = 0U; attempt < CAMERA_FIRST_FRAME_RETRY_MAX; attempt++)
     {
@@ -268,12 +403,44 @@ static bool _camera_probe_first_frame(void)
         fb = esp_camera_fb_get();
         if (fb != NULL)
         {
+            bool frame_ok;
+            uint64_t cur_ts_us;
+
+            frame_ok = (fb->buf != NULL) &&
+                       (fb->len == expected_bytes) &&
+                       (fb->width == expected_width) &&
+                       (fb->height == expected_height) &&
+                       ((fb->format == PIXFORMAT_YUV422) ||
+                        (fb->format == PIXFORMAT_RGB565));
+
+            cur_ts_us = ((uint64_t)fb->timestamp.tv_sec * 1000000ULL) +
+                        (uint64_t)fb->timestamp.tv_usec;
+
+            /* Reject suspiciously fast frame cadence, typical of sync polarity mismatch. */
+            if (frame_ok && (last_ts_us != 0ULL) && (cur_ts_us > last_ts_us) &&
+                ((cur_ts_us - last_ts_us) < CAMERA_FRAME_INTERVAL_MIN_US))
+            {
+                frame_ok = false;
+            }
+
+            if (cur_ts_us > 0ULL)
+            {
+                last_ts_us = cur_ts_us;
+            }
+
             esp_camera_fb_return(fb);
 
-            success_count++;
-            if (success_count >= CAMERA_FIRST_FRAME_SUCCESS_MIN)
+            if (frame_ok)
             {
-                return true;
+                success_count++;
+                if (success_count >= CAMERA_FIRST_FRAME_SUCCESS_MIN)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                success_count = 0U;
             }
 
             delay_ms(CAMERA_FIRST_FRAME_RETRY_DELAY_MS);
@@ -286,6 +453,91 @@ static bool _camera_probe_first_frame(void)
 
     return false;
 }
+
+#ifdef CAMERA_OBJECT
+/*
+ * brief: Apply BF20A6 timing profile through sensor registers after esp_camera_init.
+ * input: profile_idx - index to rotate timing presets during retries.
+ * output: ESP_OK on success; otherwise ESP_FAIL when register programming fails.
+ */
+static esp_err_t _camera_apply_bf20a6_sync_profile(uint32_t profile_idx)
+{
+    sensor_t *sensor;
+    const struct camera_bf20a6_sync_profile *profile;
+    uint8_t pll_ctrl;
+    uint8_t intg_ctrl;
+
+    sensor = esp_camera_sensor_get();
+    if ((sensor == NULL) || (sensor->id.PID != BF20A6_PID) || (sensor->set_reg == NULL))
+    {
+        return ESP_OK;
+    }
+
+    profile = &s_bf20a6_sync_profiles[profile_idx %
+                                      (sizeof(s_bf20a6_sync_profiles) /
+                                       sizeof(s_bf20a6_sync_profiles[0]))];
+
+    /* Round 1 validates reduced BF20A6 internal clock from fixed 24MHz XCLK. */
+    if (profile_idx < CAMERA_INIT_RETRY_MAX)
+    {
+        pll_ctrl = CAMERA_BF20A6_PLL_CTRL_LOW;
+        intg_ctrl = CAMERA_BF20A6_INTG_CTRL_LOW;
+    }
+    else
+    {
+        pll_ctrl = CAMERA_BF20A6_PLL_CTRL_DEFAULT;
+        intg_ctrl = CAMERA_BF20A6_INTG_CTRL_DEFAULT;
+    }
+
+#if CONFIG_IDF_TARGET_ESP32S3
+    /* Align ESP32-S3 LCD_CAM capture polarity with sensor DVP timing candidate. */
+    LCD_CAM.cam_ctrl1.cam_clk_inv = profile->host_clk_inv;
+    LCD_CAM.cam_ctrl1.cam_hsync_inv = profile->host_hsync_inv;
+    LCD_CAM.cam_ctrl1.cam_vsync_inv = profile->host_vsync_inv;
+    LCD_CAM.cam_ctrl.cam_update = 1;
+#endif
+
+    ESP_LOGI(TAG,
+             "apply BF20A6 sync profile: %s (clk_inv=%u hsync_inv=%u vsync_inv=%u COM1=0x%02X COM2=0x%02X PLL=0x%02X F0=0x%02X)",
+             profile->name,
+             (unsigned)profile->host_clk_inv,
+             (unsigned)profile->host_hsync_inv,
+             (unsigned)profile->host_vsync_inv,
+             profile->com1,
+             profile->com2,
+             pll_ctrl,
+             intg_ctrl);
+
+    if (sensor->set_reg(sensor, 0xE3, 0xFF, pll_ctrl) != 0)
+    {
+        return ESP_FAIL;
+    }
+    if (sensor->set_reg(sensor, 0xF0, 0xFF, intg_ctrl) != 0)
+    {
+        return ESP_FAIL;
+    }
+
+    /* Allow internal PLL/divider and exposure timing path to settle. */
+    delay_ms(20U);
+
+    if (sensor->set_reg(sensor, 0x15, 0xFF, profile->com1) != 0)
+    {
+        return ESP_FAIL;
+    }
+    if (sensor->set_reg(sensor, 0x16, 0xFF, profile->com2) != 0)
+    {
+        return ESP_FAIL;
+    }
+
+    /* Keep DVP serial mode at 8-bit parallel output (TSLB[1:0] = 0). */
+    if (sensor->set_reg(sensor, 0x3A, 0x03, 0x00) != 0)
+    {
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+#endif
 #endif
 
 /*
@@ -303,17 +555,26 @@ static esp_err_t _camera_start_driver(camera_app_ctx_t *ctx)
     esp_err_t ret;
     uint32_t attempt;
     uint32_t round;
+    size_t expected_frame_bytes;
+    uint16_t expected_width;
+    uint16_t expected_height;
 
     if ((ctx != NULL) && ctx->camera_started)
     {
         return ESP_OK;
     }
 
-    /* Release OV2640 private SCCB ownership before esp_camera_init takes control. */
-    ret = ov2640_prepare_preview_start();
+    /* Preflight BF20A6 SCCB path and then release private ownership for esp_camera_init. */
+    ret = bf20a6_init_device();
     if ((ret != ESP_OK) && (ret != ESP_ERR_NOT_SUPPORTED))
     {
-        ESP_LOGW(TAG, "ov2640_prepare_preview_start failed: %d", (int)ret);
+        ESP_LOGW(TAG, "bf20a6_init_device failed: %d", (int)ret);
+    }
+
+    ret = bf20a6_prepare_preview_start();
+    if ((ret != ESP_OK) && (ret != ESP_ERR_NOT_SUPPORTED))
+    {
+        ESP_LOGW(TAG, "bf20a6_prepare_preview_start failed: %d", (int)ret);
     }
 
     cfg.pin_pwdn = -1;
@@ -340,13 +601,20 @@ static esp_err_t _camera_start_driver(camera_app_ctx_t *ctx)
     cfg.pin_pclk = (int)CAM_IO_PCLK;
     cfg.ledc_timer = LEDC_TIMER_0;
     cfg.ledc_channel = LEDC_CHANNEL_0;
-    cfg.pixel_format = PIXFORMAT_RGB565;
+    cfg.pixel_format = PIXFORMAT_YUV422;
     cfg.frame_size = FRAMESIZE_QQVGA;
     cfg.jpeg_quality = 12;
-    cfg.fb_count = 1;
+    cfg.fb_count = 2;
     cfg.fb_location = CAMERA_FB_IN_PSRAM;
-    cfg.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+    cfg.grab_mode = CAMERA_GRAB_LATEST;
     cfg.sccb_i2c_port = CAM_SCCB_I2C_PORT;
+
+    expected_frame_bytes =
+        (size_t)resolution[cfg.frame_size].width *
+        (size_t)resolution[cfg.frame_size].height *
+        2U;
+    expected_width = (uint16_t)resolution[cfg.frame_size].width;
+    expected_height = (uint16_t)resolution[cfg.frame_size].height;
 
     ret = ESP_FAIL;
     for (round = 0U; round < CAMERA_REINIT_ROUND_MAX; round++)
@@ -371,16 +639,42 @@ static esp_err_t _camera_start_driver(camera_app_ctx_t *ctx)
             ret = esp_camera_init(&cfg);
             if (ret == ESP_OK)
             {
-                if (_camera_probe_first_frame())
+                ret = _camera_ensure_psram_dma_enabled();
+                if (ret != ESP_OK)
                 {
-                    break;
+                    ESP_LOGW(TAG,
+                             "PSRAM DMA mode is not available (attempt %u/%u)",
+                             (unsigned)(attempt + 1U),
+                             (unsigned)CAMERA_INIT_RETRY_MAX);
                 }
 
-                ESP_LOGW(TAG,
-                         "camera init succeeded but first frame probe failed (attempt %u/%u)",
-                         (unsigned)(attempt + 1U),
-                         (unsigned)CAMERA_INIT_RETRY_MAX);
-                ret = ESP_FAIL;
+                if (ret == ESP_OK)
+                {
+                    ret = _camera_apply_bf20a6_sync_profile(round * CAMERA_INIT_RETRY_MAX + attempt);
+                    if (ret != ESP_OK)
+                    {
+                        ESP_LOGW(TAG,
+                                 "apply BF20A6 sync profile failed (attempt %u/%u)",
+                                 (unsigned)(attempt + 1U),
+                                 (unsigned)CAMERA_INIT_RETRY_MAX);
+                    }
+                }
+
+                if (ret == ESP_OK)
+                {
+                    if (_camera_probe_first_frame(expected_frame_bytes,
+                                                  expected_width,
+                                                  expected_height))
+                    {
+                        break;
+                    }
+
+                    ESP_LOGW(TAG,
+                             "camera init succeeded but first frame probe failed (attempt %u/%u)",
+                             (unsigned)(attempt + 1U),
+                             (unsigned)CAMERA_INIT_RETRY_MAX);
+                    ret = ESP_FAIL;
+                }
             }
 
             if (ret != ESP_OK)
@@ -732,6 +1026,7 @@ static void _camera_preview_timer_cb(lv_timer_t *timer)
     {
         camera_fb_t *fb;
         size_t frame_bytes;
+        size_t expected_bytes;
         esp_err_t ret;
 
         fb = esp_camera_fb_get();
@@ -764,17 +1059,40 @@ static void _camera_preview_timer_cb(lv_timer_t *timer)
 
         ctx->frame_timeout_streak = 0U;
 
-        if ((fb->buf == NULL) || (fb->len == 0U) || (fb->format != PIXFORMAT_RGB565))
+        if ((fb->buf == NULL) || (fb->len == 0U))
         {
             esp_camera_fb_return(fb);
             lv_label_set_text(ctx->hint_label, "unsupported frame format");
             return;
         }
 
-        frame_bytes = fb->width * fb->height * 2U;
+        expected_bytes = fb->width * fb->height * 2U;
+        frame_bytes = expected_bytes;
         if (frame_bytes > fb->len)
         {
-            frame_bytes = fb->len;
+            if (ctx->frame_timeout_streak < UINT8_MAX)
+            {
+                ctx->frame_timeout_streak++;
+            }
+
+            lv_label_set_text_fmt(ctx->hint_label,
+                                  "camera frame short (%u/%u)",
+                                  (unsigned)ctx->frame_timeout_streak,
+                                  (unsigned)CAMERA_RUNTIME_TIMEOUT_RECOVER_MAX);
+            esp_camera_fb_return(fb);
+
+            if (ctx->frame_timeout_streak >= CAMERA_RUNTIME_TIMEOUT_RECOVER_MAX)
+            {
+                if (_camera_start_worker_task(ctx, true))
+                {
+                    lv_label_set_text(ctx->hint_label, "camera recovering...");
+                }
+                else if (!ctx->worker_busy)
+                {
+                    lv_label_set_text(ctx->hint_label, "camera recover task failed");
+                }
+            }
+            return;
         }
 
         ret = _camera_ensure_frame_buffer(ctx, frame_bytes);
@@ -785,7 +1103,26 @@ static void _camera_preview_timer_cb(lv_timer_t *timer)
             return;
         }
 
-        memcpy(ctx->frame_buf, fb->buf, frame_bytes);
+        if (fb->format == PIXFORMAT_RGB565)
+        {
+            memcpy(ctx->frame_buf, fb->buf, frame_bytes);
+        }
+        else if (fb->format == PIXFORMAT_YUV422)
+        {
+            frame_bytes = _camera_convert_yuv422_to_rgb565(fb->buf, frame_bytes, ctx->frame_buf);
+            if (frame_bytes == 0U)
+            {
+                esp_camera_fb_return(fb);
+                lv_label_set_text(ctx->hint_label, "yuv422 convert failed");
+                return;
+            }
+        }
+        else
+        {
+            esp_camera_fb_return(fb);
+            lv_label_set_text_fmt(ctx->hint_label, "unsupported frame format: %u", (unsigned)fb->format);
+            return;
+        }
 
         ctx->frame_dsc.header.always_zero = 0;
         ctx->frame_dsc.header.w = (uint32_t)fb->width;

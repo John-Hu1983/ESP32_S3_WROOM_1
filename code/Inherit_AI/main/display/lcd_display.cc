@@ -9,6 +9,9 @@
 #include <esp_log.h>
 #include <esp_lvgl_port.h>
 #include <esp_psram.h>
+#include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <material_symbols.h>
 #include <noto_emoji.h>
 #include <src/misc/cache/lv_cache.h>
@@ -25,6 +28,114 @@ LV_FONT_DECLARE(BUILTIN_TEXT_FONT);
 LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 LV_FONT_DECLARE(font_material_symbols_30_4);
 LV_FONT_DECLARE(font_noto_emoji_30_4);
+
+typedef struct {
+    lv_display_t* display;
+    esp_lcd_panel_handle_t panel;
+    bool swap_bytes;
+} spi_flush_ctx_t;
+
+static spi_flush_ctx_t s_spi_flush_ctx[4] = {};
+
+static void RegisterSpiFlushContext(lv_display_t* display, esp_lcd_panel_handle_t panel,
+                                    bool swap_bytes) {
+    size_t i;
+
+    if (display == nullptr || panel == nullptr) {
+        return;
+    }
+
+    for (i = 0; i < (sizeof(s_spi_flush_ctx) / sizeof(s_spi_flush_ctx[0])); ++i) {
+        if (s_spi_flush_ctx[i].display == display || s_spi_flush_ctx[i].display == nullptr) {
+            s_spi_flush_ctx[i].display = display;
+            s_spi_flush_ctx[i].panel = panel;
+            s_spi_flush_ctx[i].swap_bytes = swap_bytes;
+            return;
+        }
+    }
+}
+
+static void UnregisterSpiFlushContext(lv_display_t* display) {
+    size_t i;
+
+    if (display == nullptr) {
+        return;
+    }
+
+    for (i = 0; i < (sizeof(s_spi_flush_ctx) / sizeof(s_spi_flush_ctx[0])); ++i) {
+        if (s_spi_flush_ctx[i].display == display) {
+            memset(&s_spi_flush_ctx[i], 0, sizeof(s_spi_flush_ctx[i]));
+            return;
+        }
+    }
+}
+
+static const spi_flush_ctx_t* FindSpiFlushContext(lv_display_t* display) {
+    size_t i;
+
+    if (display == nullptr) {
+        return nullptr;
+    }
+
+    for (i = 0; i < (sizeof(s_spi_flush_ctx) / sizeof(s_spi_flush_ctx[0])); ++i) {
+        if (s_spi_flush_ctx[i].display == display) {
+            return &s_spi_flush_ctx[i];
+        }
+    }
+
+    return nullptr;
+}
+
+static void SpiLcdFlushCallback(lv_display_t* drv, const lv_area_t* area, uint8_t* color_map) {
+    static int64_t s_last_spi_flush_error_log_us = 0;
+    const spi_flush_ctx_t* ctx;
+    esp_err_t ret;
+    uint32_t retries;
+
+    if (drv == nullptr || area == nullptr || color_map == nullptr) {
+        if (drv != nullptr) {
+            lv_disp_flush_ready(drv);
+        }
+        return;
+    }
+
+    ctx = FindSpiFlushContext(drv);
+    if (ctx == nullptr || ctx->panel == nullptr) {
+        ESP_LOGW(TAG, "SPI flush context missing, forcing flush_ready");
+        lv_disp_flush_ready(drv);
+        return;
+    }
+
+    if (ctx->swap_bytes) {
+        size_t len = lv_area_get_size(area);
+        lv_draw_sw_rgb565_swap(color_map, len);
+    }
+
+    ret = ESP_FAIL;
+    for (retries = 0; retries < 4; ++retries) {
+        ret = esp_lcd_panel_draw_bitmap(ctx->panel, area->x1, area->y1, area->x2 + 1,
+                                        area->y2 + 1, color_map);
+        if (ret == ESP_OK) {
+            return;
+        }
+
+        if (ret != ESP_ERR_NO_MEM) {
+            break;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    if (ret != ESP_OK) {
+        int64_t now_us = esp_timer_get_time();
+        if ((now_us - s_last_spi_flush_error_log_us) > 500000) {
+            ESP_LOGW(TAG, "SPI flush failed (%s, retries=%lu), forcing flush_ready",
+                     esp_err_to_name(ret), (unsigned long)retries);
+            s_last_spi_flush_error_log_us = now_us;
+        }
+        lv_disp_flush_ready(drv);
+    }
+}
 
 static bool IsClockText(const char* status) {
     if (status == nullptr || std::strlen(status) != 5) {
@@ -227,7 +338,11 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
     // draw white
     std::vector<uint16_t> buffer(width_, 0xFFFF);
     for (int y = 0; y < height_; y++) {
-        esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
+        esp_err_t draw_ret = esp_lcd_panel_draw_bitmap(panel_, 0, y, width_, y + 1, buffer.data());
+        if (draw_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Initial panel clear failed at line %d: %s", y, esp_err_to_name(draw_ret));
+            break;
+        }
     }
 
     // Set the display to on
@@ -302,6 +417,9 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         ESP_LOGE(TAG, "Failed to add display");
         return;
     }
+
+    RegisterSpiFlushContext(display_, panel_, true);
+    lv_display_set_flush_cb(display_, SpiLcdFlushCallback);
 
     if (offset_x != 0 || offset_y != 0) {
         lv_display_set_offset(display_, offset_x, offset_y);
@@ -479,6 +597,7 @@ LcdDisplay::~LcdDisplay() {
         lv_obj_del(container_);
     }
     if (display_ != nullptr) {
+        UnregisterSpiFlushContext(display_);
         lv_display_delete(display_);
     }
 
@@ -1550,10 +1669,19 @@ void LcdDisplay::SetEmotion(const char* emotion) {
 void LcdDisplay::SetTheme(Theme* theme) {
     DisplayLockGuard lock(this);
 
+    if (theme == nullptr) {
+        ESP_LOGW(TAG, "SetTheme called with nullptr theme");
+        return;
+    }
+
     auto lvgl_theme = static_cast<LvglTheme*>(theme);
 
     // Get the active screen
     lv_obj_t* screen = lv_screen_active();
+    if (screen == nullptr) {
+        ESP_LOGW(TAG, "Active screen is null while applying theme");
+        return;
+    }
 
     // Set font
     auto text_font = lvgl_theme->text_font()->font();
@@ -1563,11 +1691,13 @@ void LcdDisplay::SetTheme(Theme* theme) {
     lv_obj_set_style_text_color(screen, lvgl_theme->text_color(), 0);
 
     // Set background image
-    if (lvgl_theme->background_image() != nullptr) {
-        lv_obj_set_style_bg_image_src(container_, lvgl_theme->background_image()->image_dsc(), 0);
-    } else {
-        lv_obj_set_style_bg_image_src(container_, nullptr, 0);
-        lv_obj_set_style_bg_color(container_, lvgl_theme->background_color(), 0);
+    if (container_ != nullptr) {
+        if (lvgl_theme->background_image() != nullptr) {
+            lv_obj_set_style_bg_image_src(container_, lvgl_theme->background_image()->image_dsc(), 0);
+        } else {
+            lv_obj_set_style_bg_image_src(container_, nullptr, 0);
+            lv_obj_set_style_bg_color(container_, lvgl_theme->background_color(), 0);
+        }
     }
 
     // Update top bar background color with 50% opacity
@@ -1577,15 +1707,27 @@ void LcdDisplay::SetTheme(Theme* theme) {
     }
 
     // Update status bar elements
-    lv_obj_set_style_text_color(network_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(status_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(notification_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(mute_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(battery_label_, lvgl_theme->text_color(), 0);
+    if (network_label_ != nullptr) {
+        lv_obj_set_style_text_color(network_label_, lvgl_theme->text_color(), 0);
+    }
+    if (status_label_ != nullptr) {
+        lv_obj_set_style_text_color(status_label_, lvgl_theme->text_color(), 0);
+    }
+    if (notification_label_ != nullptr) {
+        lv_obj_set_style_text_color(notification_label_, lvgl_theme->text_color(), 0);
+    }
+    if (mute_label_ != nullptr) {
+        lv_obj_set_style_text_color(mute_label_, lvgl_theme->text_color(), 0);
+    }
+    if (battery_label_ != nullptr) {
+        lv_obj_set_style_text_color(battery_label_, lvgl_theme->text_color(), 0);
+    }
     if (perf_label_ != nullptr) {
         lv_obj_set_style_text_color(perf_label_, lvgl_theme->text_color(), 0);
     }
-    lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
+    if (emoji_label_ != nullptr) {
+        lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
+    }
 
     // Keep bars compact even when runtime text font is replaced by network assets.
     ApplyCompactBarStyle(lvgl_theme);

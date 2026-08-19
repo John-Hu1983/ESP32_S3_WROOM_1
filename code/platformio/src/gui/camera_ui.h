@@ -20,7 +20,7 @@
 #include "peripherals/gpba02b.h"
 #include "peripherals/keyboard.h"
 #ifdef CAMERA_OBJECT
-#include "peripherals/ov2640.h"
+#include "peripherals/bf20a6.h"
 #endif
 #include "service/system_service.h"
 #include "user_config.h"
