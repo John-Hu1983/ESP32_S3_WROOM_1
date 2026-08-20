@@ -1,55 +1,47 @@
 #pragma once
 
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
-#include "esp_camera.h"
 #include "esp_err.h"
-#include "esp_log.h"
-#include "esp_heap_caps.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "lvgl.h"
 
-#include "desktop/desktop_app.h"
-#include "bsp/delay.h"
-#include "peripherals/gpba02b.h"
-#include "peripherals/keyboard.h"
-#ifdef CAMERA_OBJECT
-#include "peripherals/bf20a6.h"
-#endif
-#include "service/system_service.h"
-#include "user_config.h"
-
-#define CAMERA_MARGIN_X 0
-#define CAMERA_INPUT_SCAN_PERIOD_MS 10U
-#define CAMERA_INPUT_TASK_STACK_SIZE 4096U
-#define CAMERA_INPUT_TASK_PRIORITY 4U
-#define CAMERA_PREVIEW_PERIOD_MS 40U
-
 typedef struct
 {
 	lv_obj_t *screen;
-	lv_obj_t *view;
+	lv_obj_t *frame_panel;
 	lv_obj_t *img;
-	lv_obj_t *hint_label;
-	lv_timer_t *preview_timer;
-	lv_img_dsc_t frame_dsc;
-	uint8_t *frame_buf;
-	size_t frame_buf_size;
-	TaskHandle_t worker_task_handle;
-	volatile bool worker_stop;
-	volatile bool worker_busy;
-	volatile bool worker_done;
-	volatile bool worker_is_recovery;
-	volatile esp_err_t worker_ret;
-	uint8_t frame_timeout_streak;
-	bool preview_started;
-	bool camera_started;
+	lv_obj_t *status_label;
+	lv_timer_t *ui_timer;
+
+	TaskHandle_t capture_task_handle;
+	TaskHandle_t input_task_handle;
+	volatile bool capture_task_stop;
+	volatile bool input_task_stop;
+
+	portMUX_TYPE frame_lock;
+	lv_color_t *frame_buf[2];
+	uint8_t display_idx;
+	uint8_t newest_idx;
+	uint8_t frame_ready;
+	uint8_t yuv422_order_cfg;
+	uint8_t yuv422_order_detected;
+	uint16_t frame_w;
+	uint16_t frame_h;
+	uint32_t frame_seq;
+	uint32_t frame_seq_shown;
+
+	uint8_t camera_start_done;
+	uint8_t camera_ready;
+	esp_err_t camera_open_ret;
+
+	lv_img_dsc_t img_dsc;
+	char status_text[96];
 } camera_app_ctx_t;
 
+/* Create camera app screen with fixed BF20A6 configuration and live preview. */
 lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
