@@ -19,7 +19,7 @@
 #define CAM_BF20A6_HSYNC_INVERT (0)               /* Host LCD_CAM HSYNC polarity invert. */
 #define CAM_BF20A6_VSYNC_INVERT (0)               /* Host LCD_CAM VSYNC polarity invert. */
 #define CAM_BF20A6_HMIRROR (1)                    /* Sensor horizontal mirror enable. */
-#define CAM_BF20A6_VFLIP (1)                      /* Sensor vertical flip enable. */
+#define CAM_BF20A6_VFLIP (0)                      /* Sensor vertical flip enable. */
 
 typedef struct
 {
