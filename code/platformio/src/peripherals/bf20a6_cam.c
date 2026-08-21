@@ -20,34 +20,12 @@ static const cam_profile_s s_profiles[6] = {
     {false, 0x12U, 0x46U, false, true, false, true}   /* Profile 47 */
 };
 
-static const frame_dim_s s_frame_dims[] = {
-    [FRAMESIZE_96X96] = {96U, 96U},
-    [FRAMESIZE_QQVGA] = {160U, 120U},
-    [FRAMESIZE_128X128] = {128U, 128U},
-    [FRAMESIZE_QCIF] = {176U, 144U},
-    [FRAMESIZE_HQVGA] = {240U, 176U},
-    [FRAMESIZE_240X240] = {240U, 240U},
-    [FRAMESIZE_QVGA] = {320U, 240U},
-    [FRAMESIZE_320X320] = {320U, 320U},
-    [FRAMESIZE_CIF] = {400U, 296U},
-    [FRAMESIZE_HVGA] = {480U, 320U},
-    [FRAMESIZE_VGA] = {640U, 480U},
-    [FRAMESIZE_SVGA] = {800U, 600U},
-    [FRAMESIZE_XGA] = {1024U, 768U},
-    [FRAMESIZE_HD] = {1280U, 720U},
-    [FRAMESIZE_SXGA] = {1280U, 1024U},
-    [FRAMESIZE_UXGA] = {1600U, 1200U},
-    [FRAMESIZE_FHD] = {1920U, 1080U},
-    [FRAMESIZE_P_HD] = {720U, 1280U},
-    [FRAMESIZE_P_3MP] = {864U, 1536U},
-    [FRAMESIZE_QXGA] = {2048U, 1536U},
-    [FRAMESIZE_QHD] = {2560U, 1440U},
-    [FRAMESIZE_WQXGA] = {2560U, 1600U},
-    [FRAMESIZE_P_FHD] = {1080U, 1920U},
-    [FRAMESIZE_QSXGA] = {2560U, 1920U},
-    [FRAMESIZE_5MP] = {2592U, 1944U},
-};
-
+/*
+ * brief     : Convert configured profile index to a safe slot value.
+ * input     : None.
+ * output    : Slot index in s_profiles range.
+ * type      : private
+ */
 static uint8_t _bf20a6_profile_slot(void)
 {
     uint8_t slot = (uint8_t)CAM_BF20A6_PROFILE_ID;
@@ -60,33 +38,16 @@ static uint8_t _bf20a6_profile_slot(void)
     return slot;
 }
 
-void bf20a6_cam_get_frame_dimensions(uint16_t *width, uint16_t *height)
-{
-    frame_dim_s dim = {320U, 240U};
-    uint32_t fs = (uint32_t)((framesize_t)CAM_BF20A6_FRAME_SIZE);
-
-    if ((fs < (uint32_t)(sizeof(s_frame_dims) / sizeof(s_frame_dims[0]))) &&
-        (s_frame_dims[fs].w != 0U))
-    {
-        dim = s_frame_dims[fs];
-    }
-
-    if (width != NULL)
-    {
-        *width = dim.w;
-    }
-
-    if (height != NULL)
-    {
-        *height = dim.h;
-    }
-}
-
 #ifdef CAMERA_OBJECT
 
 static bool s_bf20a6_ready = false;
 
-/* Configure camera-side GPBA02B pins to output mode. */
+/*
+ * brief     : Initialize GPBA02B and configure camera control pins as outputs.
+ * input     : None.
+ * output    : ESP_OK on success, otherwise error code.
+ * type      : private
+ */
 static esp_err_t _bf20a6_prepare_ctrl_pins(void)
 {
     esp_err_t ret;
@@ -118,7 +79,12 @@ static esp_err_t _bf20a6_prepare_ctrl_pins(void)
     return gpba02b_pin_write(CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN, false);
 }
 
-/* Execute board-level power-cycle before esp_camera_init probes SCCB. */
+/*
+ * brief     : Perform camera hardware power-cycle before esp_camera_init.
+ * input     : None.
+ * output    : ESP_OK on success, otherwise error code.
+ * type      : private
+ */
 static esp_err_t _bf20a6_power_cycle(void)
 {
     esp_err_t ret;
@@ -153,7 +119,12 @@ static esp_err_t _bf20a6_power_cycle(void)
     return ESP_OK;
 }
 
-/* Drive camera into a low-power state after app exits. */
+/*
+ * brief     : Drive camera pins to low-power state.
+ * input     : None.
+ * output    : None.
+ * type      : private
+ */
 static void _bf20a6_power_down(void)
 {
     (void)gpba02b_pin_write(CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN, false);
@@ -161,7 +132,12 @@ static void _bf20a6_power_down(void)
     (void)gpba02b_pin_write(CAM_IO_PWDN_PORT, CAM_IO_PWDN_PIN, true);
 }
 
-/* Apply fixed BF20A6 sensor-side DVP profile from board macros. */
+/*
+ * brief     : Apply fixed sensor-side BF20A6 DVP register profile.
+ * input     : None.
+ * output    : ESP_OK on success, otherwise error code.
+ * type      : private
+ */
 static esp_err_t _bf20a6_apply_sensor_fixed_profile(void)
 {
     sensor_t *sensor;
@@ -262,7 +238,12 @@ static esp_err_t _bf20a6_apply_sensor_fixed_profile(void)
     return ESP_OK;
 }
 
-/* Apply fixed host-side LCD_CAM capture polarity from board macros. */
+/*
+ * brief     : Apply fixed host-side LCD_CAM capture polarity settings.
+ * input     : None.
+ * output    : None.
+ * type      : private
+ */
 static void _bf20a6_apply_host_capture_polarity(void)
 {
 #if CONFIG_IDF_TARGET_ESP32S3
@@ -279,7 +260,12 @@ static void _bf20a6_apply_host_capture_polarity(void)
 #endif
 }
 
-/* Apply fixed sensor clock profile from board macros. */
+/*
+ * brief     : Apply fixed BF20A6 sensor clock profile (E3/F0).
+ * input     : None.
+ * output    : ESP_OK on success, otherwise error code.
+ * type      : private
+ */
 static esp_err_t _bf20a6_apply_clock_fixed_profile(void)
 {
     sensor_t *sensor;
@@ -325,6 +311,12 @@ static esp_err_t _bf20a6_apply_clock_fixed_profile(void)
     return ESP_OK;
 }
 
+/*
+ * brief     : Control camera light output pin.
+ * input     : enable true to turn on, false to turn off.
+ * output    : ESP_OK on success, otherwise error code.
+ * type      : public
+ */
 esp_err_t bf20a6_cam_set_light(bool enable)
 {
     esp_err_t ret;
@@ -338,6 +330,12 @@ esp_err_t bf20a6_cam_set_light(bool enable)
     return gpba02b_pin_write(CAM_IO_LIGHT_PORT, CAM_IO_LIGHT_PIN, enable);
 }
 
+/*
+ * brief     : Initialize camera driver and apply fixed sensor/host profiles.
+ * input     : None.
+ * output    : ESP_OK on success, otherwise error code.
+ * type      : public
+ */
 esp_err_t bf20a6_cam_open(void)
 {
     camera_config_t cfg = {
@@ -435,6 +433,12 @@ esp_err_t bf20a6_cam_open(void)
     return ESP_OK;
 }
 
+/*
+ * brief     : Deinitialize camera driver and power down camera pins.
+ * input     : None.
+ * output    : None.
+ * type      : public
+ */
 void bf20a6_cam_close(void)
 {
     if (s_bf20a6_ready)
@@ -446,11 +450,23 @@ void bf20a6_cam_close(void)
     _bf20a6_power_down();
 }
 
+/*
+ * brief     : Query camera open state.
+ * input     : None.
+ * output    : true when camera driver is ready, otherwise false.
+ * type      : public
+ */
 bool bf20a6_cam_is_open(void)
 {
     return s_bf20a6_ready;
 }
 
+/*
+ * brief     : Acquire one frame buffer from camera driver.
+ * input     : None.
+ * output    : Frame buffer pointer, or NULL if not available.
+ * type      : public
+ */
 camera_fb_t *bf20a6_cam_fb_get(void)
 {
     if (!s_bf20a6_ready)
@@ -461,6 +477,12 @@ camera_fb_t *bf20a6_cam_fb_get(void)
     return esp_camera_fb_get();
 }
 
+/*
+ * brief     : Return one frame buffer to camera driver.
+ * input     : fb frame buffer pointer.
+ * output    : None.
+ * type      : public
+ */
 void bf20a6_cam_fb_return(camera_fb_t *fb)
 {
     if (fb == NULL)
@@ -473,30 +495,66 @@ void bf20a6_cam_fb_return(camera_fb_t *fb)
 
 #else
 
+/*
+ * brief     : Fallback open implementation when CAMERA_OBJECT is disabled.
+ * input     : None.
+ * output    : ESP_ERR_NOT_SUPPORTED.
+ * type      : public
+ */
 esp_err_t bf20a6_cam_open(void)
 {
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+/*
+ * brief     : Fallback close implementation when CAMERA_OBJECT is disabled.
+ * input     : None.
+ * output    : None.
+ * type      : public
+ */
 void bf20a6_cam_close(void)
 {
 }
 
+/*
+ * brief     : Fallback open-state query when CAMERA_OBJECT is disabled.
+ * input     : None.
+ * output    : Always false.
+ * type      : public
+ */
 bool bf20a6_cam_is_open(void)
 {
     return false;
 }
 
+/*
+ * brief     : Fallback frame acquire when CAMERA_OBJECT is disabled.
+ * input     : None.
+ * output    : Always NULL.
+ * type      : public
+ */
 camera_fb_t *bf20a6_cam_fb_get(void)
 {
     return NULL;
 }
 
+/*
+ * brief     : Fallback frame return when CAMERA_OBJECT is disabled.
+ * input     : fb frame buffer pointer.
+ * output    : None.
+ * type      : public
+ */
 void bf20a6_cam_fb_return(camera_fb_t *fb)
 {
     (void)fb;
 }
 
+/*
+ * brief     : Fallback light control when CAMERA_OBJECT is disabled.
+ * input     : enable true/false.
+ * output    : ESP_ERR_NOT_SUPPORTED.
+ * type      : public
+ */
 esp_err_t bf20a6_cam_set_light(bool enable)
 {
     (void)enable;

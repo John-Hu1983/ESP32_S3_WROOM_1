@@ -28,7 +28,7 @@
 
 #define CAMERA_UI_MARGIN_X 2
 
-#define CAMERA_UI_REFRESH_PERIOD_MS 40U
+#define CAMERA_UI_REFRESH_PERIOD_MS 20U
 #define CAMERA_UI_INPUT_SCAN_PERIOD_MS 10U
 #define CAMERA_UI_CAPTURE_BACKPRESSURE_DELAY_MS 1U
 
@@ -40,7 +40,12 @@
 #define CAMERA_UI_TASK_STOP_WAIT_RETRY 20U
 #define CAMERA_UI_TASK_STOP_WAIT_DELAY_MS 5U
 
-/* Stop one app-local task cooperatively, then force-delete on timeout. */
+/*
+ * brief     : Stop one local task cooperatively, then force-delete on timeout.
+ * input     : task_handle/stop_flag pointers.
+ * output    : None.
+ * type      : private
+ */
 static void _camera_ui_stop_task(TaskHandle_t *task_handle, volatile bool *stop_flag)
 {
     TaskHandle_t handle;
@@ -76,7 +81,12 @@ static void _camera_ui_stop_task(TaskHandle_t *task_handle, volatile bool *stop_
     }
 }
 
-/* Allocate camera UI buffers from PSRAM first to reduce internal RAM pressure. */
+/*
+ * brief     : Allocate buffer memory, preferring PSRAM first.
+ * input     : bytes allocation size.
+ * output    : Allocated pointer, or NULL on failure.
+ * type      : private
+ */
 static void *_camera_ui_alloc(size_t bytes)
 {
     void *ptr;
@@ -95,7 +105,12 @@ static void *_camera_ui_alloc(size_t bytes)
     return heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
 }
 
-/* Update status text only when content actually changes to reduce LVGL churn. */
+/*
+ * brief     : Update status label text only when content changes.
+ * input     : ctx camera context, text target status string.
+ * output    : None.
+ * type      : private
+ */
 static void _camera_ui_set_status(camera_app_ctx_t *ctx, const char *text)
 {
     if ((ctx == NULL) || (ctx->status_label == NULL) || (text == NULL))
@@ -112,6 +127,12 @@ static void _camera_ui_set_status(camera_app_ctx_t *ctx, const char *text)
     lv_label_set_text(ctx->status_label, ctx->status_text);
 }
 
+/*
+ * brief     : Clamp integer value into uint8 range.
+ * input     : v signed integer value.
+ * output    : Clamped uint8 value.
+ * type      : private
+ */
 static uint8_t _camera_ui_clamp_u8(int v)
 {
     if (v < 0)
@@ -127,7 +148,12 @@ static uint8_t _camera_ui_clamp_u8(int v)
     return (uint8_t)v;
 }
 
-/* Convert one YUV pixel triplet to LVGL color. */
+/*
+ * brief     : Convert one YUV pixel sample to LVGL color.
+ * input     : y/u/v components.
+ * output    : Converted lv_color_t value.
+ * type      : private
+ */
 static lv_color_t _camera_ui_yuv_to_color(uint8_t y, uint8_t u, uint8_t v)
 {
     int c = (int)y - 16;
@@ -149,6 +175,12 @@ static lv_color_t _camera_ui_yuv_to_color(uint8_t y, uint8_t u, uint8_t v)
     return lv_color_make(r, g, b);
 }
 
+/*
+ * brief     : Map YUV order value to readable name.
+ * input     : order YUV order enum value.
+ * output    : Constant order name string.
+ * type      : private
+ */
 static const char *_camera_ui_yuv_order_name(uint8_t order)
 {
     switch (order)
@@ -166,83 +198,102 @@ static const char *_camera_ui_yuv_order_name(uint8_t order)
     }
 }
 
-/* Detect Y-byte positions in YUV422 stream (YUYV-family vs UYVY-family). */
-static uint8_t _camera_ui_detect_yuv422_family(const camera_fb_t *fb)
-{
-    size_t pairs;
-    size_t i;
-    uint64_t sum_yuyv = 0U;
-    uint64_t sumsq_yuyv = 0U;
-    uint64_t sum_uyvy = 0U;
-    uint64_t sumsq_uyvy = 0U;
-    uint64_t n;
-    uint64_t var_yuyv;
-    uint64_t var_uyvy;
-
-    if ((fb == NULL) || (fb->buf == NULL) || (fb->len < 64U))
-    {
-        return CAMERA_UI_YUV_ORDER_YUYV;
-    }
-
-    pairs = fb->len / 4U;
-    if (pairs > 2048U)
-    {
-        pairs = 2048U;
-    }
-
-    for (i = 0U; i < pairs; i++)
-    {
-        const uint8_t *p = fb->buf + (i * 4U);
-        uint8_t y0_yuyv = p[0];
-        uint8_t y1_yuyv = p[2];
-        uint8_t y0_uyvy = p[1];
-        uint8_t y1_uyvy = p[3];
-
-        sum_yuyv += (uint64_t)y0_yuyv + (uint64_t)y1_yuyv;
-        sumsq_yuyv += (uint64_t)y0_yuyv * (uint64_t)y0_yuyv;
-        sumsq_yuyv += (uint64_t)y1_yuyv * (uint64_t)y1_yuyv;
-
-        sum_uyvy += (uint64_t)y0_uyvy + (uint64_t)y1_uyvy;
-        sumsq_uyvy += (uint64_t)y0_uyvy * (uint64_t)y0_uyvy;
-        sumsq_uyvy += (uint64_t)y1_uyvy * (uint64_t)y1_uyvy;
-    }
-
-    n = (uint64_t)pairs * 2U;
-    if (n == 0U)
-    {
-        return CAMERA_UI_YUV_ORDER_YUYV;
-    }
-
-    var_yuyv = (n * sumsq_yuyv) - (sum_yuyv * sum_yuyv);
-    var_uyvy = (n * sumsq_uyvy) - (sum_uyvy * sum_uyvy);
-
-    if ((var_uyvy * 10U) > (var_yuyv * 12U))
-    {
-        return CAMERA_UI_YUV_ORDER_UYVY;
-    }
-
-    return CAMERA_UI_YUV_ORDER_YUYV;
-}
-
-/* Map AUTO parse to a concrete parse order based on detected Y-family and sensor sequence. */
-static uint8_t _camera_ui_auto_parse_order(uint8_t detected_family)
+/*
+ * brief     : Resolve AUTO parse mode to a concrete YUV order.
+ * input     : None.
+ * output    : Concrete parser order value.
+ * type      : private
+ */
+static uint8_t _camera_ui_auto_parse_order(void)
 {
     uint8_t seq = (uint8_t)(CAM_BF20A6_SENSOR_YUV_SEQ & 0x03U);
 
-    if (detected_family == CAMERA_UI_YUV_ORDER_UYVY)
+    switch (seq)
     {
-        return (seq == 3U) ? CAMERA_UI_YUV_ORDER_VYUY : CAMERA_UI_YUV_ORDER_UYVY;
+    case 0U:
+        return CAMERA_UI_YUV_ORDER_YUYV;
+    case 1U:
+        return CAMERA_UI_YUV_ORDER_YVYU;
+    case 2U:
+        return CAMERA_UI_YUV_ORDER_UYVY;
+    case 3U:
+        return CAMERA_UI_YUV_ORDER_VYUY;
+    default:
+        return CAMERA_UI_YUV_ORDER_YUYV;
     }
-
-    return (seq == 2U) ? CAMERA_UI_YUV_ORDER_YVYU : CAMERA_UI_YUV_ORDER_YUYV;
 }
 
-/* Convert camera frame to LVGL true-color buffer used by lv_img widget. */
-static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx, const camera_fb_t *fb, lv_color_t *dst)
+/*
+ * brief     : Resolve source crop window by configured cut style.
+ * input     : src/dst sizes and cut_style.
+ * output    : src_x/src_y copy_w/copy_h values for conversion.
+ * type      : private
+ */
+static void _camera_ui_resolve_crop_window(uint16_t src_w,
+                                           uint16_t src_h,
+                                           uint16_t dst_w,
+                                           uint16_t dst_h,
+                                           camera_ui_cut_style_e cut_style,
+                                           uint16_t *src_x,
+                                           uint16_t *src_y,
+                                           uint16_t *copy_w,
+                                           uint16_t *copy_h)
 {
+    uint16_t w;
+    uint16_t h;
+    uint16_t x;
+    uint16_t y;
+
+    w = (src_w < dst_w) ? src_w : dst_w;
+    h = (src_h < dst_h) ? src_h : dst_h;
+    x = 0U;
+    y = 0U;
+
+    if (cut_style == CAMERA_UI_CUT_STYLE_CENTER)
+    {
+        if (src_w > w)
+        {
+            x = (uint16_t)((src_w - w) / 2U);
+        }
+        if (src_h > h)
+        {
+            y = (uint16_t)((src_h - h) / 2U);
+        }
+    }
+
+    if (src_x != NULL)
+    {
+        *src_x = x;
+    }
+    if (src_y != NULL)
+    {
+        *src_y = y;
+    }
+    if (copy_w != NULL)
+    {
+        *copy_w = w;
+    }
+    if (copy_h != NULL)
+    {
+        *copy_h = h;
+    }
+}
+
+/*
+ * brief     : Convert camera frame into LVGL true-color buffer.
+ * input     : ctx camera context, fb source frame, dst output buffer, cut_style crop mode.
+ * output    : true on success, false on failure.
+ * type      : private
+ */
+static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx,
+                                     const camera_fb_t *fb,
+                                     lv_color_t *dst,
+                                     camera_ui_cut_style_e cut_style)
+{
+    uint16_t src_x;
+    uint16_t src_y;
     uint16_t copy_w;
     uint16_t copy_h;
-    size_t pixel_count;
     uint16_t y;
 
     if ((ctx == NULL) || (fb == NULL) || (dst == NULL))
@@ -250,15 +301,26 @@ static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx, const camera_fb_t *f
         return false;
     }
 
-    pixel_count = (size_t)ctx->frame_w * (size_t)ctx->frame_h;
-    lv_memset_00(dst, pixel_count * sizeof(lv_color_t));
-
-    copy_w = (uint16_t)((fb->width < ctx->frame_w) ? fb->width : ctx->frame_w);
-    copy_h = (uint16_t)((fb->height < ctx->frame_h) ? fb->height : ctx->frame_h);
+    _camera_ui_resolve_crop_window((uint16_t)fb->width,
+                                   (uint16_t)fb->height,
+                                   ctx->frame_w,
+                                   ctx->frame_h,
+                                   cut_style,
+                                   &src_x,
+                                   &src_y,
+                                   &copy_w,
+                                   &copy_h);
 
     if ((copy_w == 0U) || (copy_h == 0U))
     {
         return false;
+    }
+
+    /* Skip full clear when source fully covers destination to reduce per-frame overhead. */
+    if ((copy_w < ctx->frame_w) || (copy_h < ctx->frame_h))
+    {
+        size_t pixel_count = (size_t)ctx->frame_w * (size_t)ctx->frame_h;
+        lv_memset_00(dst, pixel_count * sizeof(lv_color_t));
     }
 
     if (fb->format == PIXFORMAT_YUV422)
@@ -274,16 +336,15 @@ static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx, const camera_fb_t *f
         yuv_order = ctx->yuv422_order_cfg;
         if (yuv_order == CAMERA_UI_YUV_ORDER_AUTO)
         {
-            if (ctx->yuv422_order_detected == CAMERA_UI_YUV_ORDER_AUTO)
+            yuv_order = _camera_ui_auto_parse_order();
+            if (ctx->yuv422_order_detected != yuv_order)
             {
-                uint8_t detected_family = _camera_ui_detect_yuv422_family(fb);
-                yuv_order = _camera_ui_auto_parse_order(detected_family);
                 ctx->yuv422_order_detected = yuv_order;
                 ESP_LOGI(TAG, "YUV422 order detected=%s", _camera_ui_yuv_order_name(yuv_order));
             }
             else
             {
-                yuv_order = ctx->yuv422_order_detected;
+                ctx->yuv422_order_detected = yuv_order;
             }
         }
         else
@@ -293,7 +354,7 @@ static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx, const camera_fb_t *f
 
         for (y = 0U; y < copy_h; y++)
         {
-            const uint8_t *src_line = fb->buf + ((size_t)y * (size_t)fb->width * 2U);
+            const uint8_t *src_line = fb->buf + (((size_t)(src_y + y) * (size_t)fb->width + (size_t)src_x) * 2U);
             lv_color_t *dst_line = dst + ((size_t)y * (size_t)ctx->frame_w);
             uint16_t x = 0U;
 
@@ -387,7 +448,7 @@ static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx, const camera_fb_t *f
 
         for (y = 0U; y < copy_h; y++)
         {
-            const uint8_t *src_line = fb->buf + ((size_t)y * (size_t)fb->width);
+            const uint8_t *src_line = fb->buf + ((size_t)(src_y + y) * (size_t)fb->width + (size_t)src_x);
             lv_color_t *dst_line = dst + ((size_t)y * (size_t)ctx->frame_w);
             uint16_t x;
 
@@ -412,7 +473,7 @@ static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx, const camera_fb_t *f
 
         for (y = 0U; y < copy_h; y++)
         {
-            const uint16_t *src_line = (const uint16_t *)(fb->buf + ((size_t)y * (size_t)fb->width * 2U));
+            const uint16_t *src_line = (const uint16_t *)(fb->buf + (((size_t)(src_y + y) * (size_t)fb->width + (size_t)src_x) * 2U));
             lv_color_t *dst_line = dst + ((size_t)y * (size_t)ctx->frame_w);
             uint16_t x;
 
@@ -432,7 +493,12 @@ static bool _camera_ui_convert_frame(camera_app_ctx_t *ctx, const camera_fb_t *f
     return false;
 }
 
-/* Capture worker: open camera once, then keep fetching and converting frames. */
+/*
+ * brief     : Capture worker task that opens camera and converts frames.
+ * input     : param camera_app_ctx_t pointer.
+ * output    : None.
+ * type      : private
+ */
 static void _camera_ui_capture_task(void *param)
 {
     camera_app_ctx_t *ctx = (camera_app_ctx_t *)param;
@@ -482,7 +548,7 @@ static void _camera_ui_capture_task(void *param)
             continue;
         }
 
-        convert_ok = _camera_ui_convert_frame(ctx, fb, ctx->frame_buf[back_idx]);
+        convert_ok = _camera_ui_convert_frame(ctx, fb, ctx->frame_buf[back_idx], ctx->cut_style);
         bf20a6_cam_fb_return(fb);
 
         if (convert_ok)
@@ -509,7 +575,12 @@ static void _camera_ui_capture_task(void *param)
     vTaskDelete(NULL);
 }
 
-/* Input worker: keep only BOTH-click to return home. */
+/*
+ * brief     : Input worker task handling keyboard events.
+ * input     : param camera_app_ctx_t pointer.
+ * output    : None.
+ * type      : private
+ */
 static void _camera_ui_input_task(void *param)
 {
     camera_app_ctx_t *ctx = (camera_app_ctx_t *)param;
@@ -537,6 +608,12 @@ static void _camera_ui_input_task(void *param)
     vTaskDelete(NULL);
 }
 
+/*
+ * brief     : Start capture worker task.
+ * input     : ctx camera context.
+ * output    : true if task created, else false.
+ * type      : private
+ */
 static bool _camera_ui_start_capture_task(camera_app_ctx_t *ctx)
 {
     BaseType_t task_ok;
@@ -558,6 +635,12 @@ static bool _camera_ui_start_capture_task(camera_app_ctx_t *ctx)
     return true;
 }
 
+/*
+ * brief     : Start input worker task.
+ * input     : ctx camera context.
+ * output    : true if task created, else false.
+ * type      : private
+ */
 static bool _camera_ui_start_input_task(camera_app_ctx_t *ctx)
 {
     BaseType_t task_ok;
@@ -579,7 +662,12 @@ static bool _camera_ui_start_input_task(camera_app_ctx_t *ctx)
     return true;
 }
 
-/* UI timer pulls latest converted frame from worker-owned ping-pong buffers. */
+/*
+ * brief     : UI timer callback that updates image and status text.
+ * input     : timer LVGL timer object.
+ * output    : None.
+ * type      : private
+ */
 static void _camera_ui_timer_cb(lv_timer_t *timer)
 {
     camera_app_ctx_t *ctx = (camera_app_ctx_t *)timer->user_data;
@@ -593,7 +681,7 @@ static void _camera_ui_timer_cb(lv_timer_t *timer)
     uint8_t yuv_detected;
     bool new_frame = false;
 
-    if ((ctx == NULL) || (ctx->img == NULL) || (ctx->status_label == NULL))
+    if ((ctx == NULL) || (ctx->img == NULL))
     {
         return;
     }
@@ -621,6 +709,11 @@ static void _camera_ui_timer_cb(lv_timer_t *timer)
         ctx->img_dsc.data = (const uint8_t *)ctx->frame_buf[ctx->display_idx];
         lv_img_set_src(ctx->img, &ctx->img_dsc);
         lv_obj_invalidate(ctx->img);
+    }
+
+    if (ctx->status_label == NULL)
+    {
+        return;
     }
 
     if (start_done == 0U)
@@ -674,7 +767,12 @@ static void _camera_ui_timer_cb(lv_timer_t *timer)
     }
 }
 
-/* Release all worker/task resources when camera screen is destroyed. */
+/*
+ * brief     : Release camera UI resources on screen delete event.
+ * input     : e LVGL event object.
+ * output    : None.
+ * type      : private
+ */
 static void _camera_ui_delete_cb(lv_event_t *e)
 {
     camera_app_ctx_t *ctx = (camera_app_ctx_t *)lv_event_get_user_data(e);
@@ -710,13 +808,18 @@ static void _camera_ui_delete_cb(lv_event_t *e)
     lv_mem_free(ctx);
 }
 
+/*
+ * brief     : Create camera screen and start preview workers.
+ * input     : lcd_w/lcd_h display resolution.
+ * output    : Created LVGL screen object, or NULL on failure.
+ * type      : public
+ */
 lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
 {
     camera_app_ctx_t *ctx;
     lv_obj_t *scr;
     lv_obj_t *panel;
     lv_obj_t *img;
-    lv_obj_t *status_label;
     lv_coord_t content_top;
     lv_coord_t content_bottom;
     lv_coord_t content_h;
@@ -741,7 +844,9 @@ lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     lv_memset_00(ctx, sizeof(camera_app_ctx_t));
 
     ctx->frame_lock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
-    bf20a6_cam_get_frame_dimensions(&ctx->frame_w, &ctx->frame_h);
+    ctx->frame_w = (uint16_t)CAMERA_UI_FRAME_WIDTH;
+    ctx->frame_h = (uint16_t)CAMERA_UI_FRAME_HEIGHT;
+    ctx->cut_style = CAMERA_UI_CUT_STYLE_DEFAULT;
 
     yuv_cfg = (uint8_t)CAM_BF20A6_YUV_ORDER;
     if (yuv_cfg > CAMERA_UI_YUV_ORDER_VYUY)
@@ -833,15 +938,6 @@ lv_obj_t *camera_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h)
     ctx->img_dsc.data_size = frame_bytes;
     ctx->img_dsc.data = (const uint8_t *)ctx->frame_buf[0];
     lv_img_set_src(img, &ctx->img_dsc);
-
-    status_label = lv_label_create(scr);
-    ctx->status_label = status_label;
-    lv_obj_set_width(status_label, lcd_w - 12);
-    lv_obj_align(status_label, LV_ALIGN_BOTTOM_MID, 0, -2);
-    lv_obj_set_style_text_color(status_label, lv_color_hex(APP_THEME_TEXT_PRIMARY_HEX), 0);
-    lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(status_label, LV_LABEL_LONG_WRAP);
-    _camera_ui_set_status(ctx, "Fixed config | BOTH:HOME");
 
     ESP_LOGI(TAG, "camera ui fixed mode, parse=%s", _camera_ui_yuv_order_name(ctx->yuv422_order_cfg));
 

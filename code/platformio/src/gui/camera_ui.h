@@ -10,6 +10,18 @@
 
 #include "lvgl.h"
 
+#define CAMERA_UI_FRAME_WIDTH (320U)
+#define CAMERA_UI_FRAME_HEIGHT (240U)
+
+typedef enum
+{
+	CAMERA_UI_CUT_STYLE_LEFT_TOP = 0,
+	CAMERA_UI_CUT_STYLE_CENTER,
+	CAMERA_UI_CUT_STYLE_MAX
+} camera_ui_cut_style_e;
+
+#define CAMERA_UI_CUT_STYLE_DEFAULT (CAMERA_UI_CUT_STYLE_CENTER)
+
 typedef struct
 {
 	lv_obj_t *screen;
@@ -30,6 +42,7 @@ typedef struct
 	uint8_t frame_ready;
 	uint8_t yuv422_order_cfg;
 	uint8_t yuv422_order_detected;
+	camera_ui_cut_style_e cut_style;
 	uint16_t frame_w;
 	uint16_t frame_h;
 	uint32_t frame_seq;
