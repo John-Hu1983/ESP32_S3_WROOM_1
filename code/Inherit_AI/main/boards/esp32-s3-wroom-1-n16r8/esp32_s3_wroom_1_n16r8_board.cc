@@ -129,21 +129,11 @@ private:
         ESP_ERROR_CHECK(
             gpba02b_pwm_set_clock_div(PWM_GPBA02B_PA_CLOCK_DIV, PWM_GPBA02B_PC_CLOCK_DIV));
 
-        const uint8_t pwm_mask_a = static_cast<uint8_t>((1U << PWM_GPBA02B_07_PIN));
-        const uint8_t pwm_mask_c = static_cast<uint8_t>(
-            (1U << PWM_GPBA02B_08_PIN) | (1U << PWM_GPBA02B_09_PIN) | (1U << PWM_GPBA02B_10_PIN) |
-            (1U << PWM_GPBA02B_11_PIN) | (1U << PWM_GPBA02B_12_PIN) | (1U << PWM_GPBA02B_13_PIN));
+        const uint8_t pwm_mask_pc1 = static_cast<uint8_t>(1U << PWM_GPBA02B_09_PIN);
 
-        for (uint8_t channel = 0; channel < 8; ++channel) {
-            if ((pwm_mask_a & (1U << channel)) != 0) {
-                ESP_ERROR_CHECK(gpba02b_pwm_set_channel_duty(GPBA02B_PORT_A, channel,
-                                                             PWM_GPBA02B_DUTY_10_PERCENT));
-            }
-            if ((pwm_mask_c & (1U << channel)) != 0) {
-                ESP_ERROR_CHECK(gpba02b_pwm_set_channel_duty(GPBA02B_PORT_C, channel,
-                                                             PWM_GPBA02B_DUTY_10_PERCENT));
-            }
-        }
+        ESP_ERROR_CHECK(gpba02b_pwm_set_channel_duty(PWM_GPBA02B_09_PORT, PWM_GPBA02B_09_PIN,
+                                                     PWM_GPBA02B_DUTY_25_PERCENT));
+        ESP_ERROR_CHECK(gpba02b_pwm_enable_channels(PWM_GPBA02B_09_PORT, pwm_mask_pc1));
     }
 
     void InitializeDesktop() {
