@@ -14,6 +14,10 @@ set(SOURCES "audio/audio_codec.cc"
             "led/circular_strip.cc"
             "led/gpio_led.cc"
             "user/peripherals/gpba02b.c"
+            "user/peripherals/bsp_global.c"
+            "user/peripherals/st7365p.c"
+            "user/desktop/desktop_common.c"
+            "user/desktop/desktop_app.c"
             "display/display.cc"
             "display/text_glyph.cc"
             "display/lcd_display.cc"
@@ -43,7 +47,7 @@ set(SOURCES "audio/audio_codec.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols" "user/peripherals")
+set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols" "user" "user/peripherals" "user/desktop")
 
 # Add board common files
 list(APPEND SOURCES

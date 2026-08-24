@@ -8,17 +8,9 @@
 #include <nvs_flash.h>
 
 #include "application.h"
-#include "user/peripherals/gpba02b.h"
+#include "user/peripherals/bsp_global.h"
 
 #define TAG "main"
-
-extern "C" void bsp_init_total(void) {
-    ESP_LOGI(TAG, "Initializing BSP...");
-    ESP_ERROR_CHECK(gpba02b_init_object());
-    gpba02b_config_pwm_mode(GPBA02B_PORT_C, 1);
-    gpba02b_set_pwm_frequency(GPBA02B_PORT_C, 1000);
-    gpba02b_set_pwm_duty(GPBA02B_PORT_C, 1, 128);
-}
 
 extern "C" void app_main(void) {
     // Initialize NVS flash for WiFi configuration

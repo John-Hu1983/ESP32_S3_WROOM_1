@@ -1,7 +1,10 @@
 #include "gpba02b.h"
 
+#include <esp_log.h>
+
 #define TAG "gpba02b"
 #define GPBA02B_PWM_PERIOD_STEPS (256u)
+#define GPBA02B_PWM_DUTY_PERCENT_MAX (100u)
 
 static gpba02b_ctx_t s_ctx;
 
@@ -252,26 +255,29 @@ static esp_err_t gpba02b_unlock_new_function_regs(void) {
 }
 
 /*
- * brief  : Pick nearest PWM divider for target frequency.
- * input  : target_hz - desired PWM frequency.
- * output : best divider selector index.
+ * brief  : Validate whether a PWM frequency enum value is in range.
+ * input  : frequency - enum selection.
+ * output : true if valid; false otherwise.
  * type   : private
  */
-static uint8_t gpba02b_pick_pwm_divider(uint32_t target_hz) {
-    uint8_t best_index = 0u;
-    uint32_t best_diff = UINT32_MAX;
+static bool gpba02b_pwm_frequency_valid(gpba02b_pwm_freq_t frequency) {
+    return (uint8_t)frequency <= GPBA02B_PWM_DIV_SEL_MASK;
+}
 
-    for (uint8_t i = 0u; i < 8u; ++i) {
-        uint32_t actual =
-            GPBA02B_PWM_BASE_CLOCK_HZ / (gpba02b_get_pwm_divider(i) * GPBA02B_PWM_PERIOD_STEPS);
-        uint32_t diff = (actual > target_hz) ? (actual - target_hz) : (target_hz - actual);
-        if (diff < best_diff) {
-            best_diff = diff;
-            best_index = i;
-        }
+/*
+ * brief  : Convert duty percent (0..100) to GPBA02B raw duty (0..255).
+ * input  : duty_percent - duty percentage.
+ * output : raw duty register value.
+ * type   : private
+ */
+static uint8_t gpba02b_percent_to_pwm_duty(uint8_t duty_percent) {
+    if (duty_percent >= GPBA02B_PWM_DUTY_PERCENT_MAX) {
+        return 0xFFu;
     }
 
-    return best_index;
+    uint32_t duty_raw = ((((uint32_t)duty_percent) * (GPBA02B_PWM_PERIOD_STEPS - 1u)) + 50u) /
+                        GPBA02B_PWM_DUTY_PERCENT_MAX;
+    return (uint8_t)duty_raw;
 }
 
 /*
@@ -667,12 +673,13 @@ esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin) {
 
 /*
  * brief  : Set PWM base frequency for one port.
- * input  : port - PWM port (A/C), frequency_hz - target frequency.
+ * input  : port - PWM port (A/C), frequency - selectable frequency enum.
  * output : ESP_OK on success, error code on failure.
  * type   : public
  */
-esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, uint32_t frequency_hz) {
-    if ((port != GPBA02B_PORT_A && port != GPBA02B_PORT_C) || frequency_hz == 0u) {
+esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t frequency) {
+    if ((port != GPBA02B_PORT_A && port != GPBA02B_PORT_C) ||
+        !gpba02b_pwm_frequency_valid(frequency)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -681,7 +688,12 @@ esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, uint32_t frequency_hz) 
         return err;
     }
 
-    uint8_t div_sel = gpba02b_pick_pwm_divider(frequency_hz) & GPBA02B_PWM_DIV_SEL_MASK;
+    uint8_t div_sel = ((uint8_t)frequency) & GPBA02B_PWM_DIV_SEL_MASK;
+    uint32_t nominal_hz =
+        GPBA02B_PWM_BASE_CLOCK_HZ / (gpba02b_get_pwm_divider(div_sel) * GPBA02B_PWM_PERIOD_STEPS);
+
+    ESP_LOGI(TAG, "PWM frequency set: nominal=%uHz div=%u", (unsigned)nominal_hz,
+             (unsigned)gpba02b_get_pwm_divider(div_sel));
 
     if (port == GPBA02B_PORT_A) {
         s_ctx.pwmck_shadow = (uint8_t)((s_ctx.pwmck_shadow & (uint8_t)~GPBA02B_PWMCK_PA_DIV_MASK) |
@@ -696,11 +708,15 @@ esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, uint32_t frequency_hz) 
 
 /*
  * brief  : Set PWM duty for one pin.
- * input  : port - PWM port (A/C), pin - PWM pin, duty - duty value.
+ * input  : port - PWM port (A/C), pin - PWM pin, duty_percent - duty percent value.
  * output : ESP_OK on success, error code on failure.
  * type   : public
  */
-esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty) {
+esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent) {
+    if (duty_percent > GPBA02B_PWM_DUTY_PERCENT_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     uint8_t reg = 0;
     esp_err_t err = gpba02b_resolve_pwm_duty_reg(port, pin, &reg);
     if (err != ESP_OK) {
@@ -712,7 +728,7 @@ esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty) {
         return err;
     }
 
-    return gpba02b_write_reg(reg, duty);
+    return gpba02b_write_reg(reg, gpba02b_percent_to_pwm_duty(duty_percent));
 }
 
 esp_err_t gpba02b_read_register(uint8_t reg, uint8_t* value) {
@@ -745,3 +761,4 @@ esp_err_t gpba02b_set_device_id(uint8_t device_bit) {
 }
 
 uint8_t gpba02b_get_device_id(void) { return s_ctx.device_bit; }
+

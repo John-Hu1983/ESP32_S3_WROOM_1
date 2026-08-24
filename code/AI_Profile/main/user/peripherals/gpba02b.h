@@ -65,6 +65,17 @@ typedef enum {
 } gpba02b_port_t;
 
 typedef enum {
+    GPBA02B_PWM_FREQ_42969HZ_DIV1 = 0, /* 11000000 / (1 * 256) */
+    GPBA02B_PWM_FREQ_21484HZ_DIV2,     /* 11000000 / (2 * 256) */
+    GPBA02B_PWM_FREQ_10742HZ_DIV4,     /* 11000000 / (4 * 256) */
+    GPBA02B_PWM_FREQ_2686HZ_DIV16,     /* 11000000 / (16 * 256) */
+    GPBA02B_PWM_FREQ_1343HZ_DIV32,     /* 11000000 / (32 * 256) */
+    GPBA02B_PWM_FREQ_671HZ_DIV64,      /* 11000000 / (64 * 256) */
+    GPBA02B_PWM_FREQ_336HZ_DIV128,     /* 11000000 / (128 * 256) */
+    GPBA02B_PWM_FREQ_168HZ_DIV256,     /* 11000000 / (256 * 256) */
+} gpba02b_pwm_freq_t;
+
+typedef enum {
     GPBA02B_IO_STYLE_INPUT_HIGH_Z = 0,
     GPBA02B_IO_STYLE_INPUT_PULL_LOW,
     GPBA02B_IO_STYLE_INPUT_PULL_HIGH,
@@ -115,11 +126,11 @@ esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level
 /* 4) Configure one pin into PWM mode. */
 esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin);
 
-/* 5) Set PWM frequency for one port (A or C). */
-esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, uint32_t frequency_hz);
+/* 5) Set PWM frequency for one port (A or C) by selectable hardware-supported enum. */
+esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t frequency);
 
-/* 6) Set PWM duty for one pin (0..255). */
-esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty);
+/* 6) Set PWM duty percent for one pin (0..100). */
+esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent);
 
 /*
  * 7) Read one raw GPBA02B register (0x00..0x3F).
