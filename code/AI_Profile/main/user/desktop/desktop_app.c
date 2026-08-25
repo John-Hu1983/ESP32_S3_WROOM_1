@@ -12,7 +12,7 @@ static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_WIFI, "WiFi", 0xC0563F},        {LV_SYMBOL_BLUETOOTH, "BT", 0xB65C2C},
     {LV_SYMBOL_FILE, "File", 0xE19A35},        {LV_SYMBOL_VOLUME_MAX, "Mic", 0x8F6745},
     {LV_SYMBOL_BELL, "PIDM", 0xC23B4A},        {LV_SYMBOL_REFRESH, "Tools", 0x8A3D5D},
-    {LV_SYMBOL_SETTINGS, "Setting", 0xA8703A}, {LV_SYMBOL_POWER, "Power", 0x6F4A34},
+    {LV_SYMBOL_SETTINGS, "Setting", 0xA8703A}, {LV_SYMBOL_WARNING, "About", 0x6F4A34},
 };
 
 static lv_display_t* s_lv_display;
@@ -29,9 +29,10 @@ static bool s_desktop_started;
 static bool s_lvgl_ready;
 
 /*
- * brief: Build desktop grid UI and load it as the active LVGL screen.
- * input: none.
+ * brief : Build desktop grid UI and load it as the active LVGL screen.
+ * input : none.
  * output: none.
+ * type  : private
  */
 static void _desktop_create_ui(void) {
     static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
@@ -126,9 +127,10 @@ static void _desktop_create_ui(void) {
 }
 
 /*
- * brief: Initialize ST7365 panel and cache effective resolution values.
- * input: none.
+ * brief : Initialize ST7365 panel and cache effective resolution values.
+ * input : none.
  * output: ESP_OK on success; otherwise panel initialization/configuration error.
+ * type  : private
  */
 static esp_err_t _desktop_prepare_monitor(void) {
     st7365p_cfg_t panel_cfg;
@@ -158,9 +160,10 @@ static esp_err_t _desktop_prepare_monitor(void) {
 }
 
 /*
- * brief: Initialize LVGL core, display driver, draw buffer, and tick timer.
- * input: none.
+ * brief : Initialize LVGL core, display driver, draw buffer, and tick timer.
+ * input : none.
  * output: ESP_OK on success; otherwise startup error.
+ * type  : private
  */
 static esp_err_t _desktop_lvgl_init(void) {
     if (s_lvgl_ready) {
@@ -196,12 +199,12 @@ static esp_err_t _desktop_lvgl_init(void) {
     }
 
     lv_display_set_color_format(s_lv_display, LV_COLOR_FORMAT_RGB565_SWAPPED);
-    lv_display_set_flush_cb(s_lv_display, desktop_common_lvgl_flush_cb);
+    lv_display_set_flush_cb(s_lv_display, desktop_flush_event);
     lv_display_set_buffers(s_lv_display, s_lv_buf_1, s_lv_buf_2,
                            draw_buf_pixels * sizeof(lv_color_t), LV_DISPLAY_RENDER_MODE_PARTIAL);
 
     esp_timer_create_args_t tick_timer_args = {
-        .callback = desktop_common_lvgl_tick_cb,
+        .callback = desktop_tick_event,
         .arg = NULL,
         .dispatch_method = ESP_TIMER_TASK,
         .name = "desktop_lvgl_tick",
@@ -230,9 +233,10 @@ static esp_err_t _desktop_lvgl_init(void) {
 }
 
 /*
- * brief: Main desktop LVGL task loop.
- * input: param - unused task parameter.
+ * brief : Main desktop LVGL task loop.
+ * input : param - unused task parameter.
  * output: none.
+ * type  : private
  */
 static void _desktop_lvgl_task(void* param) {
     (void)param;
@@ -243,6 +247,12 @@ static void _desktop_lvgl_task(void* param) {
     }
 }
 
+/*
+ * brief : Get the desktop top-bar CPU text label handle.
+ * input : none.
+ * output: Valid label handle, or NULL when unavailable.
+ * type  : public
+ */
 lv_obj_t* desktop_get_cpu_label(void) {
     if ((s_cpu_label != NULL) && lv_obj_is_valid(s_cpu_label)) {
         return s_cpu_label;
@@ -250,6 +260,12 @@ lv_obj_t* desktop_get_cpu_label(void) {
     return NULL;
 }
 
+/*
+ * brief : Get the desktop top-bar network icon label handle.
+ * input : none.
+ * output: Valid label handle, or NULL when unavailable.
+ * type  : public
+ */
 lv_obj_t* desktop_get_net_label(void) {
     if ((s_net_label != NULL) && lv_obj_is_valid(s_net_label)) {
         return s_net_label;
@@ -258,9 +274,10 @@ lv_obj_t* desktop_get_net_label(void) {
 }
 
 /*
- * brief: Public entry to request returning to desktop.
- * input: none.
+ * brief : Public entry to request returning to desktop.
+ * input : none.
  * output: none.
+ * type  : public
  */
 void desktop_return_to_home(void) {
     if (!s_lvgl_ready) {
@@ -273,9 +290,10 @@ void desktop_return_to_home(void) {
 }
 
 /*
- * brief: Start desktop subsystem including panel, LVGL, and task loop.
- * input: none.
+ * brief : Start desktop subsystem including panel, LVGL, and task loop.
+ * input : none.
  * output: ESP_OK on success; otherwise propagated startup error.
+ * type  : public
  */
 esp_err_t desktop_start(void) {
 #if 1

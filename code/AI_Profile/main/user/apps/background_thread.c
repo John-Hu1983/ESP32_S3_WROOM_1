@@ -29,7 +29,13 @@ static char s_pending_net_icon[BACKGROUND_NET_ICON_LEN] = MATERIAL_SYMBOLS_WIFI_
 static bool s_status_text_dirty = true;
 static bool s_net_icon_dirty = true;
 
-static uint8_t _mem_pct(uint32_t caps) {
+/*
+ * brief : Read used-memory percentage for a heap capability set.
+ * input : caps - memory capability mask.
+ * output: Used memory percentage (0..100).
+ * type  : private
+ */
+static uint8_t _bg_read_mem(uint32_t caps) {
     size_t total = heap_caps_get_total_size(caps);
     if (total == 0U) {
         return 0U;
@@ -45,7 +51,13 @@ static uint8_t _mem_pct(uint32_t caps) {
 }
 
 #if (configUSE_TRACE_FACILITY == 1)
-static bool _cpu_counters(uint64_t* total_runtime, uint64_t* idle_runtime) {
+/*
+ * brief : Read total and idle runtime counters from task statistics.
+ * input : total_runtime - output total counter; idle_runtime - output idle counter.
+ * output: true when counters are available; false on allocation/stat failure.
+ * type  : private
+ */
+static bool _bg_read_cpu(uint64_t* total_runtime, uint64_t* idle_runtime) {
     const UBaseType_t alloc_task_count = uxTaskGetNumberOfTasks() + 5U;
     TaskStatus_t* task_states = (TaskStatus_t*)malloc(sizeof(TaskStatus_t) * alloc_task_count);
     if (task_states == NULL) {
@@ -73,14 +85,20 @@ static bool _cpu_counters(uint64_t* total_runtime, uint64_t* idle_runtime) {
     return true;
 }
 
-static uint8_t _cpu_pct(void) {
+/*
+ * brief : Compute CPU busy percentage from runtime counter deltas.
+ * input : none.
+ * output: CPU usage percentage (0..100).
+ * type  : private
+ */
+static uint8_t _bg_read_load(void) {
     static bool has_prev_sample;
     static uint64_t prev_total_runtime;
     static uint64_t prev_idle_runtime;
 
     uint64_t cur_total_runtime = 0U;
     uint64_t cur_idle_runtime = 0U;
-    if (!_cpu_counters(&cur_total_runtime, &cur_idle_runtime)) {
+    if (!_bg_read_cpu(&cur_total_runtime, &cur_idle_runtime)) {
         return 0U;
     }
 
@@ -114,24 +132,48 @@ static uint8_t _cpu_pct(void) {
     return (uint8_t)percent;
 }
 #else
-static uint8_t _cpu_pct(void) { return 0U; }
+/*
+ * brief : Return zero CPU load when runtime trace facility is disabled.
+ * input : none.
+ * output: Always 0.
+ * type  : private
+ */
+static uint8_t _bg_read_load(void) { return 0U; }
 #endif
 
-static void _status_set(const char* status_text) {
+/*
+ * brief : Store pending status text for deferred LVGL update.
+ * input : status_text - formatted status text.
+ * output: none.
+ * type  : private
+ */
+static void _bg_set_text(const char* status_text) {
     taskENTER_CRITICAL(&s_status_text_lock);
     snprintf(s_pending_status_text, sizeof(s_pending_status_text), "%s", status_text);
     s_status_text_dirty = true;
     taskEXIT_CRITICAL(&s_status_text_lock);
 }
 
-static void _net_set(const char* icon_text) {
+/*
+ * brief : Store pending network icon text for deferred LVGL update.
+ * input : icon_text - icon UTF-8 string.
+ * output: none.
+ * type  : private
+ */
+static void _bg_set_icon(const char* icon_text) {
     taskENTER_CRITICAL(&s_status_text_lock);
     snprintf(s_pending_net_icon, sizeof(s_pending_net_icon), "%s", icon_text);
     s_net_icon_dirty = true;
     taskEXIT_CRITICAL(&s_status_text_lock);
 }
 
-static const char* _net_icon(void) {
+/*
+ * brief : Map current Wi-Fi RSSI state to a top-bar icon glyph.
+ * input : none.
+ * output: Pointer to icon UTF-8 string.
+ * type  : private
+ */
+static const char* _bg_get_icon(void) {
     wifi_ap_record_t ap_info;
     if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
         return MATERIAL_SYMBOLS_WIFI_OFF;
@@ -146,7 +188,13 @@ static const char* _net_icon(void) {
     return MATERIAL_SYMBOLS_WIFI_1_BAR;
 }
 
-static void _status_apply_async(void* param) {
+/*
+ * brief : Apply cached status and network icon data on LVGL thread context.
+ * input : param - unused async callback argument.
+ * output: none.
+ * type  : private
+ */
+static void _bg_sync_ui(void* param) {
     (void)param;
 
     if ((s_top_bar_status_label == NULL) || !lv_obj_is_valid(s_top_bar_status_label)) {
@@ -182,34 +230,46 @@ static void _status_apply_async(void* param) {
     }
 }
 
-static void _status_refresh(void) {
-    const uint8_t cpu_percent = _cpu_pct();
-    const uint8_t mem_internal_percent = _mem_pct(MALLOC_CAP_INTERNAL);
-    const uint8_t mem_psram_percent = _mem_pct(MALLOC_CAP_SPIRAM);
-    const char* net_icon = _net_icon();
+/*
+ * brief : Refresh runtime metrics and schedule asynchronous top-bar update.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _bg_update_info(void) {
+    const uint8_t cpu_percent = _bg_read_load();
+    const uint8_t mem_internal_percent = _bg_read_mem(MALLOC_CAP_INTERNAL);
+    const uint8_t mem_psram_percent = _bg_read_mem(MALLOC_CAP_SPIRAM);
+    const char* net_icon = _bg_get_icon();
     char status_text[BACKGROUND_STATUS_TEXT_LEN];
 
     snprintf(status_text, sizeof(status_text), "c:%02u%% | m:%02u%% | p:%02u%%", cpu_percent,
              mem_internal_percent, mem_psram_percent);
-    _status_set(status_text);
-    _net_set(net_icon);
+    _bg_set_text(status_text);
+    _bg_set_icon(net_icon);
 
     lv_lock();
-    lv_result_t lv_res = lv_async_call(_status_apply_async, NULL);
+    lv_result_t lv_res = lv_async_call(_bg_sync_ui, NULL);
     lv_unlock();
     if (lv_res != LV_RESULT_OK) {
         ESP_LOGW(TAG, "lv_async_call failed while updating top-bar status");
     }
 }
 
-static void _thread_loop(void* param) {
+/*
+ * brief : Run the background periodic loop for desktop status updates.
+ * input : param - unused task argument.
+ * output: none.
+ * type  : private
+ */
+static void _bg_run_task(void* param) {
     (void)param;
 
     uint32_t label_update_elapsed_ms = BACKGROUND_LABEL_UPDATE_PERIOD_MS;
     while (1) {
         if (label_update_elapsed_ms >= BACKGROUND_LABEL_UPDATE_PERIOD_MS) {
             label_update_elapsed_ms = 0U;
-            _status_refresh();
+            _bg_update_info();
         }
 
         vTaskDelay(pdMS_TO_TICKS(BACKGROUND_TASK_PERIOD_MS));
@@ -217,7 +277,13 @@ static void _thread_loop(void* param) {
     }
 }
 
-esp_err_t bg_start(lv_obj_t* cpu_label, lv_obj_t* net_label) {
+/*
+ * brief : Start background status service for CPU/memory/network top-bar info.
+ * input : cpu_label - status text label; net_label - network icon label.
+ * output: ESP_OK on success; error code on invalid args or task creation failure.
+ * type  : public
+ */
+esp_err_t bg_start_task(lv_obj_t* cpu_label, lv_obj_t* net_label) {
     if (cpu_label == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -240,14 +306,14 @@ esp_err_t bg_start(lv_obj_t* cpu_label, lv_obj_t* net_label) {
     s_top_bar_status_label = cpu_label;
     s_top_bar_net_label = net_label;
     lv_lock();
-    lv_result_t lv_res = lv_async_call(_status_apply_async, NULL);
+    lv_result_t lv_res = lv_async_call(_bg_sync_ui, NULL);
     lv_unlock();
     if (lv_res != LV_RESULT_OK) {
         ESP_LOGW(TAG, "lv_async_call failed while setting initial top-bar status");
     }
 
     BaseType_t task_ok =
-        xTaskCreate(_thread_loop, "background_thread", BACKGROUND_TASK_STACK_SIZE, NULL,
+        xTaskCreate(_bg_run_task, "background_thread", BACKGROUND_TASK_STACK_SIZE, NULL,
                     BACKGROUND_TASK_PRIORITY, &s_background_task_handle);
     if (task_ok != pdPASS) {
         s_background_task_handle = NULL;

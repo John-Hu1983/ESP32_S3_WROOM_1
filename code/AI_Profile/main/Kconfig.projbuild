@@ -621,6 +621,30 @@ choice BOARD_TYPE
         depends on IDF_TARGET_ESP32S3
 endchoice
 
+choice DESKTOP_ICON_FONT_PROFILE
+    prompt "Desktop Icon Font Size"
+    default DESKTOP_ICON_FONT_PROFILE_BOARD_DEFAULT
+    help
+        Select the icon font profile used by desktop top bar and status icons.
+        "Board default" keeps the board-specific icon font from CMake.
+        Larger fonts improve readability but consume more flash/RAM.
+
+    config DESKTOP_ICON_FONT_PROFILE_BOARD_DEFAULT
+        bool "Board default"
+
+    config DESKTOP_ICON_FONT_PROFILE_14
+        bool "14"
+
+    config DESKTOP_ICON_FONT_PROFILE_16
+        bool "16"
+
+    config DESKTOP_ICON_FONT_PROFILE_20
+        bool "20"
+
+    config DESKTOP_ICON_FONT_PROFILE_30
+        bool "30"
+endchoice
+
 choice XIAOZHI_NETWORK_TYPE
     prompt "Network Type"
     depends on BOARD_TYPE_WAVESHARE_ESP32_P4_NANO

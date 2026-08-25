@@ -26,7 +26,7 @@ gpba02b_config_t g_gpba02b_config = {
  * output : BUFx register address.
  * type   : private
  */
-static uint8_t gpba02b_get_buf_reg(gpba02b_port_t port) {
+static uint8_t _gpba02b_get_buf(gpba02b_port_t port) {
     switch (port) {
         case GPBA02B_PORT_A:
             return GPBA02B_REG_BUFA;
@@ -45,7 +45,7 @@ static uint8_t gpba02b_get_buf_reg(gpba02b_port_t port) {
  * output : DIRx register address.
  * type   : private
  */
-static uint8_t gpba02b_get_dir_reg(gpba02b_port_t port) {
+static uint8_t _gpba02b_get_dir(gpba02b_port_t port) {
     switch (port) {
         case GPBA02B_PORT_A:
             return GPBA02B_REG_DIRA;
@@ -64,7 +64,7 @@ static uint8_t gpba02b_get_dir_reg(gpba02b_port_t port) {
  * output : ATTx register address.
  * type   : private
  */
-static uint8_t gpba02b_get_att_reg(gpba02b_port_t port) {
+static uint8_t _gpba02b_get_att(gpba02b_port_t port) {
     switch (port) {
         case GPBA02B_PORT_A:
             return GPBA02B_REG_ATTA;
@@ -83,7 +83,7 @@ static uint8_t gpba02b_get_att_reg(gpba02b_port_t port) {
  * output : DATx register address.
  * type   : private
  */
-static uint8_t gpba02b_get_data_reg(gpba02b_port_t port) {
+static uint8_t _gpba02b_get_data(gpba02b_port_t port) {
     switch (port) {
         case GPBA02B_PORT_A:
             return GPBA02B_REG_DATAA;
@@ -102,7 +102,7 @@ static uint8_t gpba02b_get_data_reg(gpba02b_port_t port) {
  * output : divider value used by PWM clock.
  * type   : private
  */
-static uint32_t gpba02b_get_pwm_divider(uint8_t div_sel) {
+static uint32_t _gpba02b_get_div(uint8_t div_sel) {
     switch (div_sel & GPBA02B_PWM_DIV_SEL_MASK) {
         case 0u:
             return 1u;
@@ -131,7 +131,7 @@ static uint32_t gpba02b_get_pwm_divider(uint8_t div_sel) {
  * output : command byte.
  * type   : private
  */
-static inline uint8_t gpba02b_cmd(uint8_t rw, uint8_t reg) {
+static inline uint8_t _gpba02b_make_cmd(uint8_t rw, uint8_t reg) {
     return (uint8_t)(rw | ((s_ctx.device_bit & 0x01u) << 6) | (reg & 0x3Fu));
 }
 
@@ -141,7 +141,7 @@ static inline uint8_t gpba02b_cmd(uint8_t rw, uint8_t reg) {
  * output : true for valid port, false for invalid.
  * type   : private
  */
-static bool gpba02b_port_valid(gpba02b_port_t port) {
+static bool _gpba02b_chk_port(gpba02b_port_t port) {
     return port == GPBA02B_PORT_A || port == GPBA02B_PORT_B || port == GPBA02B_PORT_C;
 }
 
@@ -151,8 +151,8 @@ static bool gpba02b_port_valid(gpba02b_port_t port) {
  * output : ESP_OK when valid, error code otherwise.
  * type   : private
  */
-static esp_err_t gpba02b_validate_port_pin(gpba02b_port_t port, uint8_t pin) {
-    if (!gpba02b_port_valid(port) || pin > 7u) {
+static esp_err_t _gpba02b_chk_pin(gpba02b_port_t port, uint8_t pin) {
+    if (!_gpba02b_chk_port(port) || pin > 7u) {
         return ESP_ERR_INVALID_ARG;
     }
     return ESP_OK;
@@ -164,7 +164,7 @@ static esp_err_t gpba02b_validate_port_pin(gpba02b_port_t port, uint8_t pin) {
  * output : ESP_OK on success, error code on failure.
  * type   : private
  */
-static esp_err_t gpba02b_xfer(uint8_t tx0, uint8_t tx1, uint8_t* rx1) {
+static esp_err_t _gpba02b_run_xfer(uint8_t tx0, uint8_t tx1, uint8_t* rx1) {
     if (!s_ctx.initialized || s_ctx.spi == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -198,8 +198,8 @@ static esp_err_t gpba02b_xfer(uint8_t tx0, uint8_t tx1, uint8_t* rx1) {
  * output : ESP_OK on success, error code on failure.
  * type   : private
  */
-static esp_err_t gpba02b_write_reg(uint8_t reg, uint8_t value) {
-    return gpba02b_xfer(gpba02b_cmd(GPBA02B_CMD_WRITE, reg), value, NULL);
+static esp_err_t _gpba02b_write_reg(uint8_t reg, uint8_t value) {
+    return _gpba02b_run_xfer(_gpba02b_make_cmd(GPBA02B_CMD_WRITE, reg), value, NULL);
 }
 
 /*
@@ -208,11 +208,11 @@ static esp_err_t gpba02b_write_reg(uint8_t reg, uint8_t value) {
  * output : ESP_OK on success, error code on failure.
  * type   : private
  */
-static esp_err_t gpba02b_read_reg(uint8_t reg, uint8_t* value) {
+static esp_err_t _gpba02b_read_reg(uint8_t reg, uint8_t* value) {
     if (value == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    return gpba02b_xfer(gpba02b_cmd(GPBA02B_CMD_READ, reg), 0x00u, value);
+    return _gpba02b_run_xfer(_gpba02b_make_cmd(GPBA02B_CMD_READ, reg), 0x00u, value);
 }
 
 /*
@@ -221,7 +221,7 @@ static esp_err_t gpba02b_read_reg(uint8_t reg, uint8_t* value) {
  * output : ESP_OK on success, error code on failure.
  * type   : private
  */
-static esp_err_t gpba02b_unlock_new_function_regs(void) {
+static esp_err_t _gpba02b_open_nfunc(void) {
     if (s_ctx.new_function_enabled) {
         return ESP_OK;
     }
@@ -230,22 +230,22 @@ static esp_err_t gpba02b_unlock_new_function_regs(void) {
      * GPBA02B datasheet requires each 16-bit frame to have its own CS pulse.
      * Therefore the unlock key sequence must be sent as 4 independent writes.
      */
-    esp_err_t err = gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_03, 0x55u);
+    esp_err_t err = _gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_03, 0x55u);
     if (err != ESP_OK) {
         return err;
     }
 
-    err = gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_07, 0xAAu);
+    err = _gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_07, 0xAAu);
     if (err != ESP_OK) {
         return err;
     }
 
-    err = gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_03, 0x55u);
+    err = _gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_03, 0x55u);
     if (err != ESP_OK) {
         return err;
     }
 
-    err = gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_07, 0xAAu);
+    err = _gpba02b_write_reg(GPBA02B_REG_NEW_FUNC_07, 0xAAu);
     if (err != ESP_OK) {
         return err;
     }
@@ -260,7 +260,7 @@ static esp_err_t gpba02b_unlock_new_function_regs(void) {
  * output : true if valid; false otherwise.
  * type   : private
  */
-static bool gpba02b_pwm_frequency_valid(gpba02b_pwm_freq_t frequency) {
+static bool _gpba02b_chk_freq(gpba02b_pwm_freq_t frequency) {
     return (uint8_t)frequency <= GPBA02B_PWM_DIV_SEL_MASK;
 }
 
@@ -270,7 +270,7 @@ static bool gpba02b_pwm_frequency_valid(gpba02b_pwm_freq_t frequency) {
  * output : raw duty register value.
  * type   : private
  */
-static uint8_t gpba02b_percent_to_pwm_duty(uint8_t duty_percent) {
+static uint8_t _gpba02b_get_duty(uint8_t duty_percent) {
     if (duty_percent >= GPBA02B_PWM_DUTY_PERCENT_MAX) {
         return 0xFFu;
     }
@@ -286,7 +286,7 @@ static uint8_t gpba02b_percent_to_pwm_duty(uint8_t duty_percent) {
  * output : ESP_OK on success, error code on failure.
  * type   : private
  */
-static esp_err_t gpba02b_resolve_pwm_duty_reg(gpba02b_port_t port, uint8_t pin, uint8_t* reg) {
+static esp_err_t _gpba02b_get_dutyreg(gpba02b_port_t port, uint8_t pin, uint8_t* reg) {
     if (reg == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -443,29 +443,29 @@ esp_err_t gpba02b_deinit(void) {
  * type   : public
  */
 esp_err_t gpba02b_set_io_mode(gpba02b_port_t port, uint8_t pin, gpba02b_io_style_t style) {
-    esp_err_t err = gpba02b_validate_port_pin(port, pin);
+    esp_err_t err = _gpba02b_chk_pin(port, pin);
     if (err != ESP_OK) {
         return err;
     }
 
-    uint8_t buf_reg = gpba02b_get_buf_reg(port);
-    uint8_t dir_reg = gpba02b_get_dir_reg(port);
-    uint8_t att_reg = gpba02b_get_att_reg(port);
+    uint8_t buf_reg = _gpba02b_get_buf(port);
+    uint8_t dir_reg = _gpba02b_get_dir(port);
+    uint8_t att_reg = _gpba02b_get_att(port);
     uint8_t mask = (uint8_t)(1u << pin);
 
     uint8_t buf_val = 0;
     uint8_t dir_val = 0;
     uint8_t att_val = 0;
 
-    err = gpba02b_read_reg(buf_reg, &buf_val);
+    err = _gpba02b_read_reg(buf_reg, &buf_val);
     if (err != ESP_OK) {
         return err;
     }
-    err = gpba02b_read_reg(dir_reg, &dir_val);
+    err = _gpba02b_read_reg(dir_reg, &dir_val);
     if (err != ESP_OK) {
         return err;
     }
-    err = gpba02b_read_reg(att_reg, &att_val);
+    err = _gpba02b_read_reg(att_reg, &att_val);
     if (err != ESP_OK) {
         return err;
     }
@@ -509,15 +509,15 @@ esp_err_t gpba02b_set_io_mode(gpba02b_port_t port, uint8_t pin, gpba02b_io_style
     }
 
     /* Write order avoids glitches for styles that depend on BUFx first. */
-    err = gpba02b_write_reg(buf_reg, buf_val);
+    err = _gpba02b_write_reg(buf_reg, buf_val);
     if (err != ESP_OK) {
         return err;
     }
-    err = gpba02b_write_reg(att_reg, att_val);
+    err = _gpba02b_write_reg(att_reg, att_val);
     if (err != ESP_OK) {
         return err;
     }
-    return gpba02b_write_reg(dir_reg, dir_val);
+    return _gpba02b_write_reg(dir_reg, dir_val);
 }
 
 /*
@@ -531,13 +531,13 @@ esp_err_t gpba02b_read_io_level(gpba02b_port_t port, uint8_t pin, uint8_t* level
         return ESP_ERR_INVALID_ARG;
     }
 
-    esp_err_t err = gpba02b_validate_port_pin(port, pin);
+    esp_err_t err = _gpba02b_chk_pin(port, pin);
     if (err != ESP_OK) {
         return err;
     }
 
     uint8_t data = 0;
-    err = gpba02b_read_reg(gpba02b_get_data_reg(port), &data);
+    err = _gpba02b_read_reg(_gpba02b_get_data(port), &data);
     if (err != ESP_OK) {
         return err;
     }
@@ -553,7 +553,7 @@ esp_err_t gpba02b_read_io_level(gpba02b_port_t port, uint8_t pin, uint8_t* level
  * type   : public
  */
 esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level) {
-    esp_err_t err = gpba02b_validate_port_pin(port, pin);
+    esp_err_t err = _gpba02b_chk_pin(port, pin);
     if (err != ESP_OK) {
         return err;
     }
@@ -561,23 +561,23 @@ esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level
     uint8_t normalized_level = (level != 0u) ? 1u : 0u;
     uint8_t mask = (uint8_t)(1u << pin);
 
-    uint8_t buf_reg = gpba02b_get_buf_reg(port);
-    uint8_t dir_reg = gpba02b_get_dir_reg(port);
-    uint8_t att_reg = gpba02b_get_att_reg(port);
+    uint8_t buf_reg = _gpba02b_get_buf(port);
+    uint8_t dir_reg = _gpba02b_get_dir(port);
+    uint8_t att_reg = _gpba02b_get_att(port);
 
     uint8_t buf_val = 0;
     uint8_t dir_val = 0;
     uint8_t att_val = 0;
 
-    err = gpba02b_read_reg(buf_reg, &buf_val);
+    err = _gpba02b_read_reg(buf_reg, &buf_val);
     if (err != ESP_OK) {
         return err;
     }
-    err = gpba02b_read_reg(dir_reg, &dir_val);
+    err = _gpba02b_read_reg(dir_reg, &dir_val);
     if (err != ESP_OK) {
         return err;
     }
-    err = gpba02b_read_reg(att_reg, &att_val);
+    err = _gpba02b_read_reg(att_reg, &att_val);
     if (err != ESP_OK) {
         return err;
     }
@@ -602,7 +602,7 @@ esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level
                 buf_val |= mask;
             }
         }
-        return gpba02b_write_reg(buf_reg, buf_val);
+        return _gpba02b_write_reg(buf_reg, buf_val);
     }
 
     if (!buf_bit) {
@@ -622,7 +622,7 @@ esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level
                 dir_val &= (uint8_t)~mask;
             }
         }
-        return gpba02b_write_reg(dir_reg, dir_val);
+        return _gpba02b_write_reg(dir_reg, dir_val);
     }
 
     return ESP_ERR_INVALID_STATE;
@@ -639,17 +639,17 @@ esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    esp_err_t err = gpba02b_unlock_new_function_regs();
+    esp_err_t err = _gpba02b_open_nfunc();
     if (err != ESP_OK) {
         return err;
     }
 
     uint8_t mask = (uint8_t)(1u << pin);
-    uint8_t att_reg = gpba02b_get_att_reg(port);
+    uint8_t att_reg = _gpba02b_get_att(port);
 
     uint8_t att_val = 0;
 
-    err = gpba02b_read_reg(att_reg, &att_val);
+    err = _gpba02b_read_reg(att_reg, &att_val);
     if (err != ESP_OK) {
         return err;
     }
@@ -657,18 +657,18 @@ esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin) {
     /* Keep default PWM polarity as non-inverted. */
     att_val &= (uint8_t)~mask;
 
-    err = gpba02b_write_reg(att_reg, att_val);
+    err = _gpba02b_write_reg(att_reg, att_val);
     if (err != ESP_OK) {
         return err;
     }
 
     if (port == GPBA02B_PORT_A) {
         s_ctx.pa_pwm_enable_shadow |= mask;
-        return gpba02b_write_reg(GPBA02B_REG_PA_PWM_ENABLE, s_ctx.pa_pwm_enable_shadow);
+        return _gpba02b_write_reg(GPBA02B_REG_PA_PWM_ENABLE, s_ctx.pa_pwm_enable_shadow);
     }
 
     s_ctx.pc_pwm_enable_shadow |= mask;
-    return gpba02b_write_reg(GPBA02B_REG_PC_PWM_ENABLE, s_ctx.pc_pwm_enable_shadow);
+    return _gpba02b_write_reg(GPBA02B_REG_PC_PWM_ENABLE, s_ctx.pc_pwm_enable_shadow);
 }
 
 /*
@@ -679,21 +679,21 @@ esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin) {
  */
 esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t frequency) {
     if ((port != GPBA02B_PORT_A && port != GPBA02B_PORT_C) ||
-        !gpba02b_pwm_frequency_valid(frequency)) {
+        !_gpba02b_chk_freq(frequency)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    esp_err_t err = gpba02b_unlock_new_function_regs();
+    esp_err_t err = _gpba02b_open_nfunc();
     if (err != ESP_OK) {
         return err;
     }
 
     uint8_t div_sel = ((uint8_t)frequency) & GPBA02B_PWM_DIV_SEL_MASK;
     uint32_t nominal_hz =
-        GPBA02B_PWM_BASE_CLOCK_HZ / (gpba02b_get_pwm_divider(div_sel) * GPBA02B_PWM_PERIOD_STEPS);
+        GPBA02B_PWM_BASE_CLOCK_HZ / (_gpba02b_get_div(div_sel) * GPBA02B_PWM_PERIOD_STEPS);
 
     ESP_LOGI(TAG, "PWM frequency set: nominal=%uHz div=%u", (unsigned)nominal_hz,
-             (unsigned)gpba02b_get_pwm_divider(div_sel));
+             (unsigned)_gpba02b_get_div(div_sel));
 
     if (port == GPBA02B_PORT_A) {
         s_ctx.pwmck_shadow = (uint8_t)((s_ctx.pwmck_shadow & (uint8_t)~GPBA02B_PWMCK_PA_DIV_MASK) |
@@ -703,7 +703,7 @@ esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t freq
             (uint8_t)((s_ctx.pwmck_shadow & (uint8_t)~GPBA02B_PWMCK_PC_DIV_MASK) | div_sel);
     }
 
-    return gpba02b_write_reg(GPBA02B_REG_PWMCK, s_ctx.pwmck_shadow);
+    return _gpba02b_write_reg(GPBA02B_REG_PWMCK, s_ctx.pwmck_shadow);
 }
 
 /*
@@ -718,19 +718,25 @@ esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_pe
     }
 
     uint8_t reg = 0;
-    esp_err_t err = gpba02b_resolve_pwm_duty_reg(port, pin, &reg);
+    esp_err_t err = _gpba02b_get_dutyreg(port, pin, &reg);
     if (err != ESP_OK) {
         return err;
     }
 
-    err = gpba02b_unlock_new_function_regs();
+    err = _gpba02b_open_nfunc();
     if (err != ESP_OK) {
         return err;
     }
 
-    return gpba02b_write_reg(reg, gpba02b_percent_to_pwm_duty(duty_percent));
+    return _gpba02b_write_reg(reg, _gpba02b_get_duty(duty_percent));
 }
 
+/*
+ * brief : Read one GPBA02B register from readable register space.
+ * input : reg - register address; value - output value pointer.
+ * output: ESP_OK on success; error code on invalid/unsupported register or transport failure.
+ * type  : public
+ */
 esp_err_t gpba02b_read_register(uint8_t reg, uint8_t* value) {
     if (value == NULL || reg > 0x3Fu) {
         return ESP_ERR_INVALID_ARG;
@@ -744,9 +750,15 @@ esp_err_t gpba02b_read_register(uint8_t reg, uint8_t* value) {
         return ESP_ERR_NOT_SUPPORTED;
     }
 
-    return gpba02b_read_reg(reg, value);
+    return _gpba02b_read_reg(reg, value);
 }
 
+/*
+ * brief : Set device address bit used in GPBA02B command framing.
+ * input : device_bit - valid values are 0 or 1.
+ * output: ESP_OK on success; error code on invalid argument or uninitialized state.
+ * type  : public
+ */
 esp_err_t gpba02b_set_device_id(uint8_t device_bit) {
     if (device_bit > 1u) {
         return ESP_ERR_INVALID_ARG;
@@ -760,5 +772,11 @@ esp_err_t gpba02b_set_device_id(uint8_t device_bit) {
     return ESP_OK;
 }
 
+/*
+ * brief : Get current GPBA02B device address bit.
+ * input : none.
+ * output: Device address bit value (0 or 1).
+ * type  : public
+ */
 uint8_t gpba02b_get_device_id(void) { return s_ctx.device_bit; }
 

@@ -53,13 +53,33 @@ typedef struct {
     uint32_t color_hex;
 } desktop_icon_s;
 
-/* Initialize ST7365 panel, start LVGL task, and create desktop UI. */
+/*
+ * brief : Initialize ST7365 panel, start LVGL task, and create desktop UI.
+ * input : none.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t desktop_start(void);
-/* Return to desktop main screen. */
+/*
+ * brief : Return to desktop main screen.
+ * input : none.
+ * output: none.
+ * type  : public
+ */
 void desktop_return_to_home(void);
-/* Get left status label handle in the desktop top bar. */
+/*
+ * brief : Get left status label handle in the desktop top bar.
+ * input : none.
+ * output: LVGL object handle or NULL.
+ * type  : public
+ */
 lv_obj_t* desktop_get_cpu_label(void);
-/* Get network icon label handle in the desktop top bar. */
+/*
+ * brief : Get network icon label handle in the desktop top bar.
+ * input : none.
+ * output: LVGL object handle or NULL.
+ * type  : public
+ */
 lv_obj_t* desktop_get_net_label(void);
 
 #ifdef __cplusplus

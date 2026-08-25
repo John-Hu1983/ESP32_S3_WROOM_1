@@ -22,12 +22,27 @@ extern "C" {
 #define RGB565_ORANGE (0xFD20U)
 #define RGB565_GRAY (0x8410U)
 
-/* Advance LVGL internal time base by one desktop tick period. */
-void desktop_common_lvgl_tick_cb(void* arg);
-/* Flush one LVGL dirty area to the ST7365 panel driver. */
-void desktop_common_lvgl_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map);
-/* Generate a high-contrast inverse color for selected-state rendering. */
-lv_color_t desktop_common_invert_color(lv_color_t color);
+/*
+ * brief : Advance LVGL internal time base by one desktop tick period.
+ * input : arg - unused timer callback argument.
+ * output: none.
+ * type  : public
+ */
+void desktop_tick_event(void* arg);
+/*
+ * brief : Flush one LVGL dirty area to the ST7365 panel driver.
+ * input : disp - LVGL display; area - dirty region; px_map - pixel buffer.
+ * output: none.
+ * type  : public
+ */
+void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map);
+/*
+ * brief : Generate a high-contrast inverse color for selected-state rendering.
+ * input : color - source color.
+ * output: Inverted color value.
+ * type  : public
+ */
+lv_color_t desktop_invert_color(lv_color_t color);
 
 #ifdef __cplusplus
 }

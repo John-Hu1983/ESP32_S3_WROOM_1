@@ -854,6 +854,17 @@ if(NOT BOARD_DIR AND NOT CMAKE_BUILD_EARLY_EXPANSION)
     message(FATAL_ERROR "The selected board does not define BOARD_DIR")
 endif()
 
+# Optional sdkconfig override for desktop/status icon font size.
+if(CONFIG_DESKTOP_ICON_FONT_PROFILE_14)
+    set(BUILTIN_ICON_FONT font_material_symbols_14_1)
+elseif(CONFIG_DESKTOP_ICON_FONT_PROFILE_16)
+    set(BUILTIN_ICON_FONT font_material_symbols_16_4)
+elseif(CONFIG_DESKTOP_ICON_FONT_PROFILE_20)
+    set(BUILTIN_ICON_FONT font_material_symbols_20_4)
+elseif(CONFIG_DESKTOP_ICON_FONT_PROFILE_30)
+    set(BUILTIN_ICON_FONT font_material_symbols_30_4)
+endif()
+
 set(BOARD_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/config.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${BOARD_CONFIG_FILE}")
 

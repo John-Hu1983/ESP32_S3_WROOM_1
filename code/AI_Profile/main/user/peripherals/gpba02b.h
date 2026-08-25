@@ -111,37 +111,91 @@ typedef struct {
 
 extern gpba02b_config_t g_gpba02b_config;
 
+/*
+ * brief : Initialize GPBA02B driver object and SPI device.
+ * input : none.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_init_object(void);
+/*
+ * brief : Deinitialize GPBA02B driver object and release SPI resources.
+ * input : none.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_deinit(void);
 
-/* 1) Configure GPIO mode by (port, pin, style). */
+/*
+ * brief : Configure GPIO mode by port, pin, and IO style.
+ * input : port - target port; pin - target pin; style - IO style.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_set_io_mode(gpba02b_port_t port, uint8_t pin, gpba02b_io_style_t style);
 
-/* 2) Read GPIO level by (port, pin). */
+/*
+ * brief : Read GPIO level from one pin.
+ * input : port - target port; pin - target pin; level - output level pointer.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_read_io_level(gpba02b_port_t port, uint8_t pin, uint8_t* level);
 
-/* 3) Write GPIO level by (port, pin, level). */
+/*
+ * brief : Write GPIO level to one pin.
+ * input : port - target port; pin - target pin; level - logic level.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level);
 
-/* 4) Configure one pin into PWM mode. */
+/*
+ * brief : Configure one pin into PWM mode.
+ * input : port - target PWM port; pin - target PWM pin.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin);
 
-/* 5) Set PWM frequency for one port (A or C) by selectable hardware-supported enum. */
+/*
+ * brief : Set PWM base frequency for one port.
+ * input : port - target PWM port; frequency - frequency enum.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t frequency);
 
-/* 6) Set PWM duty percent for one pin (0..100). */
+/*
+ * brief : Set PWM duty percent for one pin.
+ * input : port - target PWM port; pin - target PWM pin; duty_percent - 0..100.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent);
 
 /*
- * 7) Read one raw GPBA02B register (0x00..0x3F).
- * Note: many new-function registers are write-only per datasheet.
+ * brief : Read one raw GPBA02B register.
+ * input : reg - register address; value - output value pointer.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
  */
 esp_err_t gpba02b_read_register(uint8_t reg, uint8_t* value);
 
-/* 8) Update command device-id bit at runtime (0 or 1). */
+/*
+ * brief : Update command device-id bit at runtime.
+ * input : device_bit - valid values are 0 or 1.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
 esp_err_t gpba02b_set_device_id(uint8_t device_bit);
 
-/* 9) Query current command device-id bit. */
+/*
+ * brief : Query current command device-id bit.
+ * input : none.
+ * output: Device-id bit value.
+ * type  : public
+ */
 uint8_t gpba02b_get_device_id(void);
 
 #ifdef __cplusplus
