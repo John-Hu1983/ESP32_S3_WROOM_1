@@ -1,11 +1,5 @@
 #include "desktop_app.h"
 
-#include <material_symbols.h>
-
-LV_FONT_DECLARE(DESKTOP_TEXT_FONT);
-LV_FONT_DECLARE(DESKTOP_SYMBOL_FONT);
-LV_FONT_DECLARE(lv_font_montserrat_14);
-
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VIDEO, "Camera", 0xE95420},     {LV_SYMBOL_IMAGE, "Gallery", 0xD94B3D},
     {LV_SYMBOL_AUDIO, "Music", 0x77216F},      {LV_SYMBOL_LIST, "Scope", 0xF27C38},

@@ -1,5 +1,7 @@
 {
     "idf.currentSetup": "C:\\esp\\v6.0.2\\esp-idf",
+    "C_Cpp.default.configurationProvider": "espressif.esp-idf-extension",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
     "files.exclude": {
         ".github": true,
         "main/boards/alientek": true,

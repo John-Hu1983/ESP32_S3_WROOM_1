@@ -11,6 +11,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include <material_symbols.h>
 #include "lvgl.h"
 
 #include "desktop_common.h"
@@ -46,6 +47,14 @@ extern "C" {
 #ifndef DESKTOP_SYMBOL_FONT
 #define DESKTOP_SYMBOL_FONT BUILTIN_ICON_FONT
 #endif
+
+#ifndef CPU_LABEL_FONT
+#define CPU_LABEL_FONT lv_font_montserrat_14
+#endif
+
+LV_FONT_DECLARE(DESKTOP_TEXT_FONT);
+LV_FONT_DECLARE(DESKTOP_SYMBOL_FONT);
+LV_FONT_DECLARE(CPU_LABEL_FONT);
 
 typedef struct {
     const char* symbol;
