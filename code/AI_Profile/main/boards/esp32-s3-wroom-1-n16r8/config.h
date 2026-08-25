@@ -2,6 +2,7 @@
 #define _BOARD_CONFIG_H_
 
 #include <driver/gpio.h>
+#include "lvgl.h"
 
 #define AUDIO_INPUT_SAMPLE_RATE 16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 16000
@@ -37,6 +38,12 @@
 #define LCD_DEFAULT_INVERT_COLOR (1)
 #define LCD_IO_RESET_PORT (GPBA02B_PORT_A)
 #define LCD_IO_RESET_PIN (5)
+
+/*
+    desktop ui font
+*/
+#define DESKTOP_TEXT_FONT font_noto_sans_basic_20_4
+#define CPU_LABEL_FONT lv_font_montserrat_14
 
 /*
 PDM

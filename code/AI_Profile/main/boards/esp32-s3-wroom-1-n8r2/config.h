@@ -39,6 +39,11 @@
 #define LCD_DEFAULT_INVERT_COLOR (1)
 
 /*
+    desktop ui font
+*/
+#define DESKTOP_TEXT_FONT font_noto_sans_basic_20_4
+
+/*
 PDM
 */
 #define PDM_CLK_IO (GPIO_NUM_41)

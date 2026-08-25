@@ -1,5 +1,11 @@
 #include "desktop_app.h"
 
+#include <material_symbols.h>
+
+LV_FONT_DECLARE(DESKTOP_TEXT_FONT);
+LV_FONT_DECLARE(DESKTOP_SYMBOL_FONT);
+LV_FONT_DECLARE(lv_font_montserrat_14);
+
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_VIDEO, "Camera", 0xE95420},     {LV_SYMBOL_IMAGE, "Gallery", 0xD94B3D},
     {LV_SYMBOL_AUDIO, "Music", 0x77216F},      {LV_SYMBOL_LIST, "Scope", 0xF27C38},
@@ -17,6 +23,8 @@ static TaskHandle_t s_lv_task_handle;
 static uint16_t s_lcd_width;
 static uint16_t s_lcd_height;
 static lv_obj_t* s_desktop_screen;
+static lv_obj_t* s_net_label;
+static lv_obj_t* s_cpu_label;
 static bool s_desktop_started;
 static bool s_lvgl_ready;
 
@@ -57,6 +65,20 @@ static void _desktop_create_ui(void) {
     lv_obj_set_style_radius(top_bar, 0, 0);
     lv_obj_set_style_pad_all(top_bar, 0, 0);
 
+    s_net_label = lv_label_create(top_bar);
+    lv_obj_set_style_text_color(s_net_label, lv_color_black(), 0);
+    lv_obj_set_style_text_font(s_net_label, &DESKTOP_SYMBOL_FONT, 0);
+    lv_obj_align(s_net_label, LV_ALIGN_LEFT_MID, 4, 0);
+    lv_label_set_text(s_net_label, MATERIAL_SYMBOLS_WIFI_OFF);
+
+    s_cpu_label = lv_label_create(top_bar);
+    lv_obj_set_style_text_color(s_cpu_label, lv_color_black(), 0);
+    lv_obj_set_style_text_font(s_cpu_label, &CPU_LABEL_FONT, 0);
+    lv_obj_set_width(s_cpu_label, (lv_coord_t)(s_lcd_width - 28U));
+    lv_label_set_long_mode(s_cpu_label, LV_LABEL_LONG_CLIP);
+    lv_obj_align(s_cpu_label, LV_ALIGN_LEFT_MID, 24, 0);
+    lv_label_set_text(s_cpu_label, "c:--% | m:--% | p:--%");
+
     lv_obj_t* bottom_bar = lv_obj_create(scr);
     lv_obj_set_size(bottom_bar, (lv_coord_t)s_lcd_width, (lv_coord_t)DESKTOP_BOTTOM_BAR_HEIGHT);
     lv_obj_set_pos(bottom_bar, 0, (lv_coord_t)((int32_t)s_lcd_height - DESKTOP_BOTTOM_BAR_HEIGHT));
@@ -95,6 +117,7 @@ static void _desktop_create_ui(void) {
         lv_obj_t* name = lv_label_create(btn);
         lv_label_set_text(name, s_desktop_icons[i].name);
         lv_obj_set_style_text_color(name, lv_color_white(), 0);
+        lv_obj_set_style_text_font(name, &DESKTOP_TEXT_FONT, 0);
         lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -4);
     }
 
@@ -220,6 +243,20 @@ static void _desktop_lvgl_task(void* param) {
     }
 }
 
+lv_obj_t* desktop_get_cpu_label(void) {
+    if ((s_cpu_label != NULL) && lv_obj_is_valid(s_cpu_label)) {
+        return s_cpu_label;
+    }
+    return NULL;
+}
+
+lv_obj_t* desktop_get_net_label(void) {
+    if ((s_net_label != NULL) && lv_obj_is_valid(s_net_label)) {
+        return s_net_label;
+    }
+    return NULL;
+}
+
 /*
  * brief: Public entry to request returning to desktop.
  * input: none.
@@ -240,7 +277,7 @@ void desktop_return_to_home(void) {
  * input: none.
  * output: ESP_OK on success; otherwise propagated startup error.
  */
-esp_err_t desktop_app_start(void) {
+esp_err_t desktop_start(void) {
 #if 1
     if (s_desktop_started) {
         ESP_LOGI(DESKTOP_APP_TAG, "desktop already started");

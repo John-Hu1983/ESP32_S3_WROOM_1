@@ -14,6 +14,7 @@
 #include "lvgl.h"
 
 #include "desktop_common.h"
+#include "user/inc/user_config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,14 @@ extern "C" {
 #define DESKTOP_ICON_GAP_X (8U)
 #define DESKTOP_ICON_GAP_Y (8U)
 
+#ifndef DESKTOP_TEXT_FONT
+#define DESKTOP_TEXT_FONT BUILTIN_TEXT_FONT
+#endif
+
+#ifndef DESKTOP_SYMBOL_FONT
+#define DESKTOP_SYMBOL_FONT BUILTIN_ICON_FONT
+#endif
+
 typedef struct {
     const char* symbol;
     const char* name;
@@ -45,9 +54,13 @@ typedef struct {
 } desktop_icon_s;
 
 /* Initialize ST7365 panel, start LVGL task, and create desktop UI. */
-esp_err_t desktop_app_start(void);
+esp_err_t desktop_start(void);
 /* Return to desktop main screen. */
 void desktop_return_to_home(void);
+/* Get left status label handle in the desktop top bar. */
+lv_obj_t* desktop_get_cpu_label(void);
+/* Get network icon label handle in the desktop top bar. */
+lv_obj_t* desktop_get_net_label(void);
 
 #ifdef __cplusplus
 }
