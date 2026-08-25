@@ -1,12 +1,33 @@
 #include "desktop_app.h"
 
+#include "user/gui/bt_ui.h"
+#include "user/gui/camera_ui.h"
+#include "user/gui/file_ui.h"
+#include "user/gui/gallery_ui.h"
+#include "user/gui/mic_ui.h"
+#include "user/gui/music_ui.h"
+#include "user/gui/oscilloscope_ui.h"
+#include "user/gui/pidm_ui.h"
+#include "user/gui/about_ui.h"
+#include "user/gui/setting_ui.h"
+#include "user/gui/tools_ui.h"
+#include "user/gui/wifi_ui.h"
+
+#define TAG "desktop"
+
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
-    {LV_SYMBOL_VIDEO, "Camera", 0xE95420},     {LV_SYMBOL_IMAGE, "Gallery", 0xD94B3D},
-    {LV_SYMBOL_AUDIO, "Music", 0x77216F},      {LV_SYMBOL_LIST, "Scope", 0xF27C38},
-    {LV_SYMBOL_WIFI, "WiFi", 0xC0563F},        {LV_SYMBOL_BLUETOOTH, "BT", 0xB65C2C},
-    {LV_SYMBOL_FILE, "File", 0xE19A35},        {LV_SYMBOL_VOLUME_MAX, "Mic", 0x8F6745},
-    {LV_SYMBOL_BELL, "PIDM", 0xC23B4A},        {LV_SYMBOL_REFRESH, "Tools", 0x8A3D5D},
-    {LV_SYMBOL_SETTINGS, "Setting", 0xA8703A}, {LV_SYMBOL_WARNING, "About", 0x6F4A34},
+    {LV_SYMBOL_VIDEO, "Camera", 0xE95420, camera_create_screen, camera_destroy_screen},
+    {LV_SYMBOL_IMAGE, "Gallery", 0xD94B3D, gallery_create_screen, gallery_destroy_screen},
+    {LV_SYMBOL_AUDIO, "Music", 0x77216F, music_create_screen, music_destroy_screen},
+    {LV_SYMBOL_LIST, "Scope", 0xF27C38, scope_create_screen, scope_destroy_screen},
+    {LV_SYMBOL_WIFI, "WiFi", 0xC0563F, wifi_create_screen, wifi_destroy_screen},
+    {LV_SYMBOL_BLUETOOTH, "BT", 0xB65C2C, bt_create_screen, bt_destroy_screen},
+    {LV_SYMBOL_FILE, "File", 0xE19A35, file_create_screen, file_destroy_screen},
+    {LV_SYMBOL_VOLUME_MAX, "Mic", 0x8F6745, mic_create_screen, mic_destroy_screen},
+    {LV_SYMBOL_BELL, "PIDM", 0xC23B4A, pidm_create_screen, pidm_destroy_screen},
+    {LV_SYMBOL_REFRESH, "Tools", 0x8A3D5D, tools_create_screen, tools_destroy_screen},
+    {LV_SYMBOL_SETTINGS, "Setting", 0xA8703A, setting_create_screen, setting_destroy_screen},
+    {LV_SYMBOL_WARNING, "About", 0x6F4A34, about_create_screen, about_destroy_screen},
 };
 
 static lv_display_t* s_lv_display;
@@ -19,8 +40,167 @@ static uint16_t s_lcd_height;
 static lv_obj_t* s_desktop_screen;
 static lv_obj_t* s_net_label;
 static lv_obj_t* s_cpu_label;
+static desktop_icon_op_s s_icon_op;
 static bool s_desktop_started;
 static bool s_lvgl_ready;
+static volatile bool s_home_request_pending;
+
+static bool _desktop_obj_valid(lv_obj_t* obj) { return (obj != NULL) && lv_obj_is_valid(obj); }
+
+static void _desktop_del_obj(lv_obj_t** obj) {
+    if ((obj != NULL) && _desktop_obj_valid(*obj)) {
+        lv_obj_del(*obj);
+    }
+
+    if (obj != NULL) {
+        *obj = NULL;
+    }
+}
+
+static bool _desktop_set_grid_hidden(bool hidden) {
+    if (!_desktop_obj_valid(s_icon_op.desktop_grid)) {
+        return false;
+    }
+
+    if (hidden) {
+        lv_obj_add_flag(s_icon_op.desktop_grid, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_remove_flag(s_icon_op.desktop_grid, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    return true;
+}
+
+/*
+ * brief : Advance LVGL internal tick counter.
+ * input : arg - unused callback argument from esp_timer.
+ * output: none.
+ * type  : public
+ */
+void desktop_tick_event(void* arg) {
+    (void)arg;
+    lv_tick_inc(LVGL_TICK_PERIOD_MS);
+}
+
+/*
+ * brief : Forward LVGL flush area to panel driver and notify flush completion.
+ * input : disp - LVGL display instance; area - dirty rectangle; px_map - source pixel buffer.
+ * output: none.
+ * type  : public
+ */
+void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
+    esp_err_t ret = st7365p_lvgl_flush(area->x1, area->y1, area->x2, area->y2, px_map);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "st7365p_lvgl_flush failed: %d", (int)ret);
+    }
+
+    lv_display_flush_ready(disp);
+}
+
+/*
+ * brief : Convert one color to its inverted RGB counterpart.
+ * input : color - source LVGL color value.
+ * output: Inverted LVGL color.
+ * type  : public
+ */
+lv_color_t desktop_invert_color(lv_color_t color) {
+    lv_color32_t color32 = lv_color_to_32(color, LV_OPA_COVER);
+
+    return lv_color_make((uint8_t)(0xFFU - color32.red), (uint8_t)(0xFFU - color32.green),
+                         (uint8_t)(0xFFU - color32.blue));
+}
+
+/*
+ * brief : Reset cached icon widget handles in desktop runtime state.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_reset_icon_widgets(void) {
+    memset(s_icon_op.icon_btn, 0, sizeof(s_icon_op.icon_btn));
+    memset(s_icon_op.icon_symbol_label, 0, sizeof(s_icon_op.icon_symbol_label));
+    memset(s_icon_op.icon_name_label, 0, sizeof(s_icon_op.icon_name_label));
+    s_icon_op.desktop_grid = NULL;
+}
+
+/*
+ * brief : Create icon grid in desktop middle content area.
+ * input : content - middle content container object.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_build_icon_grid(lv_obj_t* content) {
+    if (!_desktop_obj_valid(content)) {
+        return;
+    }
+
+    static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+                                   LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+                                   LV_GRID_TEMPLATE_LAST};
+
+    lv_obj_t* grid = lv_obj_create(content);
+    lv_obj_set_size(grid, lv_pct(100), lv_pct(100));
+    lv_obj_set_pos(grid, 0, 0);
+    lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(grid, 0, 0);
+    lv_obj_set_style_pad_all(grid, 0, 0);
+    lv_obj_set_style_pad_row(grid, DESKTOP_ICON_GAP_Y, 0);
+    lv_obj_set_style_pad_column(grid, DESKTOP_ICON_GAP_X, 0);
+    lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
+
+    for (uint32_t i = 0; i < DESKTOP_ICON_COUNT; i++) {
+        lv_coord_t row = (lv_coord_t)(i / DESKTOP_ICON_COLS);
+        lv_coord_t col = (lv_coord_t)(i % DESKTOP_ICON_COLS);
+
+        lv_obj_t* btn = lv_btn_create(grid);
+        lv_obj_set_grid_cell(btn, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(s_desktop_icons[i].color_hex), 0);
+        lv_obj_set_style_radius(btn, 12, 0);
+        lv_obj_set_style_border_width(btn, 0, 0);
+        lv_obj_set_style_pad_all(btn, 6, 0);
+
+        lv_obj_t* symbol = lv_label_create(btn);
+        lv_label_set_text(symbol, s_desktop_icons[i].symbol);
+        lv_obj_set_style_text_color(symbol, lv_color_white(), 0);
+        lv_obj_align(symbol, LV_ALIGN_TOP_MID, 0, 2);
+
+        lv_obj_t* name = lv_label_create(btn);
+        lv_label_set_text(name, s_desktop_icons[i].name);
+        lv_obj_set_style_text_color(name, lv_color_white(), 0);
+        lv_obj_set_style_text_font(name, &DESKTOP_TEXT_FONT, 0);
+        lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -4);
+
+        s_icon_op.icon_btn[i] = btn;
+        s_icon_op.icon_symbol_label[i] = symbol;
+        s_icon_op.icon_name_label[i] = name;
+    }
+
+    s_icon_op.desktop_grid = grid;
+}
+
+/*
+ * brief : Rebuild desktop middle content area to default icon grid state.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_rebuild_home_content(void) {
+    if (!_desktop_obj_valid(s_icon_op.content_area)) {
+        return;
+    }
+
+    _desktop_del_obj(&s_icon_op.desktop_grid);
+
+    _desktop_reset_icon_widgets();
+    _desktop_build_icon_grid(s_icon_op.content_area);
+
+    s_icon_op.switching = -1;
+    s_icon_op.sel_timout = 0U;
+    s_icon_op.ui_active = false;
+    s_icon_op.active_ui_index = 0xFFu;
+    s_icon_op.active_ui_root = NULL;
+}
 
 /*
  * brief : Build desktop grid UI and load it as the active LVGL screen.
@@ -29,11 +209,6 @@ static bool s_lvgl_ready;
  * type  : private
  */
 static void _desktop_create_ui(void) {
-    static lv_coord_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
-                                   LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
-                                   LV_GRID_TEMPLATE_LAST};
-
     lv_coord_t grid_x = (lv_coord_t)DESKTOP_MARGIN_X;
     lv_coord_t grid_y = (lv_coord_t)(DESKTOP_TOP_BAR_HEIGHT + DESKTOP_MARGIN_Y);
     lv_coord_t grid_w = (lv_coord_t)((int32_t)s_lcd_width - (2 * DESKTOP_MARGIN_X));
@@ -46,6 +221,11 @@ static void _desktop_create_ui(void) {
     if (grid_h < 0) {
         grid_h = 0;
     }
+
+    memset(&s_icon_op, 0, sizeof(s_icon_op));
+    s_icon_op.switching = -1;
+    s_icon_op.active_ui_index = 0xFFu;
+    s_icon_op.ui_active = false;
 
     lv_obj_t* scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x1C1B1A), 0);
@@ -83,38 +263,19 @@ static void _desktop_create_ui(void) {
     lv_obj_set_style_radius(bottom_bar, 0, 0);
     lv_obj_set_style_pad_all(bottom_bar, 0, 0);
 
-    lv_obj_t* grid = lv_obj_create(scr);
-    lv_obj_set_size(grid, grid_w, grid_h);
-    lv_obj_set_pos(grid, grid_x, grid_y);
-    lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(grid, 0, 0);
-    lv_obj_set_style_pad_all(grid, 0, 0);
-    lv_obj_set_style_pad_row(grid, DESKTOP_ICON_GAP_Y, 0);
-    lv_obj_set_style_pad_column(grid, DESKTOP_ICON_GAP_X, 0);
-    lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
+    lv_obj_t* content = lv_obj_create(scr);
+    lv_obj_set_size(content, grid_w, grid_h);
+    lv_obj_set_pos(content, grid_x, grid_y);
+    lv_obj_set_style_bg_color(content, lv_color_hex(0x1C1B1A), 0);
+    lv_obj_set_style_bg_opa(content, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(content, 0, 0);
+    lv_obj_set_style_radius(content, 0, 0);
+    lv_obj_set_style_pad_all(content, 0, 0);
 
-    for (uint32_t i = 0; i < DESKTOP_ICON_COUNT; i++) {
-        lv_coord_t row = (lv_coord_t)(i / DESKTOP_ICON_COLS);
-        lv_coord_t col = (lv_coord_t)(i % DESKTOP_ICON_COLS);
-
-        lv_obj_t* btn = lv_btn_create(grid);
-        lv_obj_set_grid_cell(btn, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
-        lv_obj_set_style_bg_color(btn, lv_color_hex(s_desktop_icons[i].color_hex), 0);
-        lv_obj_set_style_radius(btn, 12, 0);
-        lv_obj_set_style_border_width(btn, 0, 0);
-        lv_obj_set_style_pad_all(btn, 6, 0);
-
-        lv_obj_t* symbol = lv_label_create(btn);
-        lv_label_set_text(symbol, s_desktop_icons[i].symbol);
-        lv_obj_set_style_text_color(symbol, lv_color_white(), 0);
-        lv_obj_align(symbol, LV_ALIGN_TOP_MID, 0, 2);
-
-        lv_obj_t* name = lv_label_create(btn);
-        lv_label_set_text(name, s_desktop_icons[i].name);
-        lv_obj_set_style_text_color(name, lv_color_white(), 0);
-        lv_obj_set_style_text_font(name, &DESKTOP_TEXT_FONT, 0);
-        lv_obj_align(name, LV_ALIGN_BOTTOM_MID, 0, -4);
-    }
+    s_icon_op.content_area = content;
+    s_icon_op.active_ui_root = NULL;
+    _desktop_reset_icon_widgets();
+    _desktop_build_icon_grid(content);
 
     s_desktop_screen = scr;
     lv_scr_load(scr);
@@ -132,24 +293,23 @@ static esp_err_t _desktop_prepare_monitor(void) {
 
     esp_err_t ret = st7365p_panel_init(&panel_cfg);
     if (ret != ESP_OK) {
-        ESP_LOGE(DESKTOP_APP_TAG, "st7365p_panel_init failed: %d", (int)ret);
+        ESP_LOGE(TAG, "st7365p_panel_init failed: %d", (int)ret);
         return ret;
     }
 
     ret = st7365p_set_rotation(2);
     if (ret != ESP_OK) {
-        ESP_LOGE(DESKTOP_APP_TAG, "st7365p_set_rotation failed: %d", (int)ret);
+        ESP_LOGE(TAG, "st7365p_set_rotation failed: %d", (int)ret);
         return ret;
     }
 
     st7365p_get_resolution(&s_lcd_width, &s_lcd_height);
     if ((s_lcd_width == 0U) || (s_lcd_height == 0U)) {
-        ESP_LOGE(DESKTOP_APP_TAG, "invalid LCD resolution");
+        ESP_LOGE(TAG, "invalid LCD resolution");
         return ESP_ERR_INVALID_SIZE;
     }
 
-    ESP_LOGI(DESKTOP_APP_TAG, "desktop init on %ux%u", (unsigned)s_lcd_width,
-             (unsigned)s_lcd_height);
+    ESP_LOGI(TAG, "desktop init on %ux%u", (unsigned)s_lcd_width, (unsigned)s_lcd_height);
     return ESP_OK;
 }
 
@@ -170,14 +330,14 @@ static esp_err_t _desktop_lvgl_init(void) {
     s_lv_buf_1 = (lv_color_t*)heap_caps_malloc(draw_buf_pixels * sizeof(lv_color_t),
                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_lv_buf_1 == NULL) {
-        ESP_LOGE(DESKTOP_APP_TAG, "LVGL buf1 PSRAM allocation failed");
+        ESP_LOGE(TAG, "LVGL buf1 PSRAM allocation failed");
         return ESP_ERR_NO_MEM;
     }
 
     s_lv_buf_2 = (lv_color_t*)heap_caps_malloc(draw_buf_pixels * sizeof(lv_color_t),
                                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_lv_buf_2 == NULL) {
-        ESP_LOGE(DESKTOP_APP_TAG, "LVGL buf2 PSRAM allocation failed");
+        ESP_LOGE(TAG, "LVGL buf2 PSRAM allocation failed");
         heap_caps_free(s_lv_buf_1);
         s_lv_buf_1 = NULL;
         return ESP_ERR_NO_MEM;
@@ -227,6 +387,250 @@ static esp_err_t _desktop_lvgl_init(void) {
 }
 
 /*
+ * brief : Apply normal/selected visual state for one icon widget.
+ * input : icon_index - icon index; selected - true to apply inverse color.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_set_icon_state(uint32_t icon_index, bool selected) {
+    if (icon_index >= DESKTOP_ICON_COUNT) {
+        return;
+    }
+
+    lv_obj_t* btn = s_icon_op.icon_btn[icon_index];
+    lv_obj_t* symbol = s_icon_op.icon_symbol_label[icon_index];
+    lv_obj_t* name = s_icon_op.icon_name_label[icon_index];
+    if (!_desktop_obj_valid(btn) || !_desktop_obj_valid(symbol) || !_desktop_obj_valid(name)) {
+        return;
+    }
+
+    lv_color_t bg_color = lv_color_hex(s_desktop_icons[icon_index].color_hex);
+    lv_color_t text_color = lv_color_white();
+    if (selected) {
+        bg_color = desktop_invert_color(bg_color);
+        text_color = desktop_invert_color(text_color);
+
+        lv_obj_set_style_border_width(btn, 2, 0);
+        lv_obj_set_style_border_color(btn, lv_color_white(), 0);
+        lv_obj_set_style_border_opa(btn, LV_OPA_COVER, 0);
+    } else {
+        lv_obj_set_style_border_width(btn, 0, 0);
+    }
+
+    lv_obj_set_style_bg_color(btn, bg_color, 0);
+    lv_obj_set_style_text_color(symbol, text_color, 0);
+    lv_obj_set_style_text_color(name, text_color, 0);
+}
+
+/*
+ * brief : Clear current icon selection and restore normal color state.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_clear_icon_switching(void) {
+    if ((s_icon_op.switching >= 0) && ((uint32_t)s_icon_op.switching < DESKTOP_ICON_COUNT)) {
+        _desktop_set_icon_state((uint32_t)s_icon_op.switching, false);
+    }
+
+    s_icon_op.switching = -1;
+    s_icon_op.sel_timout = 0U;
+}
+
+/*
+ * brief : Select one icon and update UI states.
+ * input : next_index - target icon index.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_select_icon(uint32_t next_index) {
+    if (next_index >= DESKTOP_ICON_COUNT) {
+        return;
+    }
+
+    if (s_icon_op.switching == (int)next_index) {
+        s_icon_op.sel_timout = 0U;
+        return;
+    }
+
+    if ((s_icon_op.switching >= 0) && ((uint32_t)s_icon_op.switching < DESKTOP_ICON_COUNT)) {
+        _desktop_set_icon_state((uint32_t)s_icon_op.switching, false);
+    }
+
+    s_icon_op.switching = (int)next_index;
+    s_icon_op.sel_timout = 0U;
+    _desktop_set_icon_state(next_index, true);
+}
+
+/*
+ * brief : Destroy currently active sub-UI and reset runtime flags.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_destroy_active_ui(void) {
+    if (!s_icon_op.ui_active) {
+        return;
+    }
+
+    if (s_icon_op.active_ui_index < DESKTOP_ICON_COUNT) {
+        const desktop_icon_s* icon = &s_desktop_icons[s_icon_op.active_ui_index];
+        if ((icon->destroy_screen != NULL) && _desktop_obj_valid(s_icon_op.active_ui_root)) {
+            icon->destroy_screen(s_icon_op.active_ui_root);
+            s_icon_op.active_ui_root = NULL;
+        } else {
+            _desktop_del_obj(&s_icon_op.active_ui_root);
+        }
+    } else {
+        _desktop_del_obj(&s_icon_op.active_ui_root);
+    }
+
+    s_icon_op.ui_active = false;
+    s_icon_op.active_ui_index = 0xFFu;
+    s_home_request_pending = false;
+}
+
+/*
+ * brief : Receive home request callback from active sub-menu task.
+ * input : user_ctx - callback context, unused.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_request_home_callback(void* user_ctx) {
+    (void)user_ctx;
+    s_home_request_pending = true;
+}
+
+/*
+ * brief : Leave active sub-UI and restore desktop screen.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_leave_subui(void) {
+    if (!s_icon_op.ui_active) {
+        return;
+    }
+
+    _desktop_destroy_active_ui();
+
+    if (!_desktop_set_grid_hidden(false)) {
+        _desktop_rebuild_home_content();
+    }
+
+    _desktop_clear_icon_switching();
+}
+
+/*
+ * brief : Enter selected icon sub-UI by dispatching to registered module entry.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_enter_selected_ui(void) {
+    if (s_icon_op.ui_active) {
+        return;
+    }
+    if ((s_icon_op.switching < 0) || ((uint32_t)s_icon_op.switching >= DESKTOP_ICON_COUNT)) {
+        return;
+    }
+
+    if (!_desktop_obj_valid(s_icon_op.content_area)) {
+        return;
+    }
+
+    uint32_t ui_index = (uint32_t)s_icon_op.switching;
+
+    const desktop_icon_s* icon = &s_desktop_icons[ui_index];
+    if (icon->create_screen == NULL) {
+        ESP_LOGE(TAG, "sub-ui create missing, index=%u", (unsigned)ui_index);
+        return;
+    }
+
+    lv_coord_t area_w = lv_obj_get_width(s_icon_op.content_area);
+    lv_coord_t area_h = lv_obj_get_height(s_icon_op.content_area);
+
+    _desktop_set_grid_hidden(true);
+
+    lv_obj_t* ui_root = icon->create_screen(s_icon_op.content_area, area_w, area_h,
+                                            _desktop_request_home_callback, NULL);
+    if (!_desktop_obj_valid(ui_root)) {
+        _desktop_set_grid_hidden(false);
+        ESP_LOGE(TAG, "sub-ui create failed, index=%u", (unsigned)ui_index);
+        return;
+    }
+
+    s_icon_op.active_ui_root = ui_root;
+    s_icon_op.ui_active = true;
+    s_icon_op.active_ui_index = (uint8_t)ui_index;
+    s_home_request_pending = false;
+    _desktop_clear_icon_switching();
+}
+
+/*
+ * brief : Handle icon selection movement and timeout by key event.
+ * input : btn_val - keyboard scan result.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_active_icons(btn_status_e btn_val) {
+    bool is_up = (btn_val == Btn_Up_Click);
+    bool is_down = (btn_val == Btn_Down_Click);
+    bool is_enter_hold = (btn_val == Btn_Up_Hold_Enter) || (btn_val == Btn_Down_Hold_Enter) ||
+                         (btn_val == Btn_Both_Hold_Enter);
+
+    if (is_enter_hold) {
+        _desktop_enter_selected_ui();
+        return;
+    }
+
+    if (is_up || is_down) {
+        int next_index = s_icon_op.switching;
+        int step = is_up ? -1 : 1;
+
+        if (next_index < 0) {
+            next_index = is_up ? ((int)DESKTOP_ICON_COUNT - 1) : 0;
+        } else {
+            next_index += step;
+            if (next_index < 0) {
+                next_index = (int)DESKTOP_ICON_COUNT - 1;
+            } else if (next_index >= (int)DESKTOP_ICON_COUNT) {
+                next_index = 0;
+            }
+        }
+
+        _desktop_select_icon((uint32_t)next_index);
+        return;
+    }
+
+    if (s_icon_op.switching < 0) {
+        return;
+    }
+
+    if (btn_val != Btn_Idle) {
+        s_icon_op.sel_timout = 0U;
+        return;
+    }
+
+    s_icon_op.sel_timout += LVGL_TASK_PERIOD_MS;
+    if (s_icon_op.sel_timout >= DESKTOP_ICON_SELECT_TIMEOUT_MS) {
+        _desktop_clear_icon_switching();
+    }
+}
+
+static bool _is_leave_desktop(void) {
+    if (!s_icon_op.ui_active) {
+        return false;
+    }
+
+    if (s_home_request_pending) {
+        _desktop_leave_subui();
+    }
+
+    return s_icon_op.ui_active;
+}
+
+/*
  * brief : Main desktop LVGL task loop.
  * input : param - unused task parameter.
  * output: none.
@@ -234,10 +638,19 @@ static esp_err_t _desktop_lvgl_init(void) {
  */
 static void _desktop_lvgl_task(void* param) {
     (void)param;
+    btn_scan_s btn = {0};
+    btn_status_e btn_val;
 
     while (1) {
         lv_timer_handler();
-        vTaskDelay(pdMS_TO_TICKS(LVGL_TASK_PERIOD_MS));
+        delay_ms(LVGL_TASK_PERIOD_MS);
+
+        if (_is_leave_desktop()) {
+            continue;
+        }
+
+        btn_val = button_scan_state(&btn, LVGL_TASK_PERIOD_MS);
+        _desktop_active_icons(btn_val);
     }
 }
 
@@ -248,7 +661,7 @@ static void _desktop_lvgl_task(void* param) {
  * type  : public
  */
 lv_obj_t* desktop_get_cpu_label(void) {
-    if ((s_cpu_label != NULL) && lv_obj_is_valid(s_cpu_label)) {
+    if (_desktop_obj_valid(s_cpu_label)) {
         return s_cpu_label;
     }
     return NULL;
@@ -261,7 +674,7 @@ lv_obj_t* desktop_get_cpu_label(void) {
  * type  : public
  */
 lv_obj_t* desktop_get_net_label(void) {
-    if ((s_net_label != NULL) && lv_obj_is_valid(s_net_label)) {
+    if (_desktop_obj_valid(s_net_label)) {
         return s_net_label;
     }
     return NULL;
@@ -278,7 +691,12 @@ void desktop_return_to_home(void) {
         return;
     }
 
-    if ((s_desktop_screen != NULL) && lv_obj_is_valid(s_desktop_screen)) {
+    if (s_icon_op.ui_active) {
+        _desktop_leave_subui();
+        return;
+    }
+
+    if (_desktop_obj_valid(s_desktop_screen)) {
         lv_scr_load(s_desktop_screen);
     }
 }
@@ -289,10 +707,9 @@ void desktop_return_to_home(void) {
  * output: ESP_OK on success; otherwise propagated startup error.
  * type  : public
  */
-esp_err_t desktop_start(void) {
-#if 1
+esp_err_t desktop_start_task(void) {
     if (s_desktop_started) {
-        ESP_LOGI(DESKTOP_APP_TAG, "desktop already started");
+        ESP_LOGI(TAG, "desktop already started");
         return ESP_OK;
     }
 
@@ -311,28 +728,10 @@ esp_err_t desktop_start(void) {
     BaseType_t task_ok =
         xTaskCreate(_desktop_lvgl_task, "desktop_lvgl", 10240, NULL, 5, &s_lv_task_handle);
     if (task_ok != pdPASS) {
-        ESP_LOGE(DESKTOP_APP_TAG, "xTaskCreate desktop_lvgl failed");
+        ESP_LOGE(TAG, "xTaskCreate desktop_lvgl failed");
         return ESP_FAIL;
     }
 
     s_desktop_started = true;
-#else
-    esp_err_t ret = _desktop_prepare_monitor();
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    ret = st7365p_set_window(0, 0, (uint16_t)(s_lcd_width - 1U), (uint16_t)(s_lcd_height - 1U));
-    if (ret != ESP_OK) {
-        ESP_LOGE(DESKTOP_APP_TAG, "st7365p_set_window failed: %d", (int)ret);
-        return ret;
-    }
-
-    ret = st7365p_fill_color(RGB565_RED, (uint32_t)s_lcd_width * (uint32_t)s_lcd_height);
-    if (ret != ESP_OK) {
-        ESP_LOGE(DESKTOP_APP_TAG, "st7365p_fill_color failed: %d", (int)ret);
-        return ret;
-    }
-#endif
     return ESP_OK;
 }

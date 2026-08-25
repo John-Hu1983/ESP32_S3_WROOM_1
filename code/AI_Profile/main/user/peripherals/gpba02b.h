@@ -58,6 +58,9 @@ extern "C" {
 #define GPBA02B_PWMCK_PA_DIV_MASK (0x70u)
 #define GPBA02B_PWMCK_PC_DIV_MASK (0x07u)
 
+#define GPBA02B_PWM_PERIOD_STEPS (256u)
+#define GPBA02B_PWM_DUTY_PERCENT_MAX (100u)
+
 typedef enum {
     GPBA02B_PORT_A = 0,
     GPBA02B_PORT_B,
@@ -197,6 +200,13 @@ esp_err_t gpba02b_set_device_id(uint8_t device_bit);
  * type  : public
  */
 uint8_t gpba02b_get_device_id(void);
+/*
+ * brief : Read full 8-bit data value from one port.
+ * input : port - target port; value - output data pointer.
+ * output: ESP_OK on success; otherwise error code.
+ * type  : public
+ */
+esp_err_t gpba02b_port_read(gpba02b_port_t port, uint8_t* value);
 
 #ifdef __cplusplus
 }

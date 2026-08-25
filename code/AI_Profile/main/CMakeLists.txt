@@ -13,12 +13,6 @@ set(SOURCES "audio/audio_codec.cc"
             "led/single_led.cc"
             "led/circular_strip.cc"
             "led/gpio_led.cc"
-            "user/peripherals/gpba02b.c"
-            "user/apps/background_thread.c"
-            "user/peripherals/bsp_global.c"
-            "user/peripherals/st7365p.c"
-            "user/desktop/desktop_common.c"
-            "user/desktop/desktop_app.c"
             "display/display.cc"
             "display/text_glyph.cc"
             "display/lcd_display.cc"
@@ -47,6 +41,17 @@ set(SOURCES "audio/audio_codec.cc"
             "assets.cc"
             "main.cc"
             )
+
+    # Auto-collect user module sources to avoid manual CMake maintenance.
+    # ESP-IDF requirement scan runs in script mode, so avoid CONFIGURE_DEPENDS here.
+    file(GLOB_RECURSE USER_SOURCES
+        RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+        "user/*.c"
+        "user/*.cc"
+        "user/*.cpp"
+    )
+    list(SORT USER_SOURCES)
+    list(APPEND SOURCES ${USER_SOURCES})
 
 set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols" "user" "user/peripherals" "user/desktop")
 

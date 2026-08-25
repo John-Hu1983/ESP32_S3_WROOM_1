@@ -1,10 +1,20 @@
 #pragma once
 
-#include "lvgl.h"
+#include "user/desktop/desktop_app.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define TOOLS_UI_TASK_STACK_SIZE (4096U)
+#define TOOLS_UI_TASK_PERIOD_MS (10U)
+
+typedef struct {
+	TaskHandle_t task_handle;
+	ui_menu_home_cb_t home_cb;
+	void* home_user_ctx;
+	btn_scan_s button_scan;
+} tools_ui_runtime_s;
 
 /*
  * brief : Create the tools page root screen object.
@@ -12,7 +22,9 @@ extern "C" {
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* tools_create_screen(lv_coord_t lcd_w, lv_coord_t lcd_h);
+lv_obj_t* tools_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+							  ui_menu_home_cb_t home_cb, void* home_user_ctx);
+void tools_destroy_screen(lv_obj_t* screen);
 
 #ifdef __cplusplus
 }

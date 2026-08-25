@@ -38,6 +38,17 @@ static void _bsp_init_button(void) {
 }
 
 /*
+ * brief: Delay execution for at least the requested millisecond duration.
+ * input: ms - delay time in milliseconds.
+ * output: None.
+ */
+void delay_ms(uint32_t ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(ms) < 1 ? 1 : pdMS_TO_TICKS(ms);
+    vTaskDelay(ticks);
+}
+
+/*
  * brief : Enable or disable audio power-control GPIOs.
  * input : enable - true to enable audio hardware, false to disable.
  * output: none.
@@ -81,6 +92,6 @@ void bsp_init_total(void) {
     _bsp_init_pwm(GPBA02B_PORT_C, 1, GPBA02B_PWM_FREQ_1343HZ_DIV32, 12);
     _bsp_init_button();
     bsp_reset_lcd();
-    desktop_start();
+    desktop_start_task();
     bg_start_task(desktop_get_cpu_label(), desktop_get_net_label());
 }

@@ -3,8 +3,6 @@
 #include <esp_log.h>
 
 #define TAG "gpba02b"
-#define GPBA02B_PWM_PERIOD_STEPS (256u)
-#define GPBA02B_PWM_DUTY_PERCENT_MAX (100u)
 
 static gpba02b_ctx_t s_ctx;
 
@@ -779,4 +777,18 @@ esp_err_t gpba02b_set_device_id(uint8_t device_bit) {
  * type  : public
  */
 uint8_t gpba02b_get_device_id(void) { return s_ctx.device_bit; }
+
+/*
+ * brief : Read full 8-bit data value from one GPBA02B port.
+ * input : port - target port; value - output data pointer.
+ * output: ESP_OK on success; error code on invalid argument or transport failure.
+ * type  : public
+ */
+esp_err_t gpba02b_port_read(gpba02b_port_t port, uint8_t* value) {
+    if (value == NULL || !_gpba02b_chk_port(port)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return _gpba02b_read_reg(_gpba02b_get_data(port), value);
+}
 

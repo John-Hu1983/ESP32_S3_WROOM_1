@@ -13,13 +13,6 @@
 
 #define TAG "background_thread"
 
-#define BACKGROUND_TASK_STACK_SIZE (4096U)
-#define BACKGROUND_TASK_PRIORITY (4U)
-#define BACKGROUND_TASK_PERIOD_MS (100U)
-#define BACKGROUND_LABEL_UPDATE_PERIOD_MS (1000U)
-#define BACKGROUND_STATUS_TEXT_LEN (32U)
-#define BACKGROUND_NET_ICON_LEN (8U)
-
 static TaskHandle_t s_background_task_handle;
 static lv_obj_t* s_top_bar_status_label;
 static lv_obj_t* s_top_bar_net_label;

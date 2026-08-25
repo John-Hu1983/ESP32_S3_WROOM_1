@@ -12,13 +12,14 @@ extern "C" {
 
 typedef struct _lv_obj_t lv_obj_t;
 
+void delay_ms(uint32_t ms);
 /*
  * brief : Start desktop app runtime.
  * input : none.
  * output: ESP_OK on success; otherwise error code.
  * type  : public
  */
-esp_err_t desktop_start(void);
+esp_err_t desktop_start_task(void);
 /*
  * brief : Get top-bar CPU status label handle.
  * input : none.

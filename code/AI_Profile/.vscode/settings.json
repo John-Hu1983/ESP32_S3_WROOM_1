@@ -4,6 +4,8 @@
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
     "files.exclude": {
         ".github": true,
+        "build": true,
+        "managed_components": true,
         "main/boards/alientek": true,
         "main/boards/bread-compact-esp32": true,
         "main/boards/bread-compact-esp32-lcd": true,
