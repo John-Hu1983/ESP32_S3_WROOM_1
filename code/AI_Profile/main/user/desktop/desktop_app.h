@@ -23,9 +23,26 @@ extern "C" {
 #define LVGL_TASK_PERIOD_MS (10U)
 #define LVGL_DRAW_BUF_LINES (72U)
 
+#define DESKTOP_APP_TAG "desktop"
+
+#define DESKTOP_TOP_BAR_HEIGHT (26U)
+#define DESKTOP_BOTTOM_BAR_HEIGHT (26U)
+#define DESKTOP_TOOLBAR_COLOR_HEX (0x87CEEBU)
+
 #define DESKTOP_ICON_COLS (3U)
 #define DESKTOP_ICON_ROWS (4U)
 #define DESKTOP_ICON_COUNT (DESKTOP_ICON_COLS * DESKTOP_ICON_ROWS)
+
+#define DESKTOP_MARGIN_X (4U)
+#define DESKTOP_MARGIN_Y (4U)
+#define DESKTOP_ICON_GAP_X (8U)
+#define DESKTOP_ICON_GAP_Y (8U)
+
+typedef struct {
+    const char* symbol;
+    const char* name;
+    uint32_t color_hex;
+} desktop_icon_s;
 
 /* Initialize ST7365 panel, start LVGL task, and create desktop UI. */
 esp_err_t desktop_app_start(void);

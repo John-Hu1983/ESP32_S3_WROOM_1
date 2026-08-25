@@ -4,7 +4,7 @@
 #include <driver/gpio.h>
 
 #define AUDIO_INPUT_SAMPLE_RATE 16000
-#define AUDIO_OUTPUT_SAMPLE_RATE 24000
+#define AUDIO_OUTPUT_SAMPLE_RATE 16000
 
 /*
     power control
@@ -34,8 +34,9 @@
 #define LCD_IO_RESET_PIN (5)
 #define LCD_DEFAULT_WIDTH (320)
 #define LCD_DEFAULT_HEIGHT (480)
-#define LCD_DEFAULT_MADCTL (0x48)
-#define LCD_DEFAULT_INVERT_COLOR (false)
+#define LCD_DEFAULT_MADCTL (0x88)
+#define LCD_DEFAULT_COLMOD (0x55)
+#define LCD_DEFAULT_INVERT_COLOR (1)
 
 /*
 PDM

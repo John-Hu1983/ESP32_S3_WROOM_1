@@ -11,6 +11,17 @@ extern "C" {
 
 #define DESKTOP_COMMON_LVGL_TICK_PERIOD_MS (10U)
 
+#define RGB565_BLACK (0x0000U)
+#define RGB565_WHITE (0xFFFFU)
+#define RGB565_RED (0xF800U)
+#define RGB565_GREEN (0x07E0U)
+#define RGB565_BLUE (0x001FU)
+#define RGB565_YELLOW (0xFFE0U)
+#define RGB565_CYAN (0x07FFU)
+#define RGB565_MAGENTA (0xF81FU)
+#define RGB565_ORANGE (0xFD20U)
+#define RGB565_GRAY (0x8410U)
+
 /* Advance LVGL internal time base by one desktop tick period. */
 void desktop_common_lvgl_tick_cb(void* arg);
 /* Flush one LVGL dirty area to the ST7365 panel driver. */

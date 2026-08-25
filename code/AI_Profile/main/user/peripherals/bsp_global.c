@@ -19,6 +19,14 @@ static void bsp_config_button_gpio(void) {
     gpba02b_set_io_mode(BUTTON_DOWN_IO_PORT, BUTTON_DOWN_IO_PIN, GPBA02B_IO_STYLE_INPUT_PULL_HIGH);
 }
 
+void bsp_set_audio_permission(bool enable) {
+    gpba02b_set_io_mode(PDM_ENABLE_PORT, PDM_ENABLE_PIN, GPBA02B_IO_STYLE_OUTPUT_CMOS);
+    gpba02b_write_io_level(PDM_ENABLE_PORT, PDM_ENABLE_PIN, enable ? 1 : 0);
+
+    gpba02b_set_io_mode(I2S_ENABLE_PORT, I2S_ENABLE_PIN, GPBA02B_IO_STYLE_OUTPUT_CMOS);
+    gpba02b_write_io_level(I2S_ENABLE_PORT, I2S_ENABLE_PIN, enable ? 1 : 0);
+}
+
 void bsp_lcd_reset_sequence(void) {
     gpba02b_set_io_mode(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, GPBA02B_IO_STYLE_OUTPUT_CMOS);
     gpba02b_write_io_level(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, 1);
@@ -33,8 +41,9 @@ void bsp_init_total(void) {
     ESP_LOGI(TAG, "Initializing BSP...");
     ESP_ERROR_CHECK(gpba02b_init_object());
     bsp_set_power_lock(true);
+    bsp_set_audio_permission(true);
     bsp_start_pwm_default(GPBA02B_PORT_C, 1, GPBA02B_PWM_FREQ_1343HZ_DIV32, 12);
     bsp_config_button_gpio();
     bsp_lcd_reset_sequence();
-    ESP_ERROR_CHECK(desktop_app_start());
+    desktop_app_start();
 }

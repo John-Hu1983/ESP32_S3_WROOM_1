@@ -276,8 +276,16 @@ void st7365p_get_default_cfg(st7365p_cfg_t* cfg) {
     cfg->x_offset = 0;
     cfg->y_offset = 0;
     cfg->madctl = LCD_DEFAULT_MADCTL;
+#ifdef LCD_DEFAULT_COLMOD
+    cfg->colmod = LCD_DEFAULT_COLMOD;
+#else
     cfg->colmod = 0x55;
-    cfg->invert_color = LCD_DEFAULT_INVERT_COLOR;
+#endif
+#ifdef LCD_DEFAULT_INVERT_COLOR
+    cfg->invert_color = (LCD_DEFAULT_INVERT_COLOR != 0);
+#else
+    cfg->invert_color = false;
+#endif
 }
 
 /*
