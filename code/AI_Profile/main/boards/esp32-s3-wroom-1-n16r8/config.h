@@ -2,7 +2,6 @@
 #define _BOARD_CONFIG_H_
 
 #include <driver/gpio.h>
-#include "lvgl.h"
 
 #define AUDIO_INPUT_SAMPLE_RATE 16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 16000
@@ -42,8 +41,8 @@
 /*
     desktop ui font
 */
-#define DESKTOP_TEXT_FONT font_noto_sans_basic_20_4
-#define CPU_LABEL_FONT lv_font_montserrat_14
+#define DESKTOP_TEXT_FONT font_noto_sans_basic_16_4
+#define DESKTOP_SYMBOL_FONT font_material_symbols_16_4
 
 /*
 PDM
