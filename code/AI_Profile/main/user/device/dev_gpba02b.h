@@ -114,98 +114,26 @@ typedef struct {
 
 extern gpba02b_config_t g_gpba02b_config;
 
-/*
- * brief : Initialize GPBA02B driver object and SPI device.
- * input : none.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_init_object(void);
-/*
- * brief : Deinitialize GPBA02B driver object and release SPI resources.
- * input : none.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_deinit(void);
 
-/*
- * brief : Configure GPIO mode by port, pin, and IO style.
- * input : port - target port; pin - target pin; style - IO style.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_set_io_mode(gpba02b_port_t port, uint8_t pin, gpba02b_io_style_t style);
 
-/*
- * brief : Read GPIO level from one pin.
- * input : port - target port; pin - target pin; level - output level pointer.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_read_io_level(gpba02b_port_t port, uint8_t pin, uint8_t* level);
 
-/*
- * brief : Write GPIO level to one pin.
- * input : port - target port; pin - target pin; level - logic level.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level);
 
-/*
- * brief : Configure one pin into PWM mode.
- * input : port - target PWM port; pin - target PWM pin.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin);
 
-/*
- * brief : Set PWM base frequency for one port.
- * input : port - target PWM port; frequency - frequency enum.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t frequency);
 
-/*
- * brief : Set PWM duty percent for one pin.
- * input : port - target PWM port; pin - target PWM pin; duty_percent - 0..100.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent);
 
-/*
- * brief : Read one raw GPBA02B register.
- * input : reg - register address; value - output value pointer.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_read_register(uint8_t reg, uint8_t* value);
 
-/*
- * brief : Update command device-id bit at runtime.
- * input : device_bit - valid values are 0 or 1.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_set_device_id(uint8_t device_bit);
 
-/*
- * brief : Query current command device-id bit.
- * input : none.
- * output: Device-id bit value.
- * type  : public
- */
 uint8_t gpba02b_get_device_id(void);
-/*
- * brief : Read full 8-bit data value from one port.
- * input : port - target port; value - output data pointer.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t gpba02b_port_read(gpba02b_port_t port, uint8_t* value);
 
 #ifdef __cplusplus

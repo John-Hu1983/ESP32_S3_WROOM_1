@@ -4,6 +4,12 @@
 
 static camera_ui_runtime_s s_camera_runtime;
 
+/*
+ * brief : _camera_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _camera_ui_task(void* param) {
     camera_ui_runtime_s* runtime = (camera_ui_runtime_s*)param;
 
@@ -60,6 +66,12 @@ lv_obj_t* camera_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t a
     return screen;
 }
 
+/*
+ * brief : camera_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void camera_destroy_screen(lv_obj_t* screen) {
     if (s_camera_runtime.task_handle != NULL) {
         vTaskDelete(s_camera_runtime.task_handle);

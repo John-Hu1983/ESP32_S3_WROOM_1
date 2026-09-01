@@ -4,6 +4,12 @@
 
 static mic_ui_runtime_s s_mic_runtime;
 
+/*
+ * brief : _mic_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _mic_ui_task(void* param) {
     mic_ui_runtime_s* runtime = (mic_ui_runtime_s*)param;
 
@@ -59,6 +65,12 @@ lv_obj_t* mic_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area
     return screen;
 }
 
+/*
+ * brief : mic_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void mic_destroy_screen(lv_obj_t* screen) {
     if (s_mic_runtime.task_handle != NULL) {
         vTaskDelete(s_mic_runtime.task_handle);

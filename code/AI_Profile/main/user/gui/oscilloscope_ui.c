@@ -4,6 +4,12 @@
 
 static scope_ui_runtime_s s_scope_runtime;
 
+/*
+ * brief : _scope_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _scope_ui_task(void* param) {
     scope_ui_runtime_s* runtime = (scope_ui_runtime_s*)param;
 
@@ -60,6 +66,12 @@ lv_obj_t* scope_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
     return screen;
 }
 
+/*
+ * brief : scope_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void scope_destroy_screen(lv_obj_t* screen) {
     if (s_scope_runtime.task_handle != NULL) {
         vTaskDelete(s_scope_runtime.task_handle);

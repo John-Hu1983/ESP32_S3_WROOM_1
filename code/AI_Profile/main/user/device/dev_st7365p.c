@@ -1,4 +1,4 @@
-#include "st7365p.h"
+#include "dev_st7365p.h"
 
 #define TAG "ST7365P"
 

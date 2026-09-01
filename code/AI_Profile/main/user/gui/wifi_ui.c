@@ -4,6 +4,12 @@
 
 static wifi_ui_runtime_s s_wifi_runtime;
 
+/*
+ * brief : _wifi_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _wifi_ui_task(void* param) {
     wifi_ui_runtime_s* runtime = (wifi_ui_runtime_s*)param;
 
@@ -59,6 +65,12 @@ lv_obj_t* wifi_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t are
     return screen;
 }
 
+/*
+ * brief : wifi_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void wifi_destroy_screen(lv_obj_t* screen) {
     if (s_wifi_runtime.task_handle != NULL) {
         vTaskDelete(s_wifi_runtime.task_handle);

@@ -53,7 +53,7 @@ set(SOURCES "audio/audio_codec.cc"
     list(SORT USER_SOURCES)
     list(APPEND SOURCES ${USER_SOURCES})
 
-set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols" "user" "user/peripherals" "user/desktop")
+set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols" "user" "user/device" "user/desktop")
 
 # Add board common files
 list(APPEND SOURCES

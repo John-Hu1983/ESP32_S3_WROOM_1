@@ -4,6 +4,12 @@
 
 static gallery_ui_runtime_s s_gallery_runtime;
 
+/*
+ * brief : _gallery_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _gallery_ui_task(void* param) {
     gallery_ui_runtime_s* runtime = (gallery_ui_runtime_s*)param;
 
@@ -60,6 +66,12 @@ lv_obj_t* gallery_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t 
     return screen;
 }
 
+/*
+ * brief : gallery_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void gallery_destroy_screen(lv_obj_t* screen) {
     if (s_gallery_runtime.task_handle != NULL) {
         vTaskDelete(s_gallery_runtime.task_handle);

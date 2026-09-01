@@ -15,7 +15,7 @@
 #include "lvgl.h"
 
 #include "user/inc/user_config.h"
-#include "user/peripherals/st7365p.h"
+#include "user/device/dev_st7365p.h"
 
 #include "user/device/dev_button.h"
 
@@ -99,55 +99,13 @@ typedef struct {
     lv_obj_t* active_ui_root;
 } desktop_icon_op_s;
 
-/*
- * brief : Advance LVGL internal time base by one desktop tick period.
- * input : arg - unused timer callback argument.
- * output: none.
- * type  : public
- */
 void desktop_tick_event(void* arg);
-/*
- * brief : Flush one LVGL dirty area to the ST7365 panel driver.
- * input : disp - LVGL display; area - dirty region; px_map - pixel buffer.
- * output: none.
- * type  : public
- */
 void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map);
-/*
- * brief : Generate a high-contrast inverse color for selected-state rendering.
- * input : color - source color.
- * output: Inverted color value.
- * type  : public
- */
 lv_color_t desktop_invert_color(lv_color_t color);
 
-/*
- * brief : Initialize ST7365 panel, start LVGL task, and create desktop UI.
- * input : none.
- * output: ESP_OK on success; otherwise error code.
- * type  : public
- */
 esp_err_t desktop_start_task(void);
-/*
- * brief : Return to desktop main screen.
- * input : none.
- * output: none.
- * type  : public
- */
 void desktop_return_to_home(void);
-/*
- * brief : Get left status label handle in the desktop top bar.
- * input : none.
- * output: LVGL object handle or NULL.
- * type  : public
- */
 lv_obj_t* desktop_get_cpu_label(void);
-/*
- * brief : Get network icon label handle in the desktop top bar.
- * input : none.
- * output: LVGL object handle or NULL.
- * type  : public
- */
 lv_obj_t* desktop_get_net_label(void);
 
 #ifdef __cplusplus

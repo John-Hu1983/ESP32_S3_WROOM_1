@@ -15,7 +15,7 @@
 #include "lvgl.h"
 
 #include "user/inc/user_config.h"
-#include "user/peripherals/st7365p.h"
+#include "user/device/dev_st7365p.h"
 
 #define KEYBOARD_CLICK_DEBOUNCE_MS (20)
 #define KEYBOARD_HOLD_MS (800U)
@@ -46,6 +46,12 @@ typedef enum {
     Btn_Level_Down,
     Btn_Level_Both,
 } btn_level_e;
+
+typedef enum {
+    scan_step_enter = 0,
+    scan_step_debounce,
+    scan_step_hold,
+} btn_scan_step_e;
 
 typedef struct {
     btn_level_e prev_level;

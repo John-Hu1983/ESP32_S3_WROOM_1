@@ -1,5 +1,6 @@
 #include "desktop_app.h"
 
+#include "user/gui/about_ui.h"
 #include "user/gui/bt_ui.h"
 #include "user/gui/camera_ui.h"
 #include "user/gui/file_ui.h"
@@ -8,9 +9,8 @@
 #include "user/gui/music_ui.h"
 #include "user/gui/oscilloscope_ui.h"
 #include "user/gui/pidm_ui.h"
-#include "user/gui/about_ui.h"
+#include "user/gui/rfid_ui.h"
 #include "user/gui/setting_ui.h"
-#include "user/gui/tools_ui.h"
 #include "user/gui/wifi_ui.h"
 
 #define TAG "desktop"
@@ -25,7 +25,7 @@ static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
     {LV_SYMBOL_FILE, "File", 0xE19A35, file_create_screen, file_destroy_screen},
     {LV_SYMBOL_VOLUME_MAX, "Mic", 0x8F6745, mic_create_screen, mic_destroy_screen},
     {LV_SYMBOL_BELL, "PIDM", 0xC23B4A, pidm_create_screen, pidm_destroy_screen},
-    {LV_SYMBOL_REFRESH, "Tools", 0x8A3D5D, tools_create_screen, tools_destroy_screen},
+    {LV_SYMBOL_REFRESH, "RFID", 0x8A3D5D, rfid_create_screen, rfid_destroy_screen},
     {LV_SYMBOL_SETTINGS, "Setting", 0xA8703A, setting_create_screen, setting_destroy_screen},
     {LV_SYMBOL_WARNING, "About", 0x6F4A34, about_create_screen, about_destroy_screen},
 };
@@ -45,8 +45,20 @@ static bool s_desktop_started;
 static bool s_lvgl_ready;
 static volatile bool s_home_request_pending;
 
+/*
+ * brief : _desktop_obj_valid.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static bool _desktop_obj_valid(lv_obj_t* obj) { return (obj != NULL) && lv_obj_is_valid(obj); }
 
+/*
+ * brief : _desktop_del_obj.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _desktop_del_obj(lv_obj_t** obj) {
     if ((obj != NULL) && _desktop_obj_valid(*obj)) {
         lv_obj_del(*obj);
@@ -57,6 +69,12 @@ static void _desktop_del_obj(lv_obj_t** obj) {
     }
 }
 
+/*
+ * brief : _desktop_set_grid_hidden.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static bool _desktop_set_grid_hidden(bool hidden) {
     if (!_desktop_obj_valid(s_icon_op.desktop_grid)) {
         return false;
@@ -618,6 +636,12 @@ static void _desktop_active_icons(btn_status_e btn_val) {
     }
 }
 
+/*
+ * brief : _is_leave_desktop.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static bool _is_leave_desktop(void) {
     if (!s_icon_op.ui_active) {
         return false;

@@ -16,12 +16,6 @@ typedef struct {
 	btn_scan_s button_scan;
 } wifi_ui_runtime_s;
 
-/*
- * brief : Create the Wi-Fi page root screen object.
- * input : lcd_w - LCD width; lcd_h - LCD height.
- * output: Created LVGL screen object.
- * type  : public
- */
 lv_obj_t* wifi_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
 							 ui_menu_home_cb_t home_cb, void* home_user_ctx);
 void wifi_destroy_screen(lv_obj_t* screen);

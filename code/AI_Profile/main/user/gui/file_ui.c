@@ -4,6 +4,12 @@
 
 static file_ui_runtime_s s_file_runtime;
 
+/*
+ * brief : _file_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _file_ui_task(void* param) {
     file_ui_runtime_s* runtime = (file_ui_runtime_s*)param;
 
@@ -59,6 +65,12 @@ lv_obj_t* file_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t are
     return screen;
 }
 
+/*
+ * brief : file_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void file_destroy_screen(lv_obj_t* screen) {
     if (s_file_runtime.task_handle != NULL) {
         vTaskDelete(s_file_runtime.task_handle);

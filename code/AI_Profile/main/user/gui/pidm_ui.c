@@ -4,6 +4,12 @@
 
 static pidm_ui_runtime_s s_pidm_runtime;
 
+/*
+ * brief : _pidm_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _pidm_ui_task(void* param) {
     pidm_ui_runtime_s* runtime = (pidm_ui_runtime_s*)param;
 
@@ -59,6 +65,12 @@ lv_obj_t* pidm_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t are
     return screen;
 }
 
+/*
+ * brief : pidm_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void pidm_destroy_screen(lv_obj_t* screen) {
     if (s_pidm_runtime.task_handle != NULL) {
         vTaskDelete(s_pidm_runtime.task_handle);

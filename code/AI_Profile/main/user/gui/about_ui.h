@@ -43,21 +43,9 @@ typedef struct {
     about_task_row_s task_rows[ABOUT_TASKLIST_MAX_ROWS];
 } about_ui_runtime_s;
 
-/*
- * brief : Create the about page root screen object.
- * input : parent - parent object; area_w - content width; area_h - content height.
- * output: Created LVGL container for the about page.
- * type  : public
- */
 lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                               ui_menu_home_cb_t home_cb, void* home_user_ctx);
 
-/*
- * brief : Destroy the about page screen and its runtime task.
- * input : screen - about page root object.
- * output: none.
- * type  : public
- */
 void about_destroy_screen(lv_obj_t* screen);
 
 #ifdef __cplusplus

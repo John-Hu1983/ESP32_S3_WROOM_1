@@ -13,8 +13,20 @@
 static about_ui_runtime_s s_about_runtime;
 static portMUX_TYPE s_about_lock = portMUX_INITIALIZER_UNLOCKED;
 
+/*
+ * brief : _about_obj_valid.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static bool _about_obj_valid(lv_obj_t* obj) { return (obj != NULL) && lv_obj_is_valid(obj); }
 
+/*
+ * brief : _about_task_state_name.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static const char* _about_task_state_name(eTaskState state) {
     switch (state) {
         case eRunning:
@@ -34,6 +46,12 @@ static const char* _about_task_state_name(eTaskState state) {
 }
 
 #if (configUSE_TRACE_FACILITY == 1)
+/*
+ * brief : _about_collect_task_snapshot.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static bool _about_collect_task_snapshot(about_task_row_s* rows, uint16_t* row_count,
                                          uint64_t* total_runtime, uint64_t* idle_runtime) {
     if ((rows == NULL) || (row_count == NULL) || (total_runtime == NULL) ||
@@ -95,6 +113,12 @@ static bool _about_collect_task_snapshot(about_task_row_s* rows, uint16_t* row_c
     return true;
 }
 
+/*
+ * brief : _about_read_cpu_usage.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static uint8_t _about_read_cpu_usage(uint64_t total_runtime, uint64_t idle_runtime) {
     static bool has_prev_sample;
     static uint64_t prev_total_runtime;
@@ -130,6 +154,12 @@ static uint8_t _about_read_cpu_usage(uint64_t total_runtime, uint64_t idle_runti
     return (uint8_t)percent;
 }
 #else
+/*
+ * brief : _about_collect_task_snapshot.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static bool _about_collect_task_snapshot(about_task_row_s* rows, uint16_t* row_count,
                                          uint64_t* total_runtime, uint64_t* idle_runtime) {
     (void)rows;
@@ -142,6 +172,12 @@ static bool _about_collect_task_snapshot(about_task_row_s* rows, uint16_t* row_c
     return false;
 }
 
+/*
+ * brief : _about_read_cpu_usage.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
 static uint8_t _about_read_cpu_usage(uint64_t total_runtime, uint64_t idle_runtime) {
     (void)total_runtime;
     (void)idle_runtime;
@@ -149,6 +185,12 @@ static uint8_t _about_read_cpu_usage(uint64_t total_runtime, uint64_t idle_runti
 }
 #endif
 
+/*
+ * brief : _about_format_mem_value.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _about_format_mem_value(char* out, size_t out_len, uint32_t caps) {
     size_t total = heap_caps_get_total_size(caps);
     if (total == 0U) {
@@ -167,6 +209,12 @@ static void _about_format_mem_value(char* out, size_t out_len, uint32_t caps) {
              (unsigned)(total / 1024U), (unsigned)percent);
 }
 
+/*
+ * brief : _about_sync_ui.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _about_sync_ui(void* param) {
     about_ui_runtime_s* runtime = (about_ui_runtime_s*)param;
     if (runtime == NULL) {
@@ -246,6 +294,12 @@ static void _about_sync_ui(void* param) {
     }
 }
 
+/*
+ * brief : _about_refresh_info.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _about_refresh_info(about_ui_runtime_s* runtime) {
     about_task_row_s rows[ABOUT_TASKLIST_MAX_ROWS] = {0};
     uint16_t row_count = 0U;
@@ -277,6 +331,12 @@ static void _about_refresh_info(about_ui_runtime_s* runtime) {
     }
 }
 
+/*
+ * brief : _about_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _about_ui_task(void* param) {
     about_ui_runtime_s* runtime = (about_ui_runtime_s*)param;
     uint32_t refresh_elapsed_ms = ABOUT_REFRESH_PERIOD_MS;
@@ -297,6 +357,12 @@ static void _about_ui_task(void* param) {
     }
 }
 
+/*
+ * brief : about_create_screen.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ */
 lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                               ui_menu_home_cb_t home_cb, void* home_user_ctx) {
     if (parent == NULL) {
@@ -435,6 +501,12 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
     return screen;
 }
 
+/*
+ * brief : about_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void about_destroy_screen(lv_obj_t* screen) {
     if (s_about_runtime.task_handle != NULL) {
         vTaskDelete(s_about_runtime.task_handle);

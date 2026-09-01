@@ -4,6 +4,12 @@
 
 static bt_ui_runtime_s s_bt_runtime;
 
+/*
+ * brief : _bt_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _bt_ui_task(void* param) {
     bt_ui_runtime_s* runtime = (bt_ui_runtime_s*)param;
 
@@ -58,6 +64,12 @@ lv_obj_t* bt_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_
     return screen;
 }
 
+/*
+ * brief : bt_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void bt_destroy_screen(lv_obj_t* screen) {
     if (s_bt_runtime.task_handle != NULL) {
         vTaskDelete(s_bt_runtime.task_handle);

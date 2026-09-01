@@ -1,11 +1,11 @@
 #include "dev_button.h"
 
-enum {
-    scan_step_enter = 0,
-    scan_step_debounce,
-    scan_step_hold,
-};
-
+/*
+ * brief : button_scan_state.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ */
 btn_status_e button_scan_state(btn_scan_s* scan, uint8_t ms) {
     uint8_t io;
     btn_level_e real_lev;

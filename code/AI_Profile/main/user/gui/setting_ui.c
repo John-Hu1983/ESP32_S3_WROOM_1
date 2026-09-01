@@ -4,6 +4,12 @@
 
 static setting_ui_runtime_s s_setting_runtime;
 
+/*
+ * brief : _setting_ui_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
 static void _setting_ui_task(void* param) {
     setting_ui_runtime_s* runtime = (setting_ui_runtime_s*)param;
 
@@ -60,6 +66,12 @@ lv_obj_t* setting_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t 
     return screen;
 }
 
+/*
+ * brief : setting_destroy_screen.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ */
 void setting_destroy_screen(lv_obj_t* screen) {
     if (s_setting_runtime.task_handle != NULL) {
         vTaskDelete(s_setting_runtime.task_handle);
