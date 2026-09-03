@@ -8,7 +8,7 @@
 #include "user/gui/file_ui.h"
 #include "user/gui/gallery_ui.h"
 #include "user/gui/mic_ui.h"
-#include "user/gui/music_ui.h"
+#include "user/gui/print_ui.h"
 #include "user/gui/oscilloscope_ui.h"
 #include "user/gui/pidm_ui.h"
 #include "user/gui/rfid_ui.h"
@@ -28,7 +28,7 @@ static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
       0xD94B3D,
       gallery_create_screen,
       gallery_destroy_screen },
-    { LV_SYMBOL_AUDIO, "Music", 0x77216F, music_create_screen, music_destroy_screen },
+    { LV_SYMBOL_AUDIO, "Print", 0x77216F, print_create_screen, print_destroy_screen },
     { LV_SYMBOL_LIST, "Scope", 0xF27C38, scope_create_screen, scope_destroy_screen },
     { LV_SYMBOL_WIFI, "WiFi", 0xC0563F, wifi_create_screen, wifi_destroy_screen },
     { LV_SYMBOL_BLUETOOTH, "BT", 0xB65C2C, bt_create_screen, bt_destroy_screen },
