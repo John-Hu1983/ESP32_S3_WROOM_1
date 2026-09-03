@@ -10,16 +10,12 @@ static mfrc522_ctx_t s_mfrc522;
  * output: none.
  * type  : private
  */
-static void _mfrc522_delay_ms(uint32_t ms) {
+static void _mfrc522_delay_ms(uint32_t ms)
+{
     if (ms == 0U) {
         return;
     }
-
-    TickType_t ticks = pdMS_TO_TICKS(ms);
-    if (ticks == 0U) {
-        ticks = 1U;
-    }
-    vTaskDelay(ticks);
+    delay_ms(ms);
 }
 
 /*
@@ -28,14 +24,15 @@ static void _mfrc522_delay_ms(uint32_t ms) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_write_reg(uint8_t reg, uint8_t value) {
+static esp_err_t _mfrc522_write_reg(uint8_t reg, uint8_t value)
+{
     if (!s_mfrc522.initialized || (s_mfrc522.spi == NULL)) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    uint8_t tx_buf[2] = {(uint8_t)((reg << 1U) & 0x7EU), value};
+    uint8_t tx_buf[2] = { (uint8_t)((reg << 1U) & 0x7EU), value };
 
-    spi_transaction_t trans = {0};
+    spi_transaction_t trans = { 0 };
     trans.length = 16;
     trans.tx_buffer = tx_buf;
 
@@ -48,7 +45,8 @@ static esp_err_t _mfrc522_write_reg(uint8_t reg, uint8_t value) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_read_reg(uint8_t reg, uint8_t* value) {
+static esp_err_t _mfrc522_read_reg(uint8_t reg, uint8_t* value)
+{
     if (value == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -57,10 +55,10 @@ static esp_err_t _mfrc522_read_reg(uint8_t reg, uint8_t* value) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    uint8_t tx_buf[2] = {(uint8_t)(((reg << 1U) & 0x7EU) | 0x80U), 0x00U};
-    uint8_t rx_buf[2] = {0x00U, 0x00U};
+    uint8_t tx_buf[2] = { (uint8_t)(((reg << 1U) & 0x7EU) | 0x80U), 0x00U };
+    uint8_t rx_buf[2] = { 0x00U, 0x00U };
 
-    spi_transaction_t trans = {0};
+    spi_transaction_t trans = { 0 };
     trans.length = 16;
     trans.rxlength = 16;
     trans.tx_buffer = tx_buf;
@@ -81,7 +79,8 @@ static esp_err_t _mfrc522_read_reg(uint8_t reg, uint8_t* value) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_set_bits(uint8_t reg, uint8_t mask) {
+static esp_err_t _mfrc522_set_bits(uint8_t reg, uint8_t mask)
+{
     uint8_t reg_val = 0;
     esp_err_t ret = _mfrc522_read_reg(reg, &reg_val);
     if (ret != ESP_OK) {
@@ -96,7 +95,8 @@ static esp_err_t _mfrc522_set_bits(uint8_t reg, uint8_t mask) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_clear_bits(uint8_t reg, uint8_t mask) {
+static esp_err_t _mfrc522_clear_bits(uint8_t reg, uint8_t mask)
+{
     uint8_t reg_val = 0;
     esp_err_t ret = _mfrc522_read_reg(reg, &reg_val);
     if (ret != ESP_OK) {
@@ -111,7 +111,8 @@ static esp_err_t _mfrc522_clear_bits(uint8_t reg, uint8_t mask) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_flush_fifo(void) {
+static esp_err_t _mfrc522_flush_fifo(void)
+{
     return _mfrc522_write_reg(MFRC522_REG_FIFO_LEVEL, MFRC522_FIFO_FLUSH);
 }
 
@@ -121,7 +122,8 @@ static esp_err_t _mfrc522_flush_fifo(void) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_write_fifo(const uint8_t* data, uint8_t len) {
+static esp_err_t _mfrc522_write_fifo(const uint8_t* data, uint8_t len)
+{
     if ((data == NULL) && (len > 0U)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -142,7 +144,8 @@ static esp_err_t _mfrc522_write_fifo(const uint8_t* data, uint8_t len) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_read_fifo(uint8_t* data, uint8_t len) {
+static esp_err_t _mfrc522_read_fifo(uint8_t* data, uint8_t len)
+{
     if ((data == NULL) && (len > 0U)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -163,7 +166,8 @@ static esp_err_t _mfrc522_read_fifo(uint8_t* data, uint8_t len) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_wait_com_irq(uint8_t wait_mask, uint16_t timeout_ms) {
+static esp_err_t _mfrc522_wait_com_irq(uint8_t wait_mask, uint16_t timeout_ms)
+{
     TickType_t timeout_tick = pdMS_TO_TICKS(timeout_ms);
     TickType_t start_tick = xTaskGetTickCount();
     if (timeout_tick == 0U) {
@@ -199,7 +203,8 @@ static esp_err_t _mfrc522_wait_com_irq(uint8_t wait_mask, uint16_t timeout_ms) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_wait_div_irq(uint8_t wait_mask, uint16_t timeout_ms) {
+static esp_err_t _mfrc522_wait_div_irq(uint8_t wait_mask, uint16_t timeout_ms)
+{
     TickType_t timeout_tick = pdMS_TO_TICKS(timeout_ms);
     TickType_t start_tick = xTaskGetTickCount();
     if (timeout_tick == 0U) {
@@ -231,7 +236,8 @@ static esp_err_t _mfrc522_wait_div_irq(uint8_t wait_mask, uint16_t timeout_ms) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_calc_crc(const uint8_t* data, uint8_t len, uint8_t out_crc[2]) {
+static esp_err_t _mfrc522_calc_crc(const uint8_t* data, uint8_t len, uint8_t out_crc[2])
+{
     if ((data == NULL && len > 0U) || (out_crc == NULL)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -285,11 +291,17 @@ static esp_err_t _mfrc522_calc_crc(const uint8_t* data, uint8_t len, uint8_t out
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_transceive(const uint8_t* send_data, uint8_t send_len,
-                                     uint8_t tx_last_bits, uint8_t* back_data, uint8_t* back_len,
-                                     uint8_t* back_last_bits) {
-    if ((send_data == NULL && send_len > 0U) ||
-        (back_len != NULL && *back_len > 0U && back_data == NULL)) {
+static esp_err_t _mfrc522_transceive(
+    const uint8_t* send_data,
+    uint8_t send_len,
+    uint8_t tx_last_bits,
+    uint8_t* back_data,
+    uint8_t* back_len,
+    uint8_t* back_last_bits
+)
+{
+    if ((send_data == NULL && send_len > 0U)
+        || (back_len != NULL && *back_len > 0U && back_data == NULL)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -328,8 +340,9 @@ static esp_err_t _mfrc522_transceive(const uint8_t* send_data, uint8_t send_len,
         return ret;
     }
 
-    ret = _mfrc522_wait_com_irq((uint8_t)(MFRC522_COM_IRQ_RX | MFRC522_COM_IRQ_IDLE),
-                                MFRC522_CMD_TIMEOUT_MS);
+    ret = _mfrc522_wait_com_irq(
+        (uint8_t)(MFRC522_COM_IRQ_RX | MFRC522_COM_IRQ_IDLE), MFRC522_CMD_TIMEOUT_MS
+    );
 
     (void)_mfrc522_clear_bits(MFRC522_REG_BIT_FRAMING, MFRC522_BIT_START_SEND);
 
@@ -388,7 +401,8 @@ static esp_err_t _mfrc522_transceive(const uint8_t* send_data, uint8_t send_len,
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_auth_cmd(const uint8_t* send_data, uint8_t send_len) {
+static esp_err_t _mfrc522_auth_cmd(const uint8_t* send_data, uint8_t send_len)
+{
     if ((send_data == NULL) || (send_len == 0U)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -442,12 +456,13 @@ static esp_err_t _mfrc522_auth_cmd(const uint8_t* send_data, uint8_t send_len) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_request(uint8_t req_cmd, uint8_t atqa[2]) {
+static esp_err_t _mfrc522_request(uint8_t req_cmd, uint8_t atqa[2])
+{
     if (atqa == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t rx_buf[10] = {0};
+    uint8_t rx_buf[10] = { 0 };
     uint8_t rx_len = sizeof(rx_buf);
     uint8_t rx_last_bits = 0;
 
@@ -474,9 +489,10 @@ static esp_err_t _mfrc522_request(uint8_t req_cmd, uint8_t atqa[2]) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_select_level(uint8_t sel_cmd, const uint8_t uid_part[5], uint8_t* sak) {
-    uint8_t tx_buf[9] = {0};
-    uint8_t crc_buf[2] = {0};
+static esp_err_t _mfrc522_select_level(uint8_t sel_cmd, const uint8_t uid_part[5], uint8_t* sak)
+{
+    uint8_t tx_buf[9] = { 0 };
+    uint8_t crc_buf[2] = { 0 };
 
     tx_buf[0] = sel_cmd;
     tx_buf[1] = 0x70U;
@@ -489,7 +505,7 @@ static esp_err_t _mfrc522_select_level(uint8_t sel_cmd, const uint8_t uid_part[5
     tx_buf[7] = crc_buf[0];
     tx_buf[8] = crc_buf[1];
 
-    uint8_t rx_buf[3] = {0};
+    uint8_t rx_buf[3] = { 0 };
     uint8_t rx_len = sizeof(rx_buf);
     uint8_t rx_last_bits = 0;
 
@@ -521,7 +537,8 @@ static esp_err_t _mfrc522_select_level(uint8_t sel_cmd, const uint8_t uid_part[5
  * output: return value from this function.
  * type  : private
  */
-static bool _mfrc522_is_ack(const uint8_t* data, uint8_t data_len, uint8_t last_bits) {
+static bool _mfrc522_is_ack(const uint8_t* data, uint8_t data_len, uint8_t last_bits)
+{
     if ((data == NULL) || (data_len != 1U) || (last_bits != 4U)) {
         return false;
     }
@@ -534,8 +551,9 @@ static bool _mfrc522_is_ack(const uint8_t* data, uint8_t data_len, uint8_t last_
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_get_sector_layout(uint8_t sector, uint8_t* first_block,
-                                            uint8_t* block_count) {
+static esp_err_t
+_mfrc522_get_sector_layout(uint8_t sector, uint8_t* first_block, uint8_t* block_count)
+{
     if ((first_block == NULL) || (block_count == NULL)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -561,7 +579,8 @@ static esp_err_t _mfrc522_get_sector_layout(uint8_t sector, uint8_t* first_block
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_antenna_on(void) {
+static esp_err_t _mfrc522_antenna_on(void)
+{
     uint8_t tx_ctrl = 0;
     esp_err_t ret = _mfrc522_read_reg(MFRC522_REG_TX_CONTROL, &tx_ctrl);
     if (ret != ESP_OK) {
@@ -569,8 +588,9 @@ static esp_err_t _mfrc522_antenna_on(void) {
     }
 
     if ((tx_ctrl & MFRC522_TX_ANTENNA_ON_MASK) != MFRC522_TX_ANTENNA_ON_MASK) {
-        ret = _mfrc522_write_reg(MFRC522_REG_TX_CONTROL,
-                                 (uint8_t)(tx_ctrl | MFRC522_TX_ANTENNA_ON_MASK));
+        ret = _mfrc522_write_reg(
+            MFRC522_REG_TX_CONTROL, (uint8_t)(tx_ctrl | MFRC522_TX_ANTENNA_ON_MASK)
+        );
     }
 
     return ret;
@@ -582,7 +602,8 @@ static esp_err_t _mfrc522_antenna_on(void) {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _mfrc522_hw_reset(void) {
+static esp_err_t _mfrc522_hw_reset(void)
+{
     esp_err_t ret =
         gpba02b_set_io_mode(MFRC522_RESET_PORT, MFRC522_RESET_PIN, GPBA02B_IO_STYLE_OUTPUT_CMOS);
     if (ret != ESP_OK) {
@@ -610,14 +631,15 @@ static esp_err_t _mfrc522_hw_reset(void) {
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_init(void) {
+esp_err_t mfrc522_init(void)
+{
     if (s_mfrc522.initialized) {
         return ESP_OK;
     }
 
-    if ((MFRC522_IO_CS == GPIO_NUM_NC) || (MFRC522_IO_CLK == GPIO_NUM_NC) ||
-        (MFRC522_IO_MOSI == GPIO_NUM_NC) || (MFRC522_IO_MISO == GPIO_NUM_NC) ||
-        (MFRC522_DEFAULT_CLOCK_HZ <= 0)) {
+    if ((MFRC522_IO_CS == GPIO_NUM_NC) || (MFRC522_IO_CLK == GPIO_NUM_NC)
+        || (MFRC522_IO_MOSI == GPIO_NUM_NC) || (MFRC522_IO_MISO == GPIO_NUM_NC)
+        || (MFRC522_DEFAULT_CLOCK_HZ <= 0)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -735,7 +757,8 @@ esp_err_t mfrc522_init(void) {
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_deinit(void) {
+esp_err_t mfrc522_deinit(void)
+{
     if (!s_mfrc522.initialized) {
         return ESP_OK;
     }
@@ -761,7 +784,10 @@ esp_err_t mfrc522_deinit(void) {
  * output: return value from this function.
  * type  : public
  */
-bool mfrc522_is_ready(void) { return s_mfrc522.initialized && (s_mfrc522.spi != NULL); }
+bool mfrc522_is_ready(void)
+{
+    return s_mfrc522.initialized && (s_mfrc522.spi != NULL);
+}
 
 /*
  * brief : mfrc522_get_version.
@@ -769,7 +795,8 @@ bool mfrc522_is_ready(void) { return s_mfrc522.initialized && (s_mfrc522.spi != 
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_get_version(uint8_t* version) {
+esp_err_t mfrc522_get_version(uint8_t* version)
+{
     if (version == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -782,13 +809,14 @@ esp_err_t mfrc522_get_version(uint8_t* version) {
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_poll_card(bool* present) {
+esp_err_t mfrc522_poll_card(bool* present)
+{
     if (present == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t atqa[2] = {0};
-    esp_err_t ret = mfrc522_request_a(atqa);
+    uint8_t atqa[2] = { 0 };
+    esp_err_t ret = mfrc522_request_type_a(atqa);
     if (ret == ESP_OK) {
         *present = true;
         return ESP_OK;
@@ -802,22 +830,24 @@ esp_err_t mfrc522_poll_card(bool* present) {
 }
 
 /*
- * brief : mfrc522_request_a.
+ * brief : mfrc522_request_type_a.
  * input : see parameters.
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_request_a(uint8_t atqa[2]) {
+esp_err_t mfrc522_request_type_a(uint8_t atqa[2])
+{
     return _mfrc522_request(MFRC522_PICC_CMD_REQA, atqa);
 }
 
 /*
- * brief : mfrc522_wakeup_a.
+ * brief : mfrc522_wakeup_type_a.
  * input : see parameters.
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_wakeup_a(uint8_t atqa[2]) {
+esp_err_t mfrc522_wakeup_type_a(uint8_t atqa[2])
+{
     return _mfrc522_request(MFRC522_PICC_CMD_WUPA, atqa);
 }
 
@@ -827,35 +857,38 @@ esp_err_t mfrc522_wakeup_a(uint8_t atqa[2]) {
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_read_uid(mfrc522_uid_t* uid) {
+esp_err_t mfrc522_read_uid(mfrc522_uid_t* uid)
+{
     if (uid == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
     memset(uid, 0, sizeof(*uid));
 
-    esp_err_t ret = mfrc522_request_a(uid->atqa);
+    esp_err_t ret = mfrc522_request_type_a(uid->atqa);
     if (ret == ESP_ERR_NOT_FOUND) {
-        ret = mfrc522_wakeup_a(uid->atqa);
+        ret = mfrc522_wakeup_type_a(uid->atqa);
     }
     if (ret != ESP_OK) {
         return ret;
     }
 
-    const uint8_t cascade_cmds[3] = {MFRC522_PICC_CMD_SEL_CL1, MFRC522_PICC_CMD_SEL_CL2,
-                                     MFRC522_PICC_CMD_SEL_CL3};
+    const uint8_t cascade_cmds[3] = { MFRC522_PICC_CMD_SEL_CL1,
+                                      MFRC522_PICC_CMD_SEL_CL2,
+                                      MFRC522_PICC_CMD_SEL_CL3 };
 
     uint8_t uid_index = 0;
     uint8_t sak = 0;
 
     for (uint8_t level = 0; level < 3U; level++) {
-        uint8_t anticoll_cmd[2] = {cascade_cmds[level], 0x20U};
-        uint8_t uid_part[5] = {0};
+        uint8_t anticoll_cmd[2] = { cascade_cmds[level], 0x20U };
+        uint8_t uid_part[5] = { 0 };
         uint8_t rx_len = sizeof(uid_part);
         uint8_t rx_last_bits = 0;
 
-        ret = _mfrc522_transceive(anticoll_cmd, sizeof(anticoll_cmd), 0U, uid_part, &rx_len,
-                                  &rx_last_bits);
+        ret = _mfrc522_transceive(
+            anticoll_cmd, sizeof(anticoll_cmd), 0U, uid_part, &rx_len, &rx_last_bits
+        );
         if (ret != ESP_OK) {
             return ret;
         }
@@ -899,13 +932,79 @@ esp_err_t mfrc522_read_uid(mfrc522_uid_t* uid) {
 }
 
 /*
+ * brief : Select card by known UID without running anticollision command sequence.
+ * input : uid - known UID information.
+ * output: ESP_OK when selection succeeds.
+ * type  : public
+ */
+esp_err_t mfrc522_select_uid(const mfrc522_uid_t* uid)
+{
+    if ((uid == NULL) || (uid->size < 4U) || (uid->size > MFRC522_UID_MAX_LEN)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const uint8_t cascade_cmds[3] = {
+        MFRC522_PICC_CMD_SEL_CL1,
+        MFRC522_PICC_CMD_SEL_CL2,
+        MFRC522_PICC_CMD_SEL_CL3,
+    };
+
+    uint8_t uid_index = 0U;
+    uint8_t sak = 0U;
+
+    for (uint8_t level = 0U; level < 3U; level++) {
+        uint8_t uid_part[5] = { 0 };
+        uint8_t remaining = (uint8_t)(uid->size - uid_index);
+
+        if (remaining > 4U) {
+            uid_part[0] = MFRC522_PICC_CMD_CT;
+            uid_part[1] = uid->uid[uid_index++];
+            uid_part[2] = uid->uid[uid_index++];
+            uid_part[3] = uid->uid[uid_index++];
+        } else if (remaining == 4U) {
+            uid_part[0] = uid->uid[uid_index++];
+            uid_part[1] = uid->uid[uid_index++];
+            uid_part[2] = uid->uid[uid_index++];
+            uid_part[3] = uid->uid[uid_index++];
+        } else {
+            return ESP_ERR_INVALID_ARG;
+        }
+
+        uid_part[4] = (uint8_t)(uid_part[0] ^ uid_part[1] ^ uid_part[2] ^ uid_part[3]);
+
+        esp_err_t ret = _mfrc522_select_level(cascade_cmds[level], uid_part, &sak);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+
+        if ((sak & MFRC522_SAK_CASCADE_BIT) == 0U) {
+            if (uid_index != uid->size) {
+                return ESP_ERR_INVALID_RESPONSE;
+            }
+            return ESP_OK;
+        }
+
+        if (uid_index >= uid->size) {
+            return ESP_ERR_INVALID_RESPONSE;
+        }
+    }
+
+    return ESP_ERR_INVALID_RESPONSE;
+}
+
+/*
  * brief : mfrc522_authenticate.
  * input : see parameters.
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_authenticate(mfrc522_key_type_t key_type, uint8_t block_addr,
-                               const uint8_t key[MFRC522_KEY_LEN], const mfrc522_uid_t* uid) {
+esp_err_t mfrc522_authenticate(
+    mfrc522_key_type_t key_type,
+    uint8_t block_addr,
+    const uint8_t key[MFRC522_KEY_LEN],
+    const mfrc522_uid_t* uid
+)
+{
     if ((uid == NULL) || (uid->size < 4U)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -913,7 +1012,7 @@ esp_err_t mfrc522_authenticate(mfrc522_key_type_t key_type, uint8_t block_addr,
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t auth_buf[12] = {0};
+    uint8_t auth_buf[12] = { 0 };
     auth_buf[0] = (uint8_t)key_type;
     auth_buf[1] = block_addr;
     if (key != NULL) {
@@ -947,7 +1046,8 @@ esp_err_t mfrc522_authenticate(mfrc522_key_type_t key_type, uint8_t block_addr,
  * output: none.
  * type  : public
  */
-void mfrc522_stop_crypto(void) {
+void mfrc522_stop_crypto(void)
+{
     if (!mfrc522_is_ready()) {
         return;
     }
@@ -960,9 +1060,10 @@ void mfrc522_stop_crypto(void) {
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_halt(void) {
-    uint8_t tx_buf[4] = {MFRC522_PICC_CMD_HLTA, 0x00U, 0x00U, 0x00U};
-    uint8_t crc_buf[2] = {0};
+esp_err_t mfrc522_halt(void)
+{
+    uint8_t tx_buf[4] = { MFRC522_PICC_CMD_HLTA, 0x00U, 0x00U, 0x00U };
+    uint8_t crc_buf[2] = { 0 };
 
     esp_err_t ret = _mfrc522_calc_crc(tx_buf, 2U, crc_buf);
     if (ret != ESP_OK) {
@@ -971,7 +1072,7 @@ esp_err_t mfrc522_halt(void) {
     tx_buf[2] = crc_buf[0];
     tx_buf[3] = crc_buf[1];
 
-    uint8_t rx_buf[4] = {0};
+    uint8_t rx_buf[4] = { 0 };
     uint8_t rx_len = sizeof(rx_buf);
     ret = _mfrc522_transceive(tx_buf, sizeof(tx_buf), 0U, rx_buf, &rx_len, NULL);
 
@@ -987,13 +1088,14 @@ esp_err_t mfrc522_halt(void) {
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_read_block(uint8_t block_addr, uint8_t out_block[MFRC522_BLOCK_LEN]) {
+esp_err_t mfrc522_read_block(uint8_t block_addr, uint8_t out_block[MFRC522_BLOCK_LEN])
+{
     if (out_block == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t tx_buf[4] = {MFRC522_PICC_CMD_MF_READ, block_addr, 0x00U, 0x00U};
-    uint8_t crc_buf[2] = {0};
+    uint8_t tx_buf[4] = { MFRC522_PICC_CMD_MF_READ, block_addr, 0x00U, 0x00U };
+    uint8_t crc_buf[2] = { 0 };
 
     esp_err_t ret = _mfrc522_calc_crc(tx_buf, 2U, crc_buf);
     if (ret != ESP_OK) {
@@ -1002,7 +1104,7 @@ esp_err_t mfrc522_read_block(uint8_t block_addr, uint8_t out_block[MFRC522_BLOCK
     tx_buf[2] = crc_buf[0];
     tx_buf[3] = crc_buf[1];
 
-    uint8_t rx_buf[18] = {0};
+    uint8_t rx_buf[18] = { 0 };
     uint8_t rx_len = sizeof(rx_buf);
     uint8_t rx_last_bits = 0;
 
@@ -1033,13 +1135,14 @@ esp_err_t mfrc522_read_block(uint8_t block_addr, uint8_t out_block[MFRC522_BLOCK
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_write_block(uint8_t block_addr, const uint8_t in_block[MFRC522_BLOCK_LEN]) {
+esp_err_t mfrc522_write_block(uint8_t block_addr, const uint8_t in_block[MFRC522_BLOCK_LEN])
+{
     if (in_block == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint8_t tx_cmd[4] = {MFRC522_PICC_CMD_MF_WRITE, block_addr, 0x00U, 0x00U};
-    uint8_t crc_buf[2] = {0};
+    uint8_t tx_cmd[4] = { MFRC522_PICC_CMD_MF_WRITE, block_addr, 0x00U, 0x00U };
+    uint8_t crc_buf[2] = { 0 };
 
     esp_err_t ret = _mfrc522_calc_crc(tx_cmd, 2U, crc_buf);
     if (ret != ESP_OK) {
@@ -1048,7 +1151,7 @@ esp_err_t mfrc522_write_block(uint8_t block_addr, const uint8_t in_block[MFRC522
     tx_cmd[2] = crc_buf[0];
     tx_cmd[3] = crc_buf[1];
 
-    uint8_t ack_buf[3] = {0};
+    uint8_t ack_buf[3] = { 0 };
     uint8_t ack_len = sizeof(ack_buf);
     uint8_t ack_last_bits = 0;
 
@@ -1060,7 +1163,7 @@ esp_err_t mfrc522_write_block(uint8_t block_addr, const uint8_t in_block[MFRC522
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    uint8_t tx_data[18] = {0};
+    uint8_t tx_data[18] = { 0 };
     memcpy(tx_data, in_block, MFRC522_BLOCK_LEN);
     ret = _mfrc522_calc_crc(in_block, MFRC522_BLOCK_LEN, crc_buf);
     if (ret != ESP_OK) {
@@ -1083,14 +1186,123 @@ esp_err_t mfrc522_write_block(uint8_t block_addr, const uint8_t in_block[MFRC522
 }
 
 /*
+ * brief : mfrc522_read_block4.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ */
+esp_err_t mfrc522_read_block4(uint8_t block_addr, uint8_t out_block[MFRC522_FM11_BLOCK_LEN])
+{
+    if (out_block == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t tx_buf[4] = { MFRC522_PICC_CMD_MF_READ, block_addr, 0x00U, 0x00U };
+    uint8_t crc_buf[2] = { 0 };
+
+    esp_err_t ret = _mfrc522_calc_crc(tx_buf, 2U, crc_buf);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    tx_buf[2] = crc_buf[0];
+    tx_buf[3] = crc_buf[1];
+
+    uint8_t rx_buf[MFRC522_FM11_BLOCK_LEN + 2U] = { 0 };
+    uint8_t rx_len = sizeof(rx_buf);
+    uint8_t rx_last_bits = 0;
+
+    ret = _mfrc522_transceive(tx_buf, sizeof(tx_buf), 0U, rx_buf, &rx_len, &rx_last_bits);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if ((rx_len != sizeof(rx_buf)) || (rx_last_bits != 0U)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    ret = _mfrc522_calc_crc(rx_buf, MFRC522_FM11_BLOCK_LEN, crc_buf);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    if ((crc_buf[0] != rx_buf[MFRC522_FM11_BLOCK_LEN])
+        || (crc_buf[1] != rx_buf[MFRC522_FM11_BLOCK_LEN + 1U])) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    memcpy(out_block, rx_buf, MFRC522_FM11_BLOCK_LEN);
+    return ESP_OK;
+}
+
+/*
+ * brief : mfrc522_write_block4.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ */
+esp_err_t mfrc522_write_block4(uint8_t block_addr, const uint8_t in_block[MFRC522_FM11_BLOCK_LEN])
+{
+    if (in_block == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t tx_cmd[4] = { MFRC522_PICC_CMD_MF_WRITE, block_addr, 0x00U, 0x00U };
+    uint8_t crc_buf[2] = { 0 };
+
+    esp_err_t ret = _mfrc522_calc_crc(tx_cmd, 2U, crc_buf);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    tx_cmd[2] = crc_buf[0];
+    tx_cmd[3] = crc_buf[1];
+
+    uint8_t ack_buf[3] = { 0 };
+    uint8_t ack_len = sizeof(ack_buf);
+    uint8_t ack_last_bits = 0;
+
+    ret = _mfrc522_transceive(tx_cmd, sizeof(tx_cmd), 0U, ack_buf, &ack_len, &ack_last_bits);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if (!_mfrc522_is_ack(ack_buf, ack_len, ack_last_bits)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    uint8_t tx_data[MFRC522_FM11_BLOCK_LEN + 2U] = { 0 };
+    memcpy(tx_data, in_block, MFRC522_FM11_BLOCK_LEN);
+    ret = _mfrc522_calc_crc(in_block, MFRC522_FM11_BLOCK_LEN, crc_buf);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    tx_data[MFRC522_FM11_BLOCK_LEN] = crc_buf[0];
+    tx_data[MFRC522_FM11_BLOCK_LEN + 1U] = crc_buf[1];
+
+    ack_len = sizeof(ack_buf);
+    ack_last_bits = 0;
+    ret = _mfrc522_transceive(tx_data, sizeof(tx_data), 0U, ack_buf, &ack_len, &ack_last_bits);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if (!_mfrc522_is_ack(ack_buf, ack_len, ack_last_bits)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    return ESP_OK;
+}
+
+/*
  * brief : mfrc522_read_sector.
  * input : see parameters.
  * output: return value from this function.
  * type  : public
  */
-esp_err_t mfrc522_read_sector(uint8_t sector, mfrc522_key_type_t key_type,
-                              const uint8_t key[MFRC522_KEY_LEN], const mfrc522_uid_t* uid,
-                              mfrc522_sector_data_t* out_sector) {
+esp_err_t mfrc522_read_sector(
+    uint8_t sector,
+    mfrc522_key_type_t key_type,
+    const uint8_t key[MFRC522_KEY_LEN],
+    const mfrc522_uid_t* uid,
+    mfrc522_sector_data_t* out_sector
+)
+{
     if ((uid == NULL) || (out_sector == NULL)) {
         return ESP_ERR_INVALID_ARG;
     }

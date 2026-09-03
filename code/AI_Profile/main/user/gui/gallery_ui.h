@@ -6,8 +6,10 @@
 extern "C" {
 #endif
 
+// clang-format off
 #define GALLERY_UI_TASK_STACK_SIZE (4096U)
-#define GALLERY_UI_TASK_PERIOD_MS (10U)
+#define GALLERY_UI_TASK_PERIOD_MS  (10U)
+// clang-format on
 
 typedef struct {
 	TaskHandle_t task_handle;

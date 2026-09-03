@@ -6,13 +6,15 @@
 extern "C" {
 #endif
 
-#define ABOUT_TASK_STACK_SIZE (6144U)
-#define ABOUT_TASK_PERIOD_MS (100U)
+// clang-format off
+#define ABOUT_TASK_STACK_SIZE   (6144U)
+#define ABOUT_TASK_PERIOD_MS    (100U)
 #define ABOUT_REFRESH_PERIOD_MS (1000U)
 
-#define ABOUT_INFO_TEXT_LEN (64U)
+#define ABOUT_INFO_TEXT_LEN     (64U)
 #define ABOUT_TASKLIST_MAX_ROWS (24U)
-#define ABOUT_TASK_NAME_LEN (16U)
+#define ABOUT_TASK_NAME_LEN     (16U)
+// clang-format on
 
 typedef struct {
     char name[ABOUT_TASK_NAME_LEN];
@@ -23,6 +25,7 @@ typedef struct {
 
 typedef struct {
     TaskHandle_t task_handle;
+    lv_timer_t* ui_sync_timer;
     ui_menu_home_cb_t home_cb;
     void* home_user_ctx;
     btn_scan_s button_scan;

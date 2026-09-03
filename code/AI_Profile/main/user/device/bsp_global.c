@@ -93,5 +93,4 @@ void bsp_init_total(void) {
     _bsp_init_button();
     bsp_reset_lcd();
     desktop_start_task();
-    bg_start_task(desktop_get_cpu_label(), desktop_get_net_label());
 }

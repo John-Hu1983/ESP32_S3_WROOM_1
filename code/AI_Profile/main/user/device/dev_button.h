@@ -17,9 +17,11 @@
 #include "user/inc/user_config.h"
 #include "user/device/dev_st7365p.h"
 
+// clang-format off
 #define KEYBOARD_CLICK_DEBOUNCE_MS (20)
-#define KEYBOARD_HOLD_MS (800U)
-#define KEYBOARD_RELEASE_MS (40U)
+#define KEYBOARD_HOLD_MS           (800U)
+#define KEYBOARD_RELEASE_MS        (40U)
+// clang-format on
 
 typedef enum {
     Btn_Idle = 0,

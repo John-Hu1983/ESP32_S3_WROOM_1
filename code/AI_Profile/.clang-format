@@ -2,23 +2,23 @@
 Language: Cpp
 BasedOnStyle: Google
 AccessModifierOffset: -4
-AlignAfterOpenBracket: Align
+AlignAfterOpenBracket: BlockIndent
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
-AlignOperands: true
-AlignTrailingComments: true
-AllowAllParametersOfDeclarationOnNextLine: true
+AlignOperands: false
+AlignTrailingComments: false
+AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: All
+AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterReturnType: ExceptShortType
 AlwaysBreakBeforeMultilineStrings: true
-AlwaysBreakTemplateDeclarations: Yes
-BinPackArguments: true
-BinPackParameters: true
+AlwaysBreakTemplateDeclarations: No
+BinPackArguments: false
+BinPackParameters: false
 BraceWrapping:
   AfterClass: false
   AfterControlStatement: false
@@ -35,8 +35,8 @@ BraceWrapping:
   SplitEmptyFunction: false
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
-BreakBeforeBinaryOperators: None
-BreakBeforeBraces: Attach
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Linux
 BreakBeforeInheritanceComma: false
 BreakInheritanceList: BeforeColon
 BreakBeforeTernaryOperators: true
@@ -50,7 +50,7 @@ CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
-Cpp11BracedListStyle: true
+Cpp11BracedListStyle: false
 DerivePointerAlignment: false
 DisableFormat: false
 ExperimentalAutoDetectBinPacking: false
@@ -70,7 +70,7 @@ IncludeCategories:
   - Regex: '.*'
     Priority: 4
 IncludeIsMainRegex: '([-_](test|unittest))?$'
-IndentCaseLabels: true
+IndentCaseLabels: false
 IndentPPDirectives: None
 IndentWidth: 4
 IndentWrappedFunctionNames: false
@@ -102,7 +102,7 @@ RawStringFormats:
     BasedOnStyle: google
 ReflowComments: true
 SortIncludes: true
-SortUsingDeclarations: true
+SortUsingDeclarations: false
 SpaceAfterCStyleCast: false
 SpaceAfterTemplateKeyword: true
 SpaceBeforeAssignmentOperators: true

@@ -23,35 +23,36 @@
 extern "C" {
 #endif
 
+// clang-format off
 #define LVGL_TICK_PERIOD_MS (10U)
 #define LVGL_TASK_PERIOD_MS (10U)
 #define LVGL_DRAW_BUF_LINES (72U)
 
 #define DESKTOP_ICON_SELECT_TIMEOUT_MS (3000U)
 
-#define DESKTOP_TOP_BAR_HEIGHT (26U)
+#define DESKTOP_TOP_BAR_HEIGHT    (26U)
 #define DESKTOP_BOTTOM_BAR_HEIGHT (26U)
 #define DESKTOP_TOOLBAR_COLOR_HEX (0x87CEEBU)
 
-#define DESKTOP_ICON_COLS (3U)
-#define DESKTOP_ICON_ROWS (4U)
+#define DESKTOP_ICON_COLS  (3U)
+#define DESKTOP_ICON_ROWS  (4U)
 #define DESKTOP_ICON_COUNT (DESKTOP_ICON_COLS * DESKTOP_ICON_ROWS)
 
-#define DESKTOP_MARGIN_X (4U)
-#define DESKTOP_MARGIN_Y (4U)
+#define DESKTOP_MARGIN_X   (4U)
+#define DESKTOP_MARGIN_Y   (4U)
 #define DESKTOP_ICON_GAP_X (8U)
 #define DESKTOP_ICON_GAP_Y (8U)
 
-#define RGB565_BLACK (0x0000U)
-#define RGB565_WHITE (0xFFFFU)
-#define RGB565_RED (0xF800U)
-#define RGB565_GREEN (0x07E0U)
-#define RGB565_BLUE (0x001FU)
-#define RGB565_YELLOW (0xFFE0U)
-#define RGB565_CYAN (0x07FFU)
+#define RGB565_BLACK   (0x0000U)
+#define RGB565_WHITE   (0xFFFFU)
+#define RGB565_RED     (0xF800U)
+#define RGB565_GREEN   (0x07E0U)
+#define RGB565_BLUE    (0x001FU)
+#define RGB565_YELLOW  (0xFFE0U)
+#define RGB565_CYAN    (0x07FFU)
 #define RGB565_MAGENTA (0xF81FU)
-#define RGB565_ORANGE (0xFD20U)
-#define RGB565_GRAY (0x8410U)
+#define RGB565_ORANGE  (0xFD20U)
+#define RGB565_GRAY    (0x8410U)
 
 #ifndef DESKTOP_TEXT_FONT
 #define DESKTOP_TEXT_FONT BUILTIN_TEXT_FONT
@@ -60,14 +61,10 @@ extern "C" {
 #ifndef DESKTOP_SYMBOL_FONT
 #define DESKTOP_SYMBOL_FONT BUILTIN_ICON_FONT
 #endif
-
-#ifndef CPU_LABEL_FONT
-#define CPU_LABEL_FONT lv_font_montserrat_14
-#endif
+// clang-format on
 
 LV_FONT_DECLARE(DESKTOP_TEXT_FONT);
 LV_FONT_DECLARE(DESKTOP_SYMBOL_FONT);
-LV_FONT_DECLARE(CPU_LABEL_FONT);
 
 typedef void (*ui_menu_home_cb_t)(void* user_ctx);
 
@@ -104,9 +101,6 @@ void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_
 lv_color_t desktop_invert_color(lv_color_t color);
 
 esp_err_t desktop_start_task(void);
-void desktop_return_to_home(void);
-lv_obj_t* desktop_get_cpu_label(void);
-lv_obj_t* desktop_get_net_label(void);
 
 #ifdef __cplusplus
 }

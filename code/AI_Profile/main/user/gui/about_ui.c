@@ -14,6 +14,14 @@ static about_ui_runtime_s s_about_runtime;
 static portMUX_TYPE s_about_lock = portMUX_INITIALIZER_UNLOCKED;
 
 /*
+ * brief : _about_ui_timer_cb.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
+static void _about_ui_timer_cb(lv_timer_t* timer);
+
+/*
  * brief : _about_obj_valid.
  * input : see parameters.
  * output: return value from this function.
@@ -295,6 +303,23 @@ static void _about_sync_ui(void* param) {
 }
 
 /*
+ * brief : _about_ui_timer_cb.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
+static void _about_ui_timer_cb(lv_timer_t* timer) {
+    about_ui_runtime_s* runtime = NULL;
+
+    if (timer == NULL) {
+        return;
+    }
+
+    runtime = (about_ui_runtime_s*)lv_timer_get_user_data(timer);
+    _about_sync_ui(runtime);
+}
+
+/*
  * brief : _about_refresh_info.
  * input : see parameters.
  * output: none.
@@ -321,14 +346,6 @@ static void _about_refresh_info(about_ui_runtime_s* runtime) {
     }
     runtime->dirty = true;
     taskEXIT_CRITICAL(&s_about_lock);
-
-    lv_lock();
-    lv_result_t lv_res = lv_async_call(_about_sync_ui, runtime);
-    lv_unlock();
-
-    if (lv_res != LV_RESULT_OK) {
-        ESP_LOGW(TAG, "lv_async_call failed while refreshing about info");
-    }
 }
 
 /*
@@ -485,13 +502,31 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
     lv_table_set_cell_value(s_about_runtime.tasklist_table, 0U, 3U, "Stack");
     lv_table_set_cell_value(s_about_runtime.tasklist_table, 1U, 0U, "collecting...");
 
+    s_about_runtime.ui_sync_timer =
+        lv_timer_create(_about_ui_timer_cb, ABOUT_TASK_PERIOD_MS, &s_about_runtime);
+    if (s_about_runtime.ui_sync_timer == NULL) {
+        s_about_runtime.tasklist_table = NULL;
+        s_about_runtime.psram_value_label = NULL;
+        s_about_runtime.ram_value_label = NULL;
+        s_about_runtime.cpu_value_label = NULL;
+        s_about_runtime.idf_value_label = NULL;
+        lv_obj_del(screen);
+        ESP_LOGE(TAG, "lv_timer_create failed");
+        return NULL;
+    }
+
     s_about_runtime.root = screen;
     _about_refresh_info(&s_about_runtime);
+    _about_sync_ui(&s_about_runtime);
 
     BaseType_t task_ok = xTaskCreate(_about_ui_task, "about_ui", ABOUT_TASK_STACK_SIZE,
                                      &s_about_runtime, 5, &s_about_runtime.task_handle);
     if (task_ok != pdPASS) {
         s_about_runtime.task_handle = NULL;
+        if (s_about_runtime.ui_sync_timer != NULL) {
+            lv_timer_delete(s_about_runtime.ui_sync_timer);
+            s_about_runtime.ui_sync_timer = NULL;
+        }
         lv_obj_del(screen);
         s_about_runtime.root = NULL;
         ESP_LOGE(TAG, "xTaskCreate failed");
@@ -508,6 +543,11 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
  * type  : public
  */
 void about_destroy_screen(lv_obj_t* screen) {
+    if (s_about_runtime.ui_sync_timer != NULL) {
+        lv_timer_delete(s_about_runtime.ui_sync_timer);
+        s_about_runtime.ui_sync_timer = NULL;
+    }
+
     if (s_about_runtime.task_handle != NULL) {
         vTaskDelete(s_about_runtime.task_handle);
         s_about_runtime.task_handle = NULL;
