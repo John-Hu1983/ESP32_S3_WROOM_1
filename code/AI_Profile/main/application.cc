@@ -9,6 +9,7 @@
 #include "settings.h"
 #include "system_info.h"
 #include "text_glyph_payload.h"
+#include "user/desktop/desktop_app.h"
 #include "websocket_protocol.h"
 
 #include <driver/gpio.h>
@@ -64,6 +65,7 @@ void Application::Initialize() {
     display->SetupUI();
     // Print board name/version info
     display->SetChatMessage("system", SystemInfo::GetUserAgent().c_str());
+    desktop_post_message(SystemInfo::GetUserAgent().c_str());
 
     // Setup the audio service
     auto codec = board.GetAudioCodec();
@@ -547,11 +549,15 @@ void Application::InitializeProtocol() {
         Schedule([this]() {
             auto display = Board::GetInstance().GetDisplay();
             display->SetChatMessage("system", "");
+            desktop_post_message(NULL);
             SetDeviceState(kDeviceStateIdle);
         });
     });
 
     protocol_->OnIncomingJson([this, display](const cJSON* root) {
+        static std::string s_desktop_agent_text;
+        static const size_t s_desktop_agent_max_len = 1024U;
+
         // Parse JSON data
         auto type = cJSON_GetObjectItem(root, "type");
         if (!cJSON_IsString(type)) {
@@ -564,6 +570,7 @@ void Application::InitializeProtocol() {
                 return;
             }
             if (strcmp(state->valuestring, "start") == 0) {
+                s_desktop_agent_text.clear();
                 Schedule([this]() {
                     aborted_ = false;
                     SetDeviceState(kDeviceStateSpeaking);
@@ -583,14 +590,28 @@ void Application::InitializeProtocol() {
                 if (cJSON_IsString(text)) {
                     std::vector<TextGlyph> glyphs;
                     uint8_t bpp = 0;
+                    std::string sentence_text = text->valuestring;
+
+                    if (!s_desktop_agent_text.empty()) {
+                        s_desktop_agent_text += " ";
+                    }
+                    s_desktop_agent_text += sentence_text;
+                    if (s_desktop_agent_text.size() > s_desktop_agent_max_len) {
+                        size_t keep_from =
+                            s_desktop_agent_text.size() - s_desktop_agent_max_len;
+                        s_desktop_agent_text.erase(0U, keep_from);
+                    }
+
                     if (!TextGlyphPayload::Parse(root, glyphs, bpp)) {
                         glyphs.clear();
                     }
                     ESP_LOGI(TAG, "<< %s", text->valuestring);
                     Schedule([display, message = std::string(text->valuestring),
+                              bottom_text = s_desktop_agent_text,
                               glyphs = std::move(glyphs), bpp]() {
                         display->AddTextGlyphs(glyphs, bpp);
                         display->SetChatMessage("assistant", message.c_str());
+                        desktop_post_message(bottom_text.c_str());
                     });
                 }
             }
@@ -607,6 +628,7 @@ void Application::InitializeProtocol() {
                           glyphs = std::move(glyphs), bpp]() {
                     display->AddTextGlyphs(glyphs, bpp);
                     display->SetChatMessage("user", message.c_str());
+                    desktop_post_message(message.c_str());
                 });
             }
         } else if (strcmp(type->valuestring, "llm") == 0) {
@@ -650,6 +672,7 @@ void Application::InitializeProtocol() {
                 Schedule(
                     [this, display, payload_str = std::string(cJSON_PrintUnformatted(payload))]() {
                         display->SetChatMessage("system", payload_str.c_str());
+                        desktop_post_message(payload_str.c_str());
                     });
             } else {
                 ESP_LOGW(TAG, "Invalid custom message format: missing payload");

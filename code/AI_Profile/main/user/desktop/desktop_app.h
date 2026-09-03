@@ -2,11 +2,16 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_wifi.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -14,11 +19,9 @@
 #include <material_symbols.h>
 #include "lvgl.h"
 
-#include "user/inc/user_config.h"
-#include "user/device/dev_st7365p.h"
-
 #include "user/device/dev_button.h"
-
+#include "user/device/dev_st7365p.h"
+#include "user/inc/user_config.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,6 +36,14 @@ extern "C" {
 #define DESKTOP_TOP_BAR_HEIGHT    (26U)
 #define DESKTOP_BOTTOM_BAR_HEIGHT (26U)
 #define DESKTOP_TOOLBAR_COLOR_HEX (0x87CEEBU)
+
+#define DESKTOP_APP_MSG_TEXT_LEN      (768U)
+#define DESKTOP_APP_MSG_KEEP_MS       (5000U)
+#define DESKTOP_SYS_INFO_REFRESH_MS   (1000U)
+#define DESKTOP_TIME_REFRESH_MS       (1000U)
+#define DESKTOP_TIME_SYNC_CHECK_MS    (10000U)
+#define DESKTOP_WEATHER_REFRESH_MS    (3000U)
+#define DESKTOP_REALTIME_MIN_UNIX_SEC (1704067200ULL)
 
 #define DESKTOP_ICON_COLS  (3U)
 #define DESKTOP_ICON_ROWS  (4U)
@@ -68,8 +79,13 @@ LV_FONT_DECLARE(DESKTOP_SYMBOL_FONT);
 
 typedef void (*ui_menu_home_cb_t)(void* user_ctx);
 
-typedef lv_obj_t* (*ui_menu_create_fn_t)(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
-                                         ui_menu_home_cb_t home_cb, void* home_user_ctx);
+typedef lv_obj_t* (*ui_menu_create_fn_t)(
+    lv_obj_t* parent,
+    lv_coord_t area_w,
+    lv_coord_t area_h,
+    ui_menu_home_cb_t home_cb,
+    void* home_user_ctx
+);
 typedef void (*ui_menu_destroy_fn_t)(lv_obj_t* screen);
 
 typedef ui_menu_create_fn_t desktop_ui_create_fn_t;
@@ -101,6 +117,7 @@ void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_
 lv_color_t desktop_invert_color(lv_color_t color);
 
 esp_err_t desktop_start_task(void);
+void desktop_post_message(const char* msg);
 
 #ifdef __cplusplus
 }

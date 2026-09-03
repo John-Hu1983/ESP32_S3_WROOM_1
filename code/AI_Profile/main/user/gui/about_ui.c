@@ -68,7 +68,16 @@ static bool _about_collect_task_snapshot(about_task_row_s* rows, uint16_t* row_c
     }
 
     UBaseType_t alloc_task_count = uxTaskGetNumberOfTasks() + 5U;
-    TaskStatus_t* task_states = (TaskStatus_t*)malloc(sizeof(TaskStatus_t) * alloc_task_count);
+    TaskStatus_t* task_states = (TaskStatus_t*)heap_caps_malloc(
+        sizeof(TaskStatus_t) * alloc_task_count,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+    );
+    if (task_states == NULL) {
+        task_states = (TaskStatus_t*)heap_caps_malloc(
+            sizeof(TaskStatus_t) * alloc_task_count,
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
+        );
+    }
     if (task_states == NULL) {
         *row_count = 0U;
         return false;
@@ -77,7 +86,7 @@ static bool _about_collect_task_snapshot(about_task_row_s* rows, uint16_t* row_c
     configRUN_TIME_COUNTER_TYPE run_time_counter = 0;
     UBaseType_t task_count = uxTaskGetSystemState(task_states, alloc_task_count, &run_time_counter);
     if (task_count == 0U) {
-        free(task_states);
+        heap_caps_free(task_states);
         *row_count = 0U;
         return false;
     }
@@ -117,7 +126,7 @@ static bool _about_collect_task_snapshot(about_task_row_s* rows, uint16_t* row_c
     *row_count = produced;
     *total_runtime = (uint64_t)run_time_counter;
     *idle_runtime = idle_sum;
-    free(task_states);
+    heap_caps_free(task_states);
     return true;
 }
 

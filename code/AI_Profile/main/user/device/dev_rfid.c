@@ -1,5 +1,7 @@
 #include "dev_rfid.h"
 
+#include <esp_heap_caps.h>
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,10 +27,46 @@ typedef struct {
     bool dump_need_scroll_top;
     char status_text[DEV_RFID_STATUS_TEXT_LEN];
     char uid_text[DEV_RFID_UID_TEXT_LEN];
-    char dump_text[DEV_RFID_DUMP_TEXT_LEN];
+    char* dump_text;
 } dev_rfid_view_state_s;
 
 static dev_rfid_view_state_s s_rfid_view;
+static char* s_rfid_view_dump_text;
+
+/*
+ * brief : _dev_rfid_alloc_buf.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
+static void* _dev_rfid_alloc_buf(size_t size)
+{
+    void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (ptr == NULL) {
+        ptr = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    return ptr;
+}
+
+/*
+ * brief : _dev_rfid_bind_dump_text.
+ * input : none.
+ * output: return value from this function.
+ * type  : private
+ */
+static bool _dev_rfid_bind_dump_text(void)
+{
+    if (s_rfid_view_dump_text == NULL) {
+        s_rfid_view_dump_text = (char*)_dev_rfid_alloc_buf(DEV_RFID_DUMP_TEXT_LEN);
+        if (s_rfid_view_dump_text == NULL) {
+            return false;
+        }
+        memset(s_rfid_view_dump_text, 0, DEV_RFID_DUMP_TEXT_LEN);
+    }
+
+    s_rfid_view.dump_text = s_rfid_view_dump_text;
+    return true;
+}
 
 /*
  * brief : _dev_rfid_set_status_text.
@@ -138,9 +176,13 @@ static void _dev_rfid_describe_card_type(uint8_t sak, const char** out_type, uin
 static void _dev_rfid_clear_dump_text(void)
 {
     uint8_t selected_sector = _dev_rfid_clamp_sector(s_rfid_view.selected_sector);
+    if (!_dev_rfid_bind_dump_text()) {
+        return;
+    }
+
     (void)snprintf(
         s_rfid_view.dump_text,
-        sizeof(s_rfid_view.dump_text),
+        DEV_RFID_DUMP_TEXT_LEN,
         "Place card near antenna...\n"
         "UP click: sector +1, DOWN click: sector -1.\n"
         "Current sector: S%02u",
@@ -164,14 +206,17 @@ static void _dev_rfid_append_dump_text(const char* fmt, ...)
     if (fmt == NULL) {
         return;
     }
+    if (!_dev_rfid_bind_dump_text()) {
+        return;
+    }
 
     va_start(args, fmt);
     (void)vsnprintf(line, sizeof(line), fmt, args);
     va_end(args);
 
     used_len = strlen(s_rfid_view.dump_text);
-    if (used_len < (sizeof(s_rfid_view.dump_text) - 1U)) {
-        strncat(s_rfid_view.dump_text, line, sizeof(s_rfid_view.dump_text) - used_len - 1U);
+    if (used_len < (DEV_RFID_DUMP_TEXT_LEN - 1U)) {
+        strncat(s_rfid_view.dump_text, line, DEV_RFID_DUMP_TEXT_LEN - used_len - 1U);
     }
 }
 
@@ -302,6 +347,9 @@ static esp_err_t _dev_rfid_dump_selected_sector(const RFID_uid_s* uid, uint8_t s
 
     if (uid == NULL) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (!_dev_rfid_bind_dump_text()) {
+        return ESP_ERR_NO_MEM;
     }
 
     selected_sector = _dev_rfid_clamp_sector(sector);
@@ -707,6 +755,13 @@ esp_err_t RFID_init(void)
     memset(&s_last_uid_cache, 0, sizeof(s_last_uid_cache));
 
     memset(&s_rfid_view, 0, sizeof(s_rfid_view));
+    if (!_dev_rfid_bind_dump_text()) {
+        (void)mfrc522_deinit();
+        s_RFID.initialized = false;
+        s_RFID.reader_version = 0U;
+        return ESP_ERR_NO_MEM;
+    }
+
     s_rfid_view.reader_version = version;
     s_rfid_view.selected_sector = DEV_RFID_DEFAULT_VIEW_SECTOR;
     s_rfid_view.selected_sector_dirty = true;
@@ -733,6 +788,7 @@ esp_err_t RFID_deinit(void)
     memset(&s_last_uid_cache, 0, sizeof(s_last_uid_cache));
 
     memset(&s_rfid_view, 0, sizeof(s_rfid_view));
+    (void)_dev_rfid_bind_dump_text();
     s_rfid_view.selected_sector = DEV_RFID_DEFAULT_VIEW_SECTOR;
     s_rfid_view.selected_sector_dirty = true;
     _dev_rfid_set_status_text("Reader not ready");
@@ -853,6 +909,10 @@ static esp_err_t _dev_rfid_refresh_snapshot(void)
     uint8_t selected_sector = _dev_rfid_clamp_sector(s_rfid_view.selected_sector);
     bool uid_changed = false;
     bool sector_changed = false;
+
+    if (!_dev_rfid_bind_dump_text()) {
+        return ESP_ERR_NO_MEM;
+    }
 
     if (ret == ESP_ERR_INVALID_STATE) {
         s_rfid_view.card_present = false;
@@ -981,6 +1041,25 @@ esp_err_t dev_rfid_get_snapshot(dev_rfid_snapshot_s* out_snapshot)
 
     if (out_snapshot == NULL) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!_dev_rfid_bind_dump_text()) {
+        memset(out_snapshot, 0, sizeof(*out_snapshot));
+        out_snapshot->reader_ready = false;
+        out_snapshot->card_present = false;
+        out_snapshot->reader_version = s_RFID.reader_version;
+        (void)snprintf(
+            out_snapshot->status_text,
+            sizeof(out_snapshot->status_text),
+            "Reader not ready"
+        );
+        (void)snprintf(out_snapshot->uid_text, sizeof(out_snapshot->uid_text), "UID: --");
+        (void)snprintf(
+            out_snapshot->dump_text,
+            sizeof(out_snapshot->dump_text),
+            "RFID buffer alloc fail"
+        );
+        return ESP_ERR_NO_MEM;
     }
 
     memset(out_snapshot, 0, sizeof(*out_snapshot));

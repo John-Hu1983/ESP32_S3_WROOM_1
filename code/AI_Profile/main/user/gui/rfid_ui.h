@@ -47,7 +47,7 @@ typedef struct {
 
     char status_text[RFID_UI_STATUS_TEXT_LEN];
     char uid_text[RFID_UI_UID_TEXT_LEN];
-    char dump_text[RFID_UI_DUMP_TEXT_LEN];
+    char* dump_text;
 } rfid_ui_runtime_s;
 
 lv_obj_t* rfid_create_screen(

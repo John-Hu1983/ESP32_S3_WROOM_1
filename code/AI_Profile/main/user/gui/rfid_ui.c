@@ -6,11 +6,12 @@ static rfid_ui_runtime_s s_rfid_runtime;
 static portMUX_TYPE s_rfid_lock = portMUX_INITIALIZER_UNLOCKED;
 static char s_rfid_status_cache[RFID_UI_STATUS_TEXT_LEN];
 static char s_rfid_uid_cache[RFID_UI_UID_TEXT_LEN];
-static char s_rfid_dump_cache[RFID_UI_DUMP_TEXT_LEN];
+static char* s_rfid_dump_cache;
 static uint8_t s_rfid_sector_cache;
 static bool s_rfid_card_present_cache;
 static bool s_rfid_card_error_cache;
-static dev_rfid_snapshot_s s_rfid_snapshot_cache;
+static dev_rfid_snapshot_s* s_rfid_snapshot_cache;
+static char* s_rfid_runtime_dump_text;
 
 /*
  * brief : _rfid_ui_timer_cb.
@@ -19,6 +20,78 @@ static dev_rfid_snapshot_s s_rfid_snapshot_cache;
  * type  : private
  */
 static void _rfid_ui_timer_cb(lv_timer_t* timer);
+
+/*
+ * brief : _rfid_alloc_buf.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
+static void* _rfid_alloc_buf(size_t size)
+{
+    void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (ptr == NULL) {
+        ptr = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    return ptr;
+}
+
+/*
+ * brief : _rfid_free_runtime_buffers.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _rfid_free_runtime_buffers(void)
+{
+    if (s_rfid_snapshot_cache != NULL) {
+        heap_caps_free(s_rfid_snapshot_cache);
+        s_rfid_snapshot_cache = NULL;
+    }
+    if (s_rfid_dump_cache != NULL) {
+        heap_caps_free(s_rfid_dump_cache);
+        s_rfid_dump_cache = NULL;
+    }
+    if (s_rfid_runtime_dump_text != NULL) {
+        heap_caps_free(s_rfid_runtime_dump_text);
+        s_rfid_runtime_dump_text = NULL;
+    }
+
+    s_rfid_runtime.dump_text = NULL;
+}
+
+/*
+ * brief : _rfid_alloc_runtime_buffers.
+ * input : none.
+ * output: return value from this function.
+ * type  : private
+ */
+static bool _rfid_alloc_runtime_buffers(void)
+{
+    s_rfid_runtime_dump_text = (char*)_rfid_alloc_buf(RFID_UI_DUMP_TEXT_LEN);
+    if (s_rfid_runtime_dump_text == NULL) {
+        _rfid_free_runtime_buffers();
+        return false;
+    }
+
+    s_rfid_dump_cache = (char*)_rfid_alloc_buf(RFID_UI_DUMP_TEXT_LEN);
+    if (s_rfid_dump_cache == NULL) {
+        _rfid_free_runtime_buffers();
+        return false;
+    }
+
+    s_rfid_snapshot_cache = (dev_rfid_snapshot_s*)_rfid_alloc_buf(sizeof(dev_rfid_snapshot_s));
+    if (s_rfid_snapshot_cache == NULL) {
+        _rfid_free_runtime_buffers();
+        return false;
+    }
+
+    memset(s_rfid_runtime_dump_text, 0, RFID_UI_DUMP_TEXT_LEN);
+    memset(s_rfid_dump_cache, 0, RFID_UI_DUMP_TEXT_LEN);
+    memset(s_rfid_snapshot_cache, 0, sizeof(dev_rfid_snapshot_s));
+    s_rfid_runtime.dump_text = s_rfid_runtime_dump_text;
+    return true;
+}
 
 /*
  * brief : _rfid_obj_valid.
@@ -60,7 +133,8 @@ static uint8_t _rfid_next_sector(uint8_t current_sector, bool increase)
                                                     : (uint8_t)(sector + 1U);
     }
 
-    return (sector <= DEV_RFID_VIEW_SECTOR_MIN) ? DEV_RFID_VIEW_SECTOR_MAX : (uint8_t)(sector - 1U);
+    return (sector <= DEV_RFID_VIEW_SECTOR_MIN) ? DEV_RFID_VIEW_SECTOR_MAX
+                                                : (uint8_t)(sector - 1U);
 }
 
 /*
@@ -69,7 +143,8 @@ static uint8_t _rfid_next_sector(uint8_t current_sector, bool increase)
  * output: none.
  * type  : private
  */
-static void _rfid_apply_indicator_style(lv_obj_t* indicator, bool card_present, bool card_error)
+static void
+_rfid_apply_indicator_style(lv_obj_t* indicator, bool card_present, bool card_error)
 {
     if (!_rfid_obj_valid(indicator)) {
         return;
@@ -167,7 +242,7 @@ static void _rfid_clear_dump_text(rfid_ui_runtime_s* runtime)
 {
     uint8_t sector = DEV_RFID_VIEW_SECTOR_MIN;
 
-    if (runtime == NULL) {
+    if ((runtime == NULL) || (runtime->dump_text == NULL)) {
         return;
     }
 
@@ -176,7 +251,7 @@ static void _rfid_clear_dump_text(rfid_ui_runtime_s* runtime)
     taskENTER_CRITICAL(&s_rfid_lock);
     snprintf(
         runtime->dump_text,
-        sizeof(runtime->dump_text),
+        RFID_UI_DUMP_TEXT_LEN,
         "Place card near antenna...\n"
         "UP click: sector +1, DOWN click: sector -1.\n"
         "Current sector: S%02u",
@@ -204,17 +279,29 @@ static void _rfid_sync_ui(void* param)
         return;
     }
 
-    if (!_rfid_obj_valid(runtime->status_label) || !_rfid_obj_valid(runtime->uid_label)
-        || !_rfid_obj_valid(runtime->sector_label) || !_rfid_obj_valid(runtime->state_indicator)
+    if ((runtime->dump_text == NULL) || (s_rfid_dump_cache == NULL)
+        || !_rfid_obj_valid(runtime->status_label) || !_rfid_obj_valid(runtime->uid_label)
+        || !_rfid_obj_valid(runtime->sector_label)
+        || !_rfid_obj_valid(runtime->state_indicator)
         || !_rfid_obj_valid(runtime->dump_label)) {
         return;
     }
 
     taskENTER_CRITICAL(&s_rfid_lock);
     if (runtime->dirty) {
-        snprintf(s_rfid_status_cache, sizeof(s_rfid_status_cache), "%s", runtime->status_text);
+        snprintf(
+            s_rfid_status_cache,
+            sizeof(s_rfid_status_cache),
+            "%s",
+            runtime->status_text
+        );
         snprintf(s_rfid_uid_cache, sizeof(s_rfid_uid_cache), "%s", runtime->uid_text);
-        snprintf(s_rfid_dump_cache, sizeof(s_rfid_dump_cache), "%s", runtime->dump_text);
+        snprintf(
+            s_rfid_dump_cache,
+            RFID_UI_DUMP_TEXT_LEN,
+            "%s",
+            (runtime->dump_text != NULL) ? runtime->dump_text : ""
+        );
         s_rfid_sector_cache = _rfid_clamp_sector(runtime->selected_sector);
         s_rfid_card_present_cache = runtime->card_present;
         s_rfid_card_error_cache = runtime->card_error;
@@ -240,7 +327,9 @@ static void _rfid_sync_ui(void* param)
     lv_label_set_text(runtime->sector_label, sector_text);
 
     _rfid_apply_indicator_style(
-        runtime->state_indicator, s_rfid_card_present_cache, s_rfid_card_error_cache
+        runtime->state_indicator,
+        s_rfid_card_present_cache,
+        s_rfid_card_error_cache
     );
     lv_label_set_text(runtime->dump_label, s_rfid_dump_cache);
     if (scroll_top && _rfid_obj_valid(runtime->dump_panel)) {
@@ -285,7 +374,8 @@ static void _rfid_request_ui_sync(rfid_ui_runtime_s* runtime)
  * output: none.
  * type  : private
  */
-static void _rfid_apply_snapshot(rfid_ui_runtime_s* runtime, const dev_rfid_snapshot_s* snapshot)
+static void
+_rfid_apply_snapshot(rfid_ui_runtime_s* runtime, const dev_rfid_snapshot_s* snapshot)
 {
     if ((runtime == NULL) || (snapshot == NULL)) {
         return;
@@ -296,9 +386,16 @@ static void _rfid_apply_snapshot(rfid_ui_runtime_s* runtime, const dev_rfid_snap
     runtime->card_present = snapshot->card_present;
     runtime->reader_version = snapshot->reader_version;
     runtime->selected_sector = dev_rfid_get_view_sector();
-    snprintf(runtime->status_text, sizeof(runtime->status_text), "%s", snapshot->status_text);
+    snprintf(
+        runtime->status_text,
+        sizeof(runtime->status_text),
+        "%s",
+        snapshot->status_text
+    );
     snprintf(runtime->uid_text, sizeof(runtime->uid_text), "%s", snapshot->uid_text);
-    snprintf(runtime->dump_text, sizeof(runtime->dump_text), "%s", snapshot->dump_text);
+    if (runtime->dump_text != NULL) {
+        snprintf(runtime->dump_text, RFID_UI_DUMP_TEXT_LEN, "%s", snapshot->dump_text);
+    }
     runtime->dump_need_scroll_top = snapshot->dump_need_scroll_top;
     runtime->dirty = true;
     taskEXIT_CRITICAL(&s_rfid_lock);
@@ -369,7 +466,11 @@ static esp_err_t _rfid_reader_self_check(rfid_ui_runtime_s* runtime)
 
     ret = RFID_get_reader_version(&version);
     if (ret != ESP_OK) {
-        _rfid_set_status_text(runtime, "Self-check fail: version read err=%d", (int)ret);
+        _rfid_set_status_text(
+            runtime,
+            "Self-check fail: version read err=%d",
+            (int)ret
+        );
         return ret;
     }
 
@@ -438,8 +539,12 @@ static esp_err_t _rfid_poll_card_and_refresh(rfid_ui_runtime_s* runtime)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ret = dev_rfid_get_snapshot(&s_rfid_snapshot_cache);
-    _rfid_apply_snapshot(runtime, &s_rfid_snapshot_cache);
+    if (s_rfid_snapshot_cache == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    ret = dev_rfid_get_snapshot(s_rfid_snapshot_cache);
+    _rfid_apply_snapshot(runtime, s_rfid_snapshot_cache);
     _rfid_set_card_error(runtime, (ret != ESP_OK));
 
     if (ret == ESP_ERR_INVALID_STATE) {
@@ -554,7 +659,13 @@ lv_obj_t* rfid_create_screen(
     /* Defensive cleanup for repeated enter/leave cycles. */
     (void)RFID_deinit();
 
+    _rfid_free_runtime_buffers();
+
     memset(&s_rfid_runtime, 0, sizeof(s_rfid_runtime));
+    if (!_rfid_alloc_runtime_buffers()) {
+        ESP_LOGE(TAG, "rfid runtime buffer alloc failed");
+        return NULL;
+    }
 
     s_rfid_runtime.home_cb = home_cb;
     s_rfid_runtime.home_user_ctx = home_user_ctx;
@@ -674,7 +785,10 @@ lv_obj_t* rfid_create_screen(
     ctrl_panel = lv_obj_create(frame);
     lv_obj_set_size(ctrl_panel, lv_pct(100), control_h);
     lv_obj_align(
-        ctrl_panel, LV_ALIGN_TOP_MID, 0, (lv_coord_t)(header_h + section_gap + info_h + section_gap)
+        ctrl_panel,
+        LV_ALIGN_TOP_MID,
+        0,
+        (lv_coord_t)(header_h + section_gap + info_h + section_gap)
     );
     lv_obj_set_style_bg_color(ctrl_panel, lv_color_hex(0x0A2238), 0);
     lv_obj_set_style_bg_opa(ctrl_panel, LV_OPA_COVER, 0);
@@ -696,7 +810,8 @@ lv_obj_t* rfid_create_screen(
         s_rfid_runtime.dump_panel,
         LV_ALIGN_TOP_MID,
         0,
-        (lv_coord_t)(header_h + section_gap + info_h + section_gap + control_h + section_gap)
+        (lv_coord_t)(header_h + section_gap + info_h + section_gap + control_h
+                     + section_gap)
     );
     lv_obj_set_style_bg_color(s_rfid_runtime.dump_panel, lv_color_hex(0x061C2F), 0);
     lv_obj_set_style_bg_opa(s_rfid_runtime.dump_panel, LV_OPA_COVER, 0);
@@ -729,7 +844,9 @@ lv_obj_t* rfid_create_screen(
         s_rfid_runtime.state_indicator = NULL;
         s_rfid_runtime.dump_panel = NULL;
         s_rfid_runtime.dump_label = NULL;
+        s_rfid_runtime.dump_text = NULL;
         lv_obj_del(screen);
+        _rfid_free_runtime_buffers();
         ESP_LOGE(TAG, "lv_timer_create failed");
         return NULL;
     }
@@ -761,7 +878,9 @@ lv_obj_t* rfid_create_screen(
         s_rfid_runtime.state_indicator = NULL;
         s_rfid_runtime.dump_panel = NULL;
         s_rfid_runtime.dump_label = NULL;
+        s_rfid_runtime.dump_text = NULL;
         lv_obj_del(screen);
+        _rfid_free_runtime_buffers();
         ESP_LOGE(TAG, "xTaskCreate failed");
         return NULL;
     }
@@ -812,7 +931,12 @@ void rfid_destroy_screen(lv_obj_t* screen)
     s_rfid_runtime.dump_label = NULL;
     s_rfid_runtime.status_text[0] = '\0';
     s_rfid_runtime.uid_text[0] = '\0';
-    s_rfid_runtime.dump_text[0] = '\0';
+    if (s_rfid_runtime.dump_text != NULL) {
+        s_rfid_runtime.dump_text[0] = '\0';
+    }
+    s_rfid_runtime.dump_text = NULL;
+
+    _rfid_free_runtime_buffers();
 
     if ((screen != NULL) && lv_obj_is_valid(screen)) {
         lv_obj_del(screen);
