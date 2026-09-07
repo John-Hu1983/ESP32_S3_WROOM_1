@@ -108,6 +108,12 @@
 #define GPBA02B_PWM_CN15_PORT              (GPBA02B_PORT_C)
 #define GPBA02B_PWM_CN15_PIN               (7)
 
+/* Printer*/
+#define PRINTER_UART_HOST                  (UART_NUM_1)
+#define PRINTER_UART_BAUDRATE              (115200)
+#define PRINTER_UART_TX_GPIO               (GPIO_NUM_17)
+#define PRINTER_UART_RX_GPIO               (GPIO_NUM_16)
+
 // clang-format on
 
 #endif  // _BOARD_CONFIG_H_
