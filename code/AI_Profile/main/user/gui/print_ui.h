@@ -24,13 +24,7 @@ typedef struct {
     btn_scan_s button_scan;
 
     lv_obj_t* root;
-    lv_obj_t* status_label;
-    lv_obj_t* state_indicator;
-    lv_obj_t* temp_value_label;
-    lv_obj_t* paper_value_label;
-    lv_obj_t* voltage_value_label;
-    lv_obj_t* action_label;
-    lv_obj_t* command_labels[PRINT_UI_CMD_COUNT];
+    lv_obj_t* info_table;
 
     bool printer_ready;
     bool status_valid;

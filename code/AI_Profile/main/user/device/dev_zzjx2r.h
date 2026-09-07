@@ -63,6 +63,18 @@ typedef enum {
 } zzjx2r_hri_font_t;
 
 typedef struct {
+    bool initialized;
+    uart_port_t uart_port;
+    gpio_num_t tx_io_num;
+    gpio_num_t rx_io_num;
+    gpio_num_t rts_io_num;
+    gpio_num_t cts_io_num;
+    uint32_t write_timeout_ms;
+    uint32_t lock_timeout_ms;
+    SemaphoreHandle_t lock;
+} zzjx2r_ctx_t;
+
+typedef struct {
     uint8_t tph_temperature_celsius;
     uint16_t paper_detect_raw;
     uint16_t working_voltage_raw;

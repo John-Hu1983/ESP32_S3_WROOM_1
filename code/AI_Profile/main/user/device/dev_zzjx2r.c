@@ -1,16 +1,6 @@
 #include "dev_zzjx2r.h"
 
-typedef struct {
-    bool initialized;
-    uart_port_t uart_port;
-    gpio_num_t tx_io_num;
-    gpio_num_t rx_io_num;
-    gpio_num_t rts_io_num;
-    gpio_num_t cts_io_num;
-    uint32_t write_timeout_ms;
-    uint32_t lock_timeout_ms;
-    SemaphoreHandle_t lock;
-} zzjx2r_ctx_t;
+#define TAG "dev_zzjx2r"
 
 static zzjx2r_ctx_t s_zzjx2r = {
     .initialized = false,
@@ -182,7 +172,7 @@ static uint16_t _zzjx2r_read_u16_le(const uint8_t* data)
     if (data == NULL) {
         return 0U;
     }
-    return (uint16_t)((uint16_t)data[0] | ((uint16_t)data[1] << 8));
+    return (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
 }
 
 /*
@@ -457,6 +447,7 @@ esp_err_t zzjx2r_write_line(const char* text)
  */
 esp_err_t zzjx2r_cmd_detect_status(zzjx2r_detect_status_t* out_status)
 {
+    const int calibration = 210;
     esp_err_t ret = ESP_OK;
     uint8_t raw[ZZJX2R_STATUS_DETECT_RESPONSE_LEN] = { 0 };
 
@@ -479,9 +470,11 @@ esp_err_t zzjx2r_cmd_detect_status(zzjx2r_detect_status_t* out_status)
     }
 
     out_status->tph_temperature_celsius = raw[1];
-    out_status->paper_detect_raw = _zzjx2r_read_u16_le(&raw[2]);
-    out_status->working_voltage_raw = _zzjx2r_read_u16_le(&raw[4]);
-
+    out_status->paper_detect_raw = _zzjx2r_read_u16_le(&raw[2]) >> 2;
+    out_status->working_voltage_raw = (uint16_t)(_zzjx2r_read_u16_le(&raw[4]) * 5 / 8);
+    if (out_status->working_voltage_raw > calibration) {
+        out_status->working_voltage_raw -= calibration;
+    }
     return ESP_OK;
 }
 
