@@ -1,5 +1,7 @@
 #include "access_assets.h"
 
+extern const uint8_t animation_girl_bin_start[] asm("_binary_animation_girl_bin_start");
+extern const uint8_t animation_girl_bin_end[] asm("_binary_animation_girl_bin_end");
 extern const uint8_t butterfly_bin_start[] asm("_binary_butterfly_bin_start");
 extern const uint8_t butterfly_bin_end[] asm("_binary_butterfly_bin_end");
 extern const uint8_t cat_sit_bin_start[] asm("_binary_cat_sit_bin_start");
@@ -12,26 +14,39 @@ extern const uint8_t lovable_dog_bin_start[] asm("_binary_lovable_dog_bin_start"
 extern const uint8_t lovable_dog_bin_end[] asm("_binary_lovable_dog_bin_end");
 extern const uint8_t maneki_neko_bin_start[] asm("_binary_maneki_neko_bin_start");
 extern const uint8_t maneki_neko_bin_end[] asm("_binary_maneki_neko_bin_end");
+extern const uint8_t pandas_bamboo_bin_start[] asm("_binary_pandas_bamboo_bin_start");
+extern const uint8_t pandas_bamboo_bin_end[] asm("_binary_pandas_bamboo_bin_end");
 extern const uint8_t panda_bin_start[] asm("_binary_panda_bin_start");
 extern const uint8_t panda_bin_end[] asm("_binary_panda_bin_end");
 extern const uint8_t robot_bin_start[] asm("_binary_robot_bin_start");
 extern const uint8_t robot_bin_end[] asm("_binary_robot_bin_end");
 extern const uint8_t run_rabbit_bin_start[] asm("_binary_run_rabbit_bin_start");
 extern const uint8_t run_rabbit_bin_end[] asm("_binary_run_rabbit_bin_end");
+extern const uint8_t start_your_day_bin_start[] asm("_binary_start_your_day_bin_start");
+extern const uint8_t start_your_day_bin_end[] asm("_binary_start_your_day_bin_end");
 extern const uint8_t thankyou_bin_start[] asm("_binary_thankyou_bin_start");
 extern const uint8_t thankyou_bin_end[] asm("_binary_thankyou_bin_end");
+extern const uint8_t dragon_bin_start[] asm("_binary_dragon_bin_start");
+extern const uint8_t dragon_bin_end[] asm("_binary_dragon_bin_end");
+extern const uint8_t pirate_ship_bin_start[] asm("_binary_pirate_ship_bin_start");
+extern const uint8_t pirate_ship_bin_end[] asm("_binary_pirate_ship_bin_end");
 
 static const access_assets_bin_item_t s_access_assets_bins[] = {
+    { "animation_girl.bin", animation_girl_bin_start, animation_girl_bin_end },
     { "butterfly.bin", butterfly_bin_start, butterfly_bin_end },
     { "cat_sit.bin", cat_sit_bin_start, cat_sit_bin_end },
     { "goodluck.bin", goodluck_bin_start, goodluck_bin_end },
     { "landscape.bin", landscape_bin_start, landscape_bin_end },
     { "lovable_dog.bin", lovable_dog_bin_start, lovable_dog_bin_end },
     { "maneki_neko.bin", maneki_neko_bin_start, maneki_neko_bin_end },
+    { "pandas_bamboo.bin", pandas_bamboo_bin_start, pandas_bamboo_bin_end },
     { "panda.bin", panda_bin_start, panda_bin_end },
     { "robot.bin", robot_bin_start, robot_bin_end },
     { "run_rabbit.bin", run_rabbit_bin_start, run_rabbit_bin_end },
+    { "start_your_day.bin", start_your_day_bin_start, start_your_day_bin_end },
     { "thankyou.bin", thankyou_bin_start, thankyou_bin_end },
+    { "dragon.bin", dragon_bin_start, dragon_bin_end },
+    { "pirate_ship.bin", pirate_ship_bin_start, pirate_ship_bin_end },
 };
 
 esp_err_t access_assets_get_bin(

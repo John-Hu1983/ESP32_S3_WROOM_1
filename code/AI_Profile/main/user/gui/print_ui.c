@@ -57,17 +57,20 @@ static esp_err_t _print_cmd_feed(void)
  */
 static esp_err_t _print_cmd_image(void)
 {
-    const char* bin[] = { "butterfly.bin", "cat_sit.bin",     "goodluck.bin",
-                          "landscape.bin", "lovable_dog.bin", "maneki_neko.bin",
-                          "panda.bin",     "robot.bin",       "run_rabbit.bin",
-                          "thankyou.bin" };
+    const char* bin[] = {
+        "animation_girl.bin",
+        "dragon.bin",
+        "pirate_ship.bin",
+    };
     esp_err_t ret = ESP_OK;
     static size_t bin_index = 0U;
+
     ret = zzjx2r_print_via_bin(bin[bin_index]);
     bin_index = (bin_index + 1U) % (sizeof(bin) / sizeof(bin[0]));
     if (ret != ESP_OK) {
         return ret;
     }
+
     return ESP_OK;
 }
 
@@ -722,6 +725,11 @@ static void _print_ui_task(void* param)
     uint32_t retry_elapsed_ms = 0U;
     btn_status_e btn_val = Btn_Idle;
 
+#ifdef PRINTER_UART_DTR_GPIO
+    (void)gpio_set_direction(PRINTER_UART_DTR_GPIO, GPIO_MODE_INPUT);
+    (void)gpio_set_pull_mode(PRINTER_UART_DTR_GPIO, GPIO_PULLUP_ONLY);
+#endif
+
     while (1) {
         btn_val = button_scan_state(&runtime->button_scan, PRINT_UI_TASK_PERIOD_MS);
         if ((btn_val == Btn_Both_Click) && (runtime->home_cb != NULL)) {
@@ -740,7 +748,7 @@ static void _print_ui_task(void* param)
         poll_elapsed_ms += PRINT_UI_TASK_PERIOD_MS;
         if (poll_elapsed_ms >= PRINT_UI_STATUS_PERIOD_MS) {
             poll_elapsed_ms = 0U;
-            _print_poll_printer_status(runtime);
+            // _print_poll_printer_status(runtime);
         }
 
         taskENTER_CRITICAL(&s_print_lock);

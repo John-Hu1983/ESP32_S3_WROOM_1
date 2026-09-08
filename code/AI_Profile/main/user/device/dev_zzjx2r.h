@@ -11,6 +11,7 @@
 
 #include "freertos/semphr.h"
 
+#include "bsp_global.h"
 #include "user/inc/user_config.h"
 #include "user/assets/access_assets.h"
 

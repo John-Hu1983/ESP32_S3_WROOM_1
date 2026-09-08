@@ -110,9 +110,10 @@
 
 /* Printer*/
 #define PRINTER_UART_HOST                  (UART_NUM_1)
-#define PRINTER_UART_BAUDRATE              (115200)
+#define PRINTER_UART_BAUDRATE              (230400)
 #define PRINTER_UART_TX_GPIO               (GPIO_NUM_17)
 #define PRINTER_UART_RX_GPIO               (GPIO_NUM_16)
+#define PRINTER_UART_DTR_GPIO              (GPIO_NUM_15)
 
 // clang-format on
 

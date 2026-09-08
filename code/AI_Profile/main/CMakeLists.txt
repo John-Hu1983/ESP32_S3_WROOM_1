@@ -1085,16 +1085,21 @@ if(CONFIG_BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD)
 endif()
 
 set(PRINTER_ASSET_BINS
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/animation_girl.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/butterfly.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/cat_sit.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/goodluck.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/landscape.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/lovable_dog.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/maneki_neko.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/pandas_bamboo.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/panda.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/robot.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/run_rabbit.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/start_your_day.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/thankyou.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/dragon.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/pirate_ship.bin"
 )
 
 idf_component_register(SRCS ${SOURCES}

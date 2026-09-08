@@ -162,16 +162,31 @@ static esp_err_t _zzjx2r_send_cmd(const uint8_t* cmd, size_t cmd_len)
 }
 
 /*
+ * brief : _zzjx2r_wait_flow_ready.
+ * input : none.
+ * output: return value from this function.
+ * type  : private
+ */
+static esp_err_t _zzjx2r_wait_flow_ready(void)
+{
+#ifdef PRINTER_UART_DTR_GPIO
+    if (_zzjx2r_gpio_is_valid(PRINTER_UART_DTR_GPIO)) {
+        while (gpio_get_level(PRINTER_UART_DTR_GPIO) != 0) {
+            delay_ms(10u);
+        }
+    }
+#endif
+    return ESP_OK;
+}
+
+/*
  * brief : _zzjx2r_write_chunked_locked.
  * input : see parameters.
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _zzjx2r_write_chunked_locked(
-    const uint8_t* data,
-    size_t data_len,
-    size_t chunk_bytes
-)
+static esp_err_t
+_zzjx2r_write_chunked_locked(const uint8_t* data, size_t data_len, size_t chunk_bytes)
 {
     esp_err_t ret = ESP_OK;
     size_t offset = 0U;
@@ -188,6 +203,11 @@ static esp_err_t _zzjx2r_write_chunked_locked(
         chunk_len = data_len - offset;
         if (chunk_len > chunk_bytes) {
             chunk_len = chunk_bytes;
+        }
+
+        ret = _zzjx2r_wait_flow_ready();
+        if (ret != ESP_OK) {
+            return ret;
         }
 
         ret = _zzjx2r_write_locked(&data[offset], chunk_len);
@@ -504,11 +524,8 @@ esp_err_t zzjx2r_print_via_bin(const char* bin_name)
         return ret;
     }
 
-    ret = _zzjx2r_write_chunked_locked(
-        bin_data,
-        data_len,
-        ZZJX2R_BULK_WRITE_CHUNK_BYTES
-    );
+    ret =
+        _zzjx2r_write_chunked_locked(bin_data, data_len, ZZJX2R_BULK_WRITE_CHUNK_BYTES);
     _zzjx2r_give_lock();
     return ret;
 }
