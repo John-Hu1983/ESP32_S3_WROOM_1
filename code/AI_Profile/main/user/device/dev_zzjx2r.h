@@ -12,6 +12,7 @@
 #include "freertos/semphr.h"
 
 #include "user/inc/user_config.h"
+#include "user/assets/access_assets.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,6 +26,7 @@ extern "C" {
 #define ZZJX2R_LOCK_TIMEOUT_MS_DEFAULT     (1000)
 #define ZZJX2R_MAX_BARCODE_BYTES           (255U)
 #define ZZJX2R_STATUS_DETECT_RESPONSE_LEN  (6U)
+#define ZZJX2R_BULK_WRITE_CHUNK_BYTES      (256U)
 
 #define ZZJX2R_PRINT_MODE_FONT_B      (0x01U)
 #define ZZJX2R_PRINT_MODE_EMPHASIZED  (0x08U)
@@ -125,6 +127,7 @@ esp_err_t zzjx2r_cmd_set_hri_font(zzjx2r_hri_font_t font);
 esp_err_t zzjx2r_cmd_set_barcode_height(uint8_t height_dots);
 esp_err_t zzjx2r_cmd_set_barcode_width(uint8_t width_dots);
 esp_err_t zzjx2r_cmd_print_barcode_code128(const uint8_t* data, size_t data_len);
+esp_err_t zzjx2r_print_via_bin(const char* bin_name);
 
 #ifdef __cplusplus
 }

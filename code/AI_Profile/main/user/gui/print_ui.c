@@ -8,28 +8,24 @@
 
 #define TAG "print_ui"
 
-// clang-format off
-#define PRINT_UI_TABLE_COLS          (2U)
-#define PRINT_UI_TABLE_ROW_HEADER    (0U)
-#define PRINT_UI_TABLE_ROW_TEMP      (1U)
-#define PRINT_UI_TABLE_ROW_PAPER     (2U)
-#define PRINT_UI_TABLE_ROW_VOLTAGE   (3U)
-#define PRINT_UI_TABLE_ROW_STATUS    (4U)
-#define PRINT_UI_TABLE_ROW_ACTION    (5U)
-#define PRINT_UI_TABLE_ROW_CMD_HINT  (6U)
-#define PRINT_UI_TABLE_ROW_CMD_START (7U)
-#define PRINT_UI_TABLE_ROWS          (PRINT_UI_TABLE_ROW_CMD_START + PRINT_UI_CMD_COUNT)
-// clang-format on
-
-typedef esp_err_t (*print_ui_cmd_fn_t)(void);
-
-typedef struct {
-    const char* name;
-    print_ui_cmd_fn_t exec;
-} print_ui_cmd_s;
-
 static print_ui_runtime_s s_print_runtime;
 static portMUX_TYPE s_print_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static esp_err_t _print_cmd_clear(void);
+static esp_err_t _print_cmd_feed(void);
+static esp_err_t _print_cmd_image(void);
+static esp_err_t _print_cmd_text(void);
+static esp_err_t _print_cmd_qrcode(void);
+static esp_err_t _print_cmd_Auto(void);
+
+static const print_ui_cmd_s s_print_cmds[PRINT_UI_CMD_COUNT] = {
+    { LV_SYMBOL_WARNING, "Clear", 0xF4D3D9, _print_cmd_clear },
+    { LV_SYMBOL_LIST, "Feed", 0xD8F0C6, _print_cmd_feed },
+    { LV_SYMBOL_REFRESH, "Image", 0xCDEBFF, _print_cmd_image },
+    { LV_SYMBOL_FILE, "Text", 0xFCE4B7, _print_cmd_text },
+    { LV_SYMBOL_WIFI, "QR", 0xD6F2F6, _print_cmd_qrcode },
+    { LV_SYMBOL_SETTINGS, "Automatic", 0xE4D8FB, _print_cmd_Auto },
+};
 
 /*
  * brief : _print_cmd_clear.
@@ -43,34 +39,45 @@ static esp_err_t _print_cmd_clear(void)
 }
 
 /*
- * brief : _print_cmd_feed_1_line.
+ * brief : _print_cmd_feed.
  * input : none.
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_feed_1_line(void)
+static esp_err_t _print_cmd_feed(void)
 {
-    return zzjx2r_cmd_print_and_feed_lines(1U);
+    return zzjx2r_cmd_print_and_feed_lines(100U);
 }
 
 /*
- * brief : _print_cmd_feed_3_lines.
+ * brief : _print_cmd_image.
  * input : none.
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_feed_3_lines(void)
+static esp_err_t _print_cmd_image(void)
 {
-    return zzjx2r_cmd_print_and_feed_lines(3U);
+    const char* bin[] = { "butterfly.bin", "cat_sit.bin",     "goodluck.bin",
+                          "landscape.bin", "lovable_dog.bin", "maneki_neko.bin",
+                          "panda.bin",     "robot.bin",       "run_rabbit.bin",
+                          "thankyou.bin" };
+    esp_err_t ret = ESP_OK;
+    static size_t bin_index = 0U;
+    ret = zzjx2r_print_via_bin(bin[bin_index]);
+    bin_index = (bin_index + 1U) % (sizeof(bin) / sizeof(bin[0]));
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    return ESP_OK;
 }
 
 /*
- * brief : _print_cmd_print_sample_text.
+ * brief : _print_cmd_text.
  * input : none.
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_print_sample_text(void)
+static esp_err_t _print_cmd_text(void)
 {
     esp_err_t ret = ESP_OK;
 
@@ -93,12 +100,55 @@ static esp_err_t _print_cmd_print_sample_text(void)
 }
 
 /*
- * brief : _print_cmd_style_demo.
+ * brief : _print_cmd_qrcode.
  * input : none.
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_style_demo(void)
+static esp_err_t _print_cmd_qrcode(void)
+{
+    static const uint8_t qr_payload[] = "https://xiao-zhi.local/qr-demo";
+    esp_err_t ret = ESP_OK;
+
+    ret = zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_CENTER);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = zzjx2r_cmd_set_barcode_width(2U);
+    if (ret != ESP_OK) {
+        (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+        return ret;
+    }
+
+    ret = zzjx2r_cmd_set_barcode_height(72U);
+    if (ret != ESP_OK) {
+        (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+        return ret;
+    }
+
+    ret = zzjx2r_cmd_print_barcode_code128(qr_payload, sizeof(qr_payload) - 1U);
+    if (ret != ESP_OK) {
+        (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+        return ret;
+    }
+
+    ret = zzjx2r_write_line("QR event demo");
+    (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    return zzjx2r_cmd_print_and_feed_lines(2U);
+}
+
+/*
+ * brief : _print_cmd_Auto.
+ * input : none.
+ * output: return value from this function.
+ * type  : private
+ */
+static esp_err_t _print_cmd_Auto(void)
 {
     esp_err_t ret = ESP_OK;
 
@@ -132,14 +182,6 @@ static esp_err_t _print_cmd_style_demo(void)
     return zzjx2r_cmd_print_and_feed_lines(1U);
 }
 
-static const print_ui_cmd_s s_print_cmds[PRINT_UI_CMD_COUNT] = {
-    { "Clear printer", _print_cmd_clear },
-    { "Feed 1 line", _print_cmd_feed_1_line },
-    { "Feed 3 lines", _print_cmd_feed_3_lines },
-    { "Print sample text", _print_cmd_print_sample_text },
-    { "Print style demo", _print_cmd_style_demo },
-};
-
 /*
  * brief : _print_obj_valid.
  * input : see parameters.
@@ -149,6 +191,155 @@ static const print_ui_cmd_s s_print_cmds[PRINT_UI_CMD_COUNT] = {
 static bool _print_obj_valid(lv_obj_t* obj)
 {
     return (obj != NULL) && lv_obj_is_valid(obj);
+}
+
+/*
+ * brief : _print_apply_command_tile_style.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
+static void _print_apply_command_tile_style(
+    lv_obj_t* btn,
+    lv_obj_t* symbol_label,
+    lv_obj_t* name_label,
+    uint32_t color_hex,
+    bool selected
+)
+{
+    lv_color_t base_color = lv_color_hex(color_hex);
+    lv_color_t text_color = lv_color_hex(0x1D3247);
+    lv_color_t border_color = lv_color_hex(0xB6D2E8);
+
+    if (!_print_obj_valid(btn) || !_print_obj_valid(symbol_label)
+        || !_print_obj_valid(name_label)) {
+        return;
+    }
+
+    if (selected) {
+        border_color = lv_color_hex(0x2D76AC);
+        lv_obj_set_style_shadow_width(btn, 10, 0);
+        lv_obj_set_style_shadow_opa(btn, LV_OPA_30, 0);
+    }
+    else {
+        lv_obj_set_style_shadow_width(btn, 3, 0);
+        lv_obj_set_style_shadow_opa(btn, LV_OPA_20, 0);
+    }
+
+    lv_obj_set_style_bg_color(btn, base_color, 0);
+    lv_obj_set_style_bg_opa(btn, selected ? LV_OPA_80 : LV_OPA_70, 0);
+    lv_obj_set_style_border_color(btn, border_color, 0);
+    lv_obj_set_style_border_width(btn, selected ? 3 : 1, 0);
+    lv_obj_set_style_shadow_color(btn, lv_color_hex(0x3D84BD), 0);
+    lv_obj_set_style_text_color(symbol_label, text_color, 0);
+    lv_obj_set_style_text_color(name_label, text_color, 0);
+}
+
+/*
+ * brief : _print_apply_status_title_style.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
+static void
+_print_apply_status_title_style(lv_obj_t* label, bool printer_ready, bool status_valid)
+{
+    if (!_print_obj_valid(label)) {
+        return;
+    }
+
+    if (!printer_ready) {
+        lv_obj_set_style_text_color(label, lv_color_hex(0xC53B3B), 0);
+    }
+    else if (!status_valid) {
+        lv_obj_set_style_text_color(label, lv_color_hex(0xA56700), 0);
+    }
+    else {
+        lv_obj_set_style_text_color(label, lv_color_hex(0x1C8F39), 0);
+    }
+}
+
+/*
+ * brief : _print_create_metric_card.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
+static lv_obj_t* _print_create_metric_card(
+    lv_obj_t* parent,
+    lv_align_t align,
+    lv_coord_t x_ofs,
+    const char* metric_icon,
+    const char* metric_name,
+    lv_color_t card_bg_color,
+    lv_color_t icon_color,
+    bool draw_right_sep,
+    lv_obj_t** out_value_label
+)
+{
+    lv_obj_t* card = NULL;
+    lv_obj_t* icon_lab = NULL;
+    lv_obj_t* name_lab = NULL;
+    lv_obj_t* sep = NULL;
+    lv_obj_t* value_label = NULL;
+
+    if ((parent == NULL) || (metric_icon == NULL) || (metric_name == NULL)
+        || (out_value_label == NULL)) {
+        return NULL;
+    }
+
+    card = lv_obj_create(parent);
+    lv_obj_set_size(card, lv_pct(32), lv_pct(100));
+    lv_obj_align(card, align, x_ofs, 0);
+    lv_obj_set_style_bg_color(card, card_bg_color, 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(card, 0, 0);
+    lv_obj_set_style_radius(card, 0, 0);
+    lv_obj_set_style_pad_left(card, 4, 0);
+    lv_obj_set_style_pad_right(card, 4, 0);
+    lv_obj_set_style_pad_top(card, 5, 0);
+    lv_obj_set_style_pad_bottom(card, 5, 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    icon_lab = lv_label_create(card);
+    lv_label_set_text(icon_lab, metric_icon);
+    lv_obj_set_style_text_color(icon_lab, icon_color, 0);
+    lv_obj_set_style_text_font(icon_lab, &DESKTOP_TEXT_FONT, 0);
+    lv_obj_align(icon_lab, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    name_lab = lv_label_create(card);
+    lv_label_set_text(name_lab, metric_name);
+    lv_obj_set_style_text_color(name_lab, lv_color_hex(0x1A2733), 0);
+    lv_obj_set_style_text_font(name_lab, &DESKTOP_TEXT_FONT, 0);
+    lv_obj_align_to(name_lab, icon_lab, LV_ALIGN_OUT_RIGHT_MID, 6, 0);
+
+    value_label = lv_label_create(card);
+    lv_label_set_text(value_label, "--");
+    lv_obj_set_style_text_color(value_label, lv_color_hex(0x202A35), 0);
+#if CONFIG_LV_FONT_MONTSERRAT_22
+    lv_obj_set_style_text_font(value_label, &lv_font_montserrat_22, 0);
+#elif CONFIG_LV_FONT_MONTSERRAT_20
+    lv_obj_set_style_text_font(value_label, &lv_font_montserrat_20, 0);
+#elif CONFIG_LV_FONT_MONTSERRAT_18
+    lv_obj_set_style_text_font(value_label, &lv_font_montserrat_18, 0);
+#else
+    lv_obj_set_style_text_font(value_label, &DESKTOP_TEXT_FONT, 0);
+#endif
+    lv_obj_align(value_label, LV_ALIGN_BOTTOM_MID, 0, -1);
+
+    if (draw_right_sep) {
+        sep = lv_obj_create(card);
+        lv_obj_set_size(sep, 1, lv_pct(78));
+        lv_obj_align(sep, LV_ALIGN_RIGHT_MID, -1, 0);
+        lv_obj_set_style_bg_color(sep, lv_color_hex(0xC6D8E8), 0);
+        lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(sep, 0, 0);
+        lv_obj_set_style_radius(sep, 0, 0);
+        lv_obj_clear_flag(sep, LV_OBJ_FLAG_SCROLLABLE);
+    }
+
+    *out_value_label = value_label;
+    return card;
 }
 
 /*
@@ -398,15 +589,20 @@ static void _print_sync_ui(void* param)
     uint16_t voltage_raw = 0U;
     char status_text[PRINT_UI_TEXT_LEN] = { 0 };
     char action_text[PRINT_UI_TEXT_LEN] = { 0 };
-    char text_buf[96] = { 0 };
-    uint16_t row = 0U;
+    char value_text[32] = { 0 };
+    lv_color_t metric_value_color = lv_color_hex(0x7F95A9);
     uint8_t i = 0U;
 
     if (runtime == NULL) {
         return;
     }
 
-    if (!_print_obj_valid(runtime->info_table)) {
+    if (!_print_obj_valid(runtime->temp_value_label)
+        || !_print_obj_valid(runtime->paper_value_label)
+        || !_print_obj_valid(runtime->voltage_value_label)
+        || !_print_obj_valid(runtime->status_title_label)
+        || !_print_obj_valid(runtime->status_detail_label)
+        || !_print_obj_valid(runtime->action_label)) {
         return;
     }
 
@@ -430,133 +626,67 @@ static void _print_sync_ui(void* param)
         return;
     }
 
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_HEADER,
-        0U,
-        "Field"
+    lv_label_set_text(runtime->status_title_label, printer_ready ? "Ready" : "Offline");
+    _print_apply_status_title_style(
+        runtime->status_title_label,
+        printer_ready,
+        status_valid
     );
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_HEADER,
-        1U,
-        "Value"
-    );
-
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_STATUS,
-        0U,
-        printer_ready ? "Status(READY)" : "Status(OFFLINE)"
-    );
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_STATUS,
-        1U,
-        status_text
-    );
+    lv_label_set_text(runtime->status_detail_label, status_text);
+    lv_label_set_text(runtime->action_label, action_text);
 
     if (status_valid) {
-        (void)snprintf(text_buf, sizeof(text_buf), "%u C", (unsigned)temp_c);
-        lv_table_set_cell_value(
-            runtime->info_table,
-            PRINT_UI_TABLE_ROW_TEMP,
-            1U,
-            text_buf
-        );
+        metric_value_color =
+            (paper_raw == 0U) ? lv_color_hex(0x1D8D35) : lv_color_hex(0xC2651A);
 
-        (void)snprintf(text_buf, sizeof(text_buf), "%u", (unsigned)paper_raw);
-        lv_table_set_cell_value(
-            runtime->info_table,
-            PRINT_UI_TABLE_ROW_PAPER,
-            1U,
-            text_buf
-        );
+        (void)snprintf(value_text, sizeof(value_text), "%u C", (unsigned)temp_c);
+        lv_label_set_text(runtime->temp_value_label, value_text);
+        lv_obj_set_style_text_color(runtime->temp_value_label, metric_value_color, 0);
 
-        (void)snprintf(text_buf, sizeof(text_buf), "%u", (unsigned)voltage_raw);
-        lv_table_set_cell_value(
-            runtime->info_table,
-            PRINT_UI_TABLE_ROW_VOLTAGE,
-            1U,
-            text_buf
+        (void)snprintf(value_text, sizeof(value_text), "%u", (unsigned)paper_raw);
+        lv_label_set_text(runtime->paper_value_label, value_text);
+        lv_obj_set_style_text_color(runtime->paper_value_label, metric_value_color, 0);
+
+        (void)snprintf(value_text, sizeof(value_text), "%u mV", (unsigned)voltage_raw);
+        lv_label_set_text(runtime->voltage_value_label, value_text);
+        lv_obj_set_style_text_color(
+            runtime->voltage_value_label,
+            metric_value_color,
+            0
         );
     }
     else {
-        lv_table_set_cell_value(runtime->info_table, PRINT_UI_TABLE_ROW_TEMP, 1U, "--");
-        lv_table_set_cell_value(
-            runtime->info_table,
-            PRINT_UI_TABLE_ROW_PAPER,
-            1U,
-            "--"
+        lv_label_set_text(runtime->temp_value_label, "--");
+        lv_label_set_text(runtime->paper_value_label, "--");
+        lv_label_set_text(runtime->voltage_value_label, "--");
+        lv_obj_set_style_text_color(
+            runtime->temp_value_label,
+            lv_color_hex(0x7F95A9),
+            0
         );
-        lv_table_set_cell_value(
-            runtime->info_table,
-            PRINT_UI_TABLE_ROW_VOLTAGE,
-            1U,
-            "--"
+        lv_obj_set_style_text_color(
+            runtime->paper_value_label,
+            lv_color_hex(0x7F95A9),
+            0
+        );
+        lv_obj_set_style_text_color(
+            runtime->voltage_value_label,
+            lv_color_hex(0x7F95A9),
+            0
         );
     }
 
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_TEMP,
-        0U,
-        "Temp(C)"
-    );
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_PAPER,
-        0U,
-        "PaperRaw"
-    );
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_VOLTAGE,
-        0U,
-        "VoltageRaw"
-    );
-
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_ACTION,
-        0U,
-        "Action"
-    );
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_ACTION,
-        1U,
-        action_text
-    );
-
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_CMD_HINT,
-        0U,
-        "Commands"
-    );
-    lv_table_set_cell_value(
-        runtime->info_table,
-        PRINT_UI_TABLE_ROW_CMD_HINT,
-        1U,
-        "UP/DOWN select, HOLD run"
-    );
-
     for (i = 0U; i < PRINT_UI_CMD_COUNT; ++i) {
-        row = (uint16_t)(PRINT_UI_TABLE_ROW_CMD_START + i);
-        if (i < cmd_count) {
-            (void)snprintf(text_buf, sizeof(text_buf), "%s", s_print_cmds[i].name);
-            lv_table_set_cell_value(
-                runtime->info_table,
-                row,
-                0U,
-                (i == selected) ? ">" : " "
+        if (_print_obj_valid(runtime->command_btn[i])
+            && _print_obj_valid(runtime->command_symbol_label[i])
+            && _print_obj_valid(runtime->command_name_label[i])) {
+            _print_apply_command_tile_style(
+                runtime->command_btn[i],
+                runtime->command_symbol_label[i],
+                runtime->command_name_label[i],
+                s_print_cmds[i].color_hex,
+                (i < cmd_count) && (i == selected)
             );
-            lv_table_set_cell_value(runtime->info_table, row, 1U, text_buf);
-        }
-        else {
-            lv_table_set_cell_value(runtime->info_table, row, 0U, "");
-            lv_table_set_cell_value(runtime->info_table, row, 1U, "");
         }
     }
 }
@@ -647,11 +777,28 @@ lv_obj_t* print_create_screen(
 {
     lv_obj_t* screen = NULL;
     lv_obj_t* frame = NULL;
-    lv_coord_t table_w = 0;
-    lv_coord_t col0_w = 0;
-    lv_coord_t col1_w = 0;
+    lv_obj_t* metrics_panel = NULL;
+    lv_obj_t* cmd_panel = NULL;
+    lv_obj_t* cmd_grid = NULL;
+    lv_obj_t* status_panel = NULL;
+    lv_coord_t usable_h = 0;
+    lv_coord_t metrics_h = 0;
+    lv_coord_t status_h = 0;
+    lv_coord_t cmd_h = 0;
+    lv_coord_t cmd_min = 0;
+    lv_coord_t gap = 0;
+    lv_coord_t need = 0;
     BaseType_t task_ok = pdFAIL;
     esp_err_t ret = ESP_OK;
+    uint8_t i = 0U;
+
+    static lv_coord_t cmd_col_dsc[] = { LV_GRID_FR(1),
+                                        LV_GRID_FR(1),
+                                        LV_GRID_TEMPLATE_LAST };
+    static lv_coord_t cmd_row_dsc[] = { LV_GRID_FR(1),
+                                        LV_GRID_FR(1),
+                                        LV_GRID_FR(1),
+                                        LV_GRID_TEMPLATE_LAST };
 
     if (parent == NULL) {
         return NULL;
@@ -682,55 +829,242 @@ lv_obj_t* print_create_screen(
     _print_set_status_text(&s_print_runtime, "Initializing printer...");
     _print_set_action_text(&s_print_runtime, "Selected: %s", s_print_cmds[0].name);
 
+    usable_h = (lv_coord_t)(area_h - 10);
+    if (usable_h < 190) {
+        usable_h = 190;
+    }
+
+    metrics_h = (usable_h >= 240) ? 78 : 64;
+    status_h = (usable_h >= 240) ? 64 : 50;
+    cmd_min = (usable_h >= 240) ? 126 : 104;
+    gap = (usable_h >= 240) ? 6 : 4;
+
+    cmd_h = (lv_coord_t)(usable_h - metrics_h - status_h - (gap * 2));
+    if (cmd_h < cmd_min) {
+        need = (lv_coord_t)(cmd_min - cmd_h);
+        while ((need > 0) && (metrics_h > 50)) {
+            metrics_h--;
+            need--;
+        }
+        while ((need > 0) && (status_h > 48)) {
+            status_h--;
+            need--;
+        }
+        cmd_h = (lv_coord_t)(usable_h - metrics_h - status_h - (gap * 2));
+        if (cmd_h < 72) {
+            cmd_h = 72;
+        }
+    }
+
     screen = lv_obj_create(parent);
     lv_obj_set_size(screen, area_w, area_h);
     lv_obj_set_pos(screen, 0, 0);
-    lv_obj_set_style_bg_color(screen, lv_color_hex(0x10273E), 0);
-    lv_obj_set_style_bg_grad_color(screen, lv_color_hex(0x274968), 0);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0xDCEFFF), 0);
+    lv_obj_set_style_bg_grad_color(screen, lv_color_hex(0xC2E0FF), 0);
     lv_obj_set_style_bg_grad_dir(screen, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_radius(screen, 0, 0);
-    lv_obj_set_style_pad_all(screen, 2, 0);
+    lv_obj_set_style_pad_all(screen, 4, 0);
 
     frame = lv_obj_create(screen);
     lv_obj_set_size(frame, lv_pct(100), lv_pct(100));
     lv_obj_align(frame, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(frame, lv_color_hex(0x0D1C2B), 0);
-    lv_obj_set_style_bg_opa(frame, LV_OPA_70, 0);
-    lv_obj_set_style_border_color(frame, lv_color_hex(0x65B9F0), 0);
+    lv_obj_set_style_bg_color(frame, lv_color_hex(0xF8FBFF), 0);
+    lv_obj_set_style_bg_opa(frame, LV_OPA_90, 0);
+    lv_obj_set_style_border_color(frame, lv_color_hex(0x89B6DC), 0);
     lv_obj_set_style_border_width(frame, 1, 0);
-    lv_obj_set_style_radius(frame, 8, 0);
-    lv_obj_set_style_pad_all(frame, 3, 0);
+    lv_obj_set_style_radius(frame, 10, 0);
+    lv_obj_set_style_pad_all(frame, 6, 0);
     lv_obj_clear_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_print_runtime.info_table = lv_table_create(frame);
-    lv_obj_set_size(s_print_runtime.info_table, lv_pct(96), lv_pct(96));
-    lv_obj_align(s_print_runtime.info_table, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_text_color(s_print_runtime.info_table, lv_color_hex(0xEAF7FF), 0);
-    lv_obj_set_style_text_font(
-        s_print_runtime.info_table,
-        LV_FONT_DEFAULT,
-        LV_PART_ITEMS
-    );
-    lv_obj_set_style_bg_color(s_print_runtime.info_table, lv_color_hex(0x0F2438), 0);
-    lv_obj_set_style_bg_opa(s_print_runtime.info_table, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(s_print_runtime.info_table, 0, 0);
-    lv_obj_set_style_pad_top(s_print_runtime.info_table, 4, LV_PART_ITEMS);
-    lv_obj_set_style_pad_bottom(s_print_runtime.info_table, 4, LV_PART_ITEMS);
-    lv_obj_set_style_pad_left(s_print_runtime.info_table, 4, LV_PART_ITEMS);
-    lv_obj_set_style_pad_right(s_print_runtime.info_table, 4, LV_PART_ITEMS);
-    lv_table_set_col_cnt(s_print_runtime.info_table, PRINT_UI_TABLE_COLS);
-    lv_table_set_row_cnt(s_print_runtime.info_table, PRINT_UI_TABLE_ROWS);
+    metrics_panel = lv_obj_create(frame);
+    lv_obj_set_size(metrics_panel, lv_pct(100), metrics_h);
+    lv_obj_align(metrics_panel, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(metrics_panel, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(metrics_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(metrics_panel, lv_color_hex(0xB5CEE3), 0);
+    lv_obj_set_style_border_width(metrics_panel, 1, 0);
+    lv_obj_set_style_radius(metrics_panel, 10, 0);
+    lv_obj_set_style_pad_left(metrics_panel, 6, 0);
+    lv_obj_set_style_pad_right(metrics_panel, 6, 0);
+    lv_obj_set_style_pad_top(metrics_panel, 4, 0);
+    lv_obj_set_style_pad_bottom(metrics_panel, 4, 0);
+    lv_obj_clear_flag(metrics_panel, LV_OBJ_FLAG_SCROLLABLE);
 
-    table_w = (lv_coord_t)(area_w - 24);
-    if (table_w < 120) {
-        table_w = 120;
+    if (_print_create_metric_card(
+            metrics_panel,
+            LV_ALIGN_LEFT_MID,
+            0,
+            LV_SYMBOL_WARNING,
+            "TPH",
+            lv_color_hex(0xF0DDD2),
+            lv_color_hex(0xE06A1D),
+            true,
+            &s_print_runtime.temp_value_label
+        )
+        == NULL) {
+        lv_obj_del(screen);
+        return NULL;
     }
-    col0_w = (lv_coord_t)(table_w * 38 / 100);
-    col1_w = (lv_coord_t)(table_w - col0_w);
-    lv_table_set_column_width(s_print_runtime.info_table, 0U, col0_w);
-    lv_table_set_column_width(s_print_runtime.info_table, 1U, col1_w);
+
+    if (_print_create_metric_card(
+            metrics_panel,
+            LV_ALIGN_CENTER,
+            0,
+            LV_SYMBOL_FILE,
+            "Paper",
+            lv_color_hex(0xD8EBD8),
+            lv_color_hex(0x1FA53A),
+            true,
+            &s_print_runtime.paper_value_label
+        )
+        == NULL) {
+        lv_obj_del(screen);
+        return NULL;
+    }
+
+    if (_print_create_metric_card(
+            metrics_panel,
+            LV_ALIGN_RIGHT_MID,
+            0,
+            LV_SYMBOL_POWER,
+            "Bat-vol",
+            lv_color_hex(0xD9E4F5),
+            lv_color_hex(0x2276DA),
+            false,
+            &s_print_runtime.voltage_value_label
+        )
+        == NULL) {
+        lv_obj_del(screen);
+        return NULL;
+    }
+
+    cmd_panel = lv_obj_create(frame);
+    lv_obj_set_size(cmd_panel, lv_pct(100), cmd_h);
+    lv_obj_align(cmd_panel, LV_ALIGN_TOP_MID, 0, (lv_coord_t)(metrics_h + gap));
+    lv_obj_set_style_bg_color(cmd_panel, lv_color_hex(0xFF00FF), 0);
+    lv_obj_set_style_bg_opa(cmd_panel, LV_OPA_70, 0);
+    lv_obj_set_style_border_color(cmd_panel, lv_color_hex(0x9CC4E3), 0);
+    lv_obj_set_style_border_width(cmd_panel, 1, 0);
+    lv_obj_set_style_radius(cmd_panel, 10, 0);
+    lv_obj_set_style_pad_all(cmd_panel, 4, 0);
+    lv_obj_clear_flag(cmd_panel, LV_OBJ_FLAG_SCROLLABLE);
+
+    cmd_grid = lv_obj_create(cmd_panel);
+    lv_obj_set_size(cmd_grid, lv_pct(100), lv_pct(100));
+    lv_obj_align(cmd_grid, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_opa(cmd_grid, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cmd_grid, 0, 0);
+    lv_obj_set_style_pad_all(cmd_grid, 0, 0);
+    lv_obj_set_style_pad_row(cmd_grid, 8, 0);
+    lv_obj_set_style_pad_column(cmd_grid, 8, 0);
+    lv_obj_set_grid_dsc_array(cmd_grid, cmd_col_dsc, cmd_row_dsc);
+
+    for (i = 0U; i < PRINT_UI_CMD_GRID_SLOTS; ++i) {
+        lv_obj_t* btn = NULL;
+        lv_coord_t row = (lv_coord_t)(i / PRINT_UI_CMD_GRID_COLS);
+        lv_coord_t col = (lv_coord_t)(i % PRINT_UI_CMD_GRID_COLS);
+
+        btn = lv_btn_create(cmd_grid);
+        lv_obj_set_grid_cell(
+            btn,
+            LV_GRID_ALIGN_STRETCH,
+            col,
+            1,
+            LV_GRID_ALIGN_STRETCH,
+            row,
+            1
+        );
+        lv_obj_set_style_radius(btn, 10, 0);
+        lv_obj_set_style_border_width(btn, 1, 0);
+        lv_obj_set_style_pad_top(btn, 8, 0);
+        lv_obj_set_style_pad_bottom(btn, 8, 0);
+        lv_obj_set_style_pad_left(btn, 4, 0);
+        lv_obj_set_style_pad_right(btn, 4, 0);
+        lv_obj_clear_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+
+        if (i < PRINT_UI_CMD_COUNT) {
+            lv_obj_t* symbol_label = lv_label_create(btn);
+            lv_obj_t* name_label = lv_label_create(btn);
+
+            lv_label_set_text(symbol_label, s_print_cmds[i].symbol);
+            lv_obj_align(symbol_label, LV_ALIGN_TOP_MID, 0, 0);
+
+            lv_label_set_text(name_label, s_print_cmds[i].name);
+            lv_obj_set_style_text_font(name_label, &DESKTOP_TEXT_FONT, 0);
+            lv_obj_align(name_label, LV_ALIGN_BOTTOM_MID, 0, -2);
+
+            s_print_runtime.command_btn[i] = btn;
+            s_print_runtime.command_symbol_label[i] = symbol_label;
+            s_print_runtime.command_name_label[i] = name_label;
+            _print_apply_command_tile_style(
+                btn,
+                symbol_label,
+                name_label,
+                s_print_cmds[i].color_hex,
+                (i == s_print_runtime.selected_cmd)
+            );
+        }
+        else {
+            lv_obj_set_style_bg_color(btn, lv_color_hex(0xDDEAF6), 0);
+            lv_obj_set_style_bg_opa(btn, LV_OPA_30, 0);
+            lv_obj_set_style_border_color(btn, lv_color_hex(0xB7CCE0), 0);
+            lv_obj_set_style_border_width(btn, 1, 0);
+        }
+    }
+
+    status_panel = lv_obj_create(frame);
+    lv_obj_set_size(status_panel, lv_pct(100), status_h);
+    lv_obj_align(
+        status_panel,
+        LV_ALIGN_TOP_MID,
+        0,
+        (lv_coord_t)(metrics_h + gap + cmd_h + gap)
+    );
+    lv_obj_set_style_bg_color(status_panel, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(status_panel, LV_OPA_80, 0);
+    lv_obj_set_style_border_color(status_panel, lv_color_hex(0x9CC4E3), 0);
+    lv_obj_set_style_border_width(status_panel, 1, 0);
+    lv_obj_set_style_radius(status_panel, 10, 0);
+    lv_obj_set_style_pad_left(status_panel, 10, 0);
+    lv_obj_set_style_pad_right(status_panel, 10, 0);
+    lv_obj_set_style_pad_top(status_panel, 8, 0);
+    lv_obj_set_style_pad_bottom(status_panel, 8, 0);
+    lv_obj_clear_flag(status_panel, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_print_runtime.status_title_label = lv_label_create(status_panel);
+    lv_label_set_text(s_print_runtime.status_title_label, "Offline");
+    lv_obj_set_style_text_font(
+        s_print_runtime.status_title_label,
+        &DESKTOP_TEXT_FONT,
+        0
+    );
+    lv_obj_align(s_print_runtime.status_title_label, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    s_print_runtime.status_detail_label = lv_label_create(status_panel);
+    lv_obj_set_width(s_print_runtime.status_detail_label, lv_pct(100));
+    lv_label_set_long_mode(s_print_runtime.status_detail_label, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(s_print_runtime.status_detail_label, "Initializing printer...");
+    lv_obj_set_style_text_color(
+        s_print_runtime.status_detail_label,
+        lv_color_hex(0x123A5A),
+        0
+    );
+    lv_obj_set_style_text_font(s_print_runtime.status_detail_label, LV_FONT_DEFAULT, 0);
+    lv_obj_align(s_print_runtime.status_detail_label, LV_ALIGN_TOP_LEFT, 0, 20);
+
+    s_print_runtime.action_label = lv_label_create(status_panel);
+    lv_obj_set_width(s_print_runtime.action_label, lv_pct(100));
+    lv_label_set_long_mode(s_print_runtime.action_label, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(s_print_runtime.action_label, "Selected: --");
+    lv_obj_set_style_text_color(
+        s_print_runtime.action_label,
+        lv_color_hex(0x123A5A),
+        0
+    );
+    lv_obj_set_style_text_font(s_print_runtime.action_label, LV_FONT_DEFAULT, 0);
+    lv_obj_align(s_print_runtime.action_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 
     s_print_runtime.ui_sync_timer =
         lv_timer_create(_print_ui_timer_cb, PRINT_UI_TASK_PERIOD_MS, &s_print_runtime);

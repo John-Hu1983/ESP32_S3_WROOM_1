@@ -12,9 +12,21 @@ extern "C" {
 #define PRINT_UI_STATUS_PERIOD_MS  (1000U)
 #define PRINT_UI_RETRY_INIT_MS     (2000U)
 
-#define PRINT_UI_CMD_COUNT         (5U)
+#define PRINT_UI_CMD_COUNT         (6U)
+#define PRINT_UI_CMD_GRID_COLS     (2U)
+#define PRINT_UI_CMD_GRID_ROWS     (3U)
+#define PRINT_UI_CMD_GRID_SLOTS    (PRINT_UI_CMD_GRID_COLS * PRINT_UI_CMD_GRID_ROWS)
 #define PRINT_UI_TEXT_LEN          (96U)
 // clang-format on
+
+typedef esp_err_t (*print_ui_cmd_fn_t)(void);
+
+typedef struct {
+    const char* symbol;
+    const char* name;
+    uint32_t color_hex;
+    print_ui_cmd_fn_t exec;
+} print_ui_cmd_s;
 
 typedef struct {
     TaskHandle_t task_handle;
@@ -24,7 +36,15 @@ typedef struct {
     btn_scan_s button_scan;
 
     lv_obj_t* root;
-    lv_obj_t* info_table;
+    lv_obj_t* temp_value_label;
+    lv_obj_t* paper_value_label;
+    lv_obj_t* voltage_value_label;
+    lv_obj_t* status_title_label;
+    lv_obj_t* status_detail_label;
+    lv_obj_t* action_label;
+    lv_obj_t* command_btn[PRINT_UI_CMD_COUNT];
+    lv_obj_t* command_symbol_label[PRINT_UI_CMD_COUNT];
+    lv_obj_t* command_name_label[PRINT_UI_CMD_COUNT];
 
     bool printer_ready;
     bool status_valid;

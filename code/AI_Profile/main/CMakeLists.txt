@@ -1083,8 +1083,22 @@ if(CONFIG_BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD)
         sdmmc
     )
 endif()
+
+set(PRINTER_ASSET_BINS
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/butterfly.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/cat_sit.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/goodluck.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/landscape.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/lovable_dog.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/maneki_neko.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/panda.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/robot.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/run_rabbit.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/thankyou.bin"
+)
+
 idf_component_register(SRCS ${SOURCES}
-                    EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
+                    EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS} ${PRINTER_ASSET_BINS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
                     WHOLE_ARCHIVE
                     PRIV_REQUIRES

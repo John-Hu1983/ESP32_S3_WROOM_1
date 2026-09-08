@@ -162,6 +162,45 @@ static esp_err_t _zzjx2r_send_cmd(const uint8_t* cmd, size_t cmd_len)
 }
 
 /*
+ * brief : _zzjx2r_write_chunked_locked.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
+static esp_err_t _zzjx2r_write_chunked_locked(
+    const uint8_t* data,
+    size_t data_len,
+    size_t chunk_bytes
+)
+{
+    esp_err_t ret = ESP_OK;
+    size_t offset = 0U;
+    size_t chunk_len = 0U;
+
+    if ((data == NULL) && (data_len > 0U)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (chunk_bytes == 0U) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    while (offset < data_len) {
+        chunk_len = data_len - offset;
+        if (chunk_len > chunk_bytes) {
+            chunk_len = chunk_bytes;
+        }
+
+        ret = _zzjx2r_write_locked(&data[offset], chunk_len);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        offset += chunk_len;
+    }
+
+    return ESP_OK;
+}
+
+/*
  * brief : _zzjx2r_read_u16_le.
  * input : see parameters.
  * output: return value from this function.
@@ -437,6 +476,41 @@ esp_err_t zzjx2r_write_line(const char* text)
         return ret;
     }
     return zzjx2r_write_raw(line_end, sizeof(line_end));
+}
+
+/*
+ * brief : zzjx2r_print_via_bin.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ */
+esp_err_t zzjx2r_print_via_bin(const char* bin_name)
+{
+    esp_err_t ret = ESP_OK;
+    const uint8_t* bin_data = NULL;
+    size_t data_len = 0U;
+
+    if (!s_zzjx2r.initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ret = access_assets_get_bin(bin_name, &bin_data, &data_len);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = _zzjx2r_take_lock();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = _zzjx2r_write_chunked_locked(
+        bin_data,
+        data_len,
+        ZZJX2R_BULK_WRITE_CHUNK_BYTES
+    );
+    _zzjx2r_give_lock();
+    return ret;
 }
 
 /*
