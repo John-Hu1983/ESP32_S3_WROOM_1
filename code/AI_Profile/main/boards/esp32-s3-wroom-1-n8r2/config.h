@@ -115,6 +115,10 @@
 #define PRINTER_UART_RX_GPIO               (GPIO_NUM_16)
 #define PRINTER_UART_DTR_GPIO              (GPIO_NUM_15)
 
+/* Vr */
+#define VR_ADC_IO                          (GPIO_NUM_1)
+#define VR_ADC_CHANNEL                     (ADC_CHANNEL_0)
+
 // clang-format on
 
 #endif  // _BOARD_CONFIG_H_

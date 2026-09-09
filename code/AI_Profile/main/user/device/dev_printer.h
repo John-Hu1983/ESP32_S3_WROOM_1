@@ -12,6 +12,7 @@
 #include "freertos/semphr.h"
 
 #include "bsp_global.h"
+#include "user/common/user_common.h"
 #include "user/inc/user_config.h"
 #include "user/assets/access_assets.h"
 
@@ -95,40 +96,38 @@ typedef struct {
     int queue_size;
     uint32_t write_timeout_ms;
     uint32_t lock_timeout_ms;
-} printer_config_t;
+} printer_cfg_t;
 
-void printer_get_default_config(printer_config_t* out_cfg);
+void printer_get_default_config(printer_cfg_t* out_cfg);
 
-esp_err_t printer_init(const printer_config_t* config);
+esp_err_t printer_init(const printer_cfg_t* config);
 esp_err_t printer_deinit(void);
 bool printer_is_ready(void);
 
-esp_err_t printer_write_raw(const uint8_t* data, size_t data_len);
-esp_err_t printer_write_text(const char* text);
-esp_err_t printer_write_line(const char* text);
+esp_err_t printer_write_string(const char* text);
 
-esp_err_t printer_cmd_detect_status(printer_detect_status_t* out_status);
+esp_err_t printer_detect_status(printer_detect_status_t* out_status);
 
 /* printer command APIs */
-esp_err_t printer_cmd_clear_printer(void);
-esp_err_t printer_cmd_print_and_feed_lines(uint8_t lines);
-esp_err_t printer_cmd_print_and_feed_dots(uint8_t dots);
-esp_err_t printer_cmd_set_justification(printer_justification_t mode);
-esp_err_t printer_cmd_select_print_mode(uint8_t mode_mask);
-esp_err_t printer_cmd_set_character_size(uint8_t width, uint8_t height);
-esp_err_t printer_cmd_set_bold(bool enable);
-esp_err_t printer_cmd_set_underline(printer_underline_t mode);
-esp_err_t printer_cmd_set_inverse(bool enable);
-esp_err_t printer_cmd_set_upside_down(bool enable);
-esp_err_t printer_cmd_set_line_spacing(uint8_t spacing_dots);
-esp_err_t printer_cmd_reset_line_spacing(void);
-esp_err_t printer_cmd_cut_paper(printer_cut_mode_t mode);
-esp_err_t printer_cmd_set_hri_position(printer_hri_position_t position);
-esp_err_t printer_cmd_set_hri_font(printer_hri_font_t font);
-esp_err_t printer_cmd_set_barcode_height(uint8_t height_dots);
-esp_err_t printer_cmd_set_barcode_width(uint8_t width_dots);
-esp_err_t printer_cmd_print_barcode_code128(const uint8_t* data, size_t data_len);
-esp_err_t printer_print_via_bin(const char* bin_name);
+esp_err_t printer_clear_cache(void);
+esp_err_t printer_feed_lines(uint8_t lines);
+esp_err_t printer_print_and_feed_dots(uint8_t dots);
+esp_err_t printer_set_justification(printer_justification_t mode);
+esp_err_t printer_select_print_mode(uint8_t mode_mask);
+esp_err_t printer_set_character_size(uint8_t width, uint8_t height);
+esp_err_t printer_set_bold(bool enable);
+esp_err_t printer_set_underline(printer_underline_t mode);
+esp_err_t printer_set_inverse(bool enable);
+esp_err_t printer_set_upside_down(bool enable);
+esp_err_t printer_set_line_spacing(uint8_t spacing_dots);
+esp_err_t printer_reset_line_spacing(void);
+esp_err_t printer_cut_paper(printer_cut_mode_t mode);
+esp_err_t printer_set_hri_position(printer_hri_position_t position);
+esp_err_t printer_set_hri_font(printer_hri_font_t font);
+esp_err_t printer_set_barcode_height(uint8_t height_dots);
+esp_err_t printer_set_barcode_width(uint8_t width_dots);
+esp_err_t printer_barcode_code128(const uint8_t* data, size_t data_len);
+esp_err_t printer_image_via_bin(const char* bin_name);
 
 #ifdef __cplusplus
 }

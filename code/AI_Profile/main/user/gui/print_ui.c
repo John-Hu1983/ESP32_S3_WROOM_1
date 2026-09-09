@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "user/device/dev_zzjx2r.h"
+#include "user/device/dev_printer.h"
 
 #define TAG "print_ui"
 
@@ -35,7 +35,7 @@ static const print_ui_cmd_s s_print_cmds[PRINT_UI_CMD_COUNT] = {
  */
 static esp_err_t _print_cmd_clear(void)
 {
-    return zzjx2r_cmd_clear_printer();
+    return printer_clear_cache();
 }
 
 /*
@@ -46,7 +46,7 @@ static esp_err_t _print_cmd_clear(void)
  */
 static esp_err_t _print_cmd_feed(void)
 {
-    return zzjx2r_cmd_print_and_feed_lines(100U);
+    return printer_feed_lines(10U);
 }
 
 /*
@@ -57,20 +57,22 @@ static esp_err_t _print_cmd_feed(void)
  */
 static esp_err_t _print_cmd_image(void)
 {
-    const char* bin[] = {
-        "animation_girl.bin",
-        "dragon.bin",
-        "pirate_ship.bin",
-    };
-    esp_err_t ret = ESP_OK;
-    static size_t bin_index = 0U;
+    // const char* bin[] = {
+    //     "animation_girl.bin",
+    //     "dragon.bin",
+    //     "pirate_ship.bin",
+    // };
+    // esp_err_t ret = ESP_OK;
+    // static size_t bin_index = 0U;
 
-    ret = zzjx2r_print_via_bin(bin[bin_index]);
-    bin_index = (bin_index + 1U) % (sizeof(bin) / sizeof(bin[0]));
-    if (ret != ESP_OK) {
-        return ret;
-    }
+    // ret = printer_image_via_bin(bin[bin_index]);
+    // bin_index = (bin_index + 1U) % (sizeof(bin) / sizeof(bin[0]));
+    // if (ret != ESP_OK) {
+    //     return ret;
+    // }
 
+    printer_image_via_bin("dragon.bin");
+    printer_image_via_bin("pirate_ship.bin");
     return ESP_OK;
 }
 
@@ -84,22 +86,22 @@ static esp_err_t _print_cmd_text(void)
 {
     esp_err_t ret = ESP_OK;
 
-    ret = zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+    ret = printer_set_justification(PRINTER_JUSTIFY_LEFT);
     if (ret != ESP_OK) {
         return ret;
     }
 
-    ret = zzjx2r_write_line("--- PRINTER TEST ---");
+    ret = printer_write_string("--- PRINTER TEST ---\r\n");
     if (ret != ESP_OK) {
         return ret;
     }
 
-    ret = zzjx2r_write_line("Status path is running.");
+    ret = printer_write_string("Status path is running.\r\n");
     if (ret != ESP_OK) {
         return ret;
     }
 
-    return zzjx2r_cmd_print_and_feed_lines(2U);
+    return printer_feed_lines(2U);
 }
 
 /*
@@ -113,36 +115,36 @@ static esp_err_t _print_cmd_qrcode(void)
     static const uint8_t qr_payload[] = "https://xiao-zhi.local/qr-demo";
     esp_err_t ret = ESP_OK;
 
-    ret = zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_CENTER);
+    ret = printer_set_justification(PRINTER_JUSTIFY_CENTER);
     if (ret != ESP_OK) {
         return ret;
     }
 
-    ret = zzjx2r_cmd_set_barcode_width(2U);
+    ret = printer_set_barcode_width(2U);
     if (ret != ESP_OK) {
-        (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+        (void)printer_set_justification(PRINTER_JUSTIFY_LEFT);
         return ret;
     }
 
-    ret = zzjx2r_cmd_set_barcode_height(72U);
+    ret = printer_set_barcode_height(72U);
     if (ret != ESP_OK) {
-        (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+        (void)printer_set_justification(PRINTER_JUSTIFY_LEFT);
         return ret;
     }
 
-    ret = zzjx2r_cmd_print_barcode_code128(qr_payload, sizeof(qr_payload) - 1U);
+    ret = printer_barcode_code128(qr_payload, sizeof(qr_payload) - 1U);
     if (ret != ESP_OK) {
-        (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+        (void)printer_set_justification(PRINTER_JUSTIFY_LEFT);
         return ret;
     }
 
-    ret = zzjx2r_write_line("QR event demo");
-    (void)zzjx2r_cmd_set_justification(ZZJX2R_JUSTIFY_LEFT);
+    ret = printer_write_string("QR event demo\r\n");
+    (void)printer_set_justification(PRINTER_JUSTIFY_LEFT);
     if (ret != ESP_OK) {
         return ret;
     }
 
-    return zzjx2r_cmd_print_and_feed_lines(2U);
+    return printer_feed_lines(2U);
 }
 
 /*
@@ -153,36 +155,8 @@ static esp_err_t _print_cmd_qrcode(void)
  */
 static esp_err_t _print_cmd_Auto(void)
 {
-    esp_err_t ret = ESP_OK;
-
-    ret = zzjx2r_cmd_set_bold(true);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    ret = zzjx2r_write_line("BOLD TEXT SAMPLE");
-    if (ret != ESP_OK) {
-        (void)zzjx2r_cmd_set_bold(false);
-        return ret;
-    }
-
-    ret = zzjx2r_cmd_set_bold(false);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    ret = zzjx2r_cmd_set_underline(ZZJX2R_UNDERLINE_THIN);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    ret = zzjx2r_write_line("Underline sample");
-    (void)zzjx2r_cmd_set_underline(ZZJX2R_UNDERLINE_OFF);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    return zzjx2r_cmd_print_and_feed_lines(1U);
+    printer_write_string("Auto print demo \r\n");
+    return ESP_OK;
 }
 
 /*
@@ -289,7 +263,7 @@ static lv_obj_t* _print_create_metric_card(
     if ((parent == NULL) || (metric_icon == NULL) || (metric_name == NULL)
         || (out_value_label == NULL)) {
         return NULL;
-    }
+        }
 
     card = lv_obj_create(parent);
     lv_obj_set_size(card, lv_pct(32), lv_pct(100));
@@ -409,7 +383,7 @@ static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ret = zzjx2r_init(NULL);
+    ret = printer_init(NULL);
 
     taskENTER_CRITICAL(&s_print_lock);
     runtime->printer_ready = (ret == ESP_OK);
@@ -437,13 +411,13 @@ static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime)
 static void _print_poll_printer_status(print_ui_runtime_s* runtime)
 {
     esp_err_t ret = ESP_FAIL;
-    zzjx2r_detect_status_t status = { 0 };
+    printer_detect_status_t status = { 0 };
 
     if (runtime == NULL) {
         return;
     }
 
-    ret = zzjx2r_cmd_detect_status(&status);
+    ret = printer_detect_status(&status);
     if (ret == ESP_OK) {
         taskENTER_CRITICAL(&s_print_lock);
         runtime->printer_ready = true;
@@ -822,7 +796,7 @@ lv_obj_t* print_create_screen(
         s_print_runtime.task_handle = NULL;
     }
 
-    (void)zzjx2r_deinit();
+    (void)printer_deinit();
 
     memset(&s_print_runtime, 0, sizeof(s_print_runtime));
 
@@ -1105,7 +1079,7 @@ lv_obj_t* print_create_screen(
             lv_timer_delete(s_print_runtime.ui_sync_timer);
             s_print_runtime.ui_sync_timer = NULL;
         }
-        (void)zzjx2r_deinit();
+        (void)printer_deinit();
         lv_obj_del(screen);
         ESP_LOGE(TAG, "xTaskCreate failed");
         return NULL;
@@ -1134,9 +1108,9 @@ void print_destroy_screen(lv_obj_t* screen)
         s_print_runtime.task_handle = NULL;
     }
 
-    ret = zzjx2r_deinit();
+    ret = printer_deinit();
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "zzjx2r_deinit failed: %d", (int)ret);
+        ESP_LOGW(TAG, "printer_deinit failed: %d", (int)ret);
     }
 
     if ((screen != NULL) && lv_obj_is_valid(screen)) {
