@@ -4,12 +4,16 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "user/common/user_app_notify.h"
 #include "user/device/dev_printer.h"
 
 #define TAG "print_ui"
 
 static print_ui_runtime_s s_print_runtime;
 static portMUX_TYPE s_print_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t s_print_image_count = 0U;
+
+static print_auto_test_s automatic_mode = { 0 };
 
 static esp_err_t _print_cmd_clear(void);
 static esp_err_t _print_cmd_feed(void);
@@ -85,18 +89,57 @@ static esp_err_t _print_cmd_image(void)
 static esp_err_t _print_cmd_text(void)
 {
     esp_err_t ret = ESP_OK;
+    uint16_t battery_mv = 0U;
+    time_t now_sec = 0;
+    struct tm tm_now = { 0 };
+    bool tm_valid = false;
+    char line[48] = { 0 };
 
     ret = printer_set_justification(PRINTER_JUSTIFY_LEFT);
     if (ret != ESP_OK) {
         return ret;
     }
 
-    ret = printer_write_string("--- PRINTER TEST ---\r\n");
+    battery_mv = bsp_read_battery_mv();
+    now_sec = time(NULL);
+    tm_valid = (localtime_r(&now_sec, &tm_now) != NULL);
+
+    (void)snprintf(
+        line,
+        sizeof(line),
+        " Battery       : %4u mv\r\n",
+        (unsigned)battery_mv
+    );
+    ret = printer_write_string(line);
     if (ret != ESP_OK) {
         return ret;
     }
 
-    ret = printer_write_string("Status path is running.\r\n");
+    if (tm_valid) {
+        (void)snprintf(
+            line,
+            sizeof(line),
+            " RealTime    : %02d:%02d:%02d\r\n",
+            tm_now.tm_hour,
+            tm_now.tm_min,
+            tm_now.tm_sec
+        );
+    }
+    else {
+        (void)snprintf(line, sizeof(line), " RealTime    : --:--:--\r\n");
+    }
+    ret = printer_write_string(line);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    (void)snprintf(
+        line,
+        sizeof(line),
+        " Image         : %4u \r\n",
+        (unsigned)s_print_image_count
+    );
+    ret = printer_write_string(line);
     if (ret != ESP_OK) {
         return ret;
     }
@@ -155,7 +198,8 @@ static esp_err_t _print_cmd_qrcode(void)
  */
 static esp_err_t _print_cmd_Auto(void)
 {
-    printer_write_string("Auto print demo \r\n");
+    automatic_mode.en = (automatic_mode.en == true) ? false : true;
+    automatic_mode.interval_ms = AUTO_PRINT_INTERVAL_MS;
     return ESP_OK;
 }
 
@@ -263,7 +307,7 @@ static lv_obj_t* _print_create_metric_card(
     if ((parent == NULL) || (metric_icon == NULL) || (metric_name == NULL)
         || (out_value_label == NULL)) {
         return NULL;
-        }
+    }
 
     card = lv_obj_create(parent);
     lv_obj_set_size(card, lv_pct(32), lv_pct(100));
@@ -403,12 +447,12 @@ static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime)
 }
 
 /*
- * brief : _print_poll_printer_status.
+ * brief : _obtain_print_profile.
  * input : see parameters.
  * output: none.
  * type  : private
  */
-static void _print_poll_printer_status(print_ui_runtime_s* runtime)
+static void _obtain_print_profile(print_ui_runtime_s* runtime)
 {
     esp_err_t ret = ESP_FAIL;
     printer_detect_status_t status = { 0 };
@@ -497,7 +541,7 @@ static void _print_execute_selected_command(print_ui_runtime_s* runtime)
     esp_err_t ret = ESP_OK;
     uint8_t cmd_count = 0U;
     uint8_t selected = 0U;
-    bool printer_ready = false;
+    bool _ready_ = false;
 
     if (runtime == NULL) {
         return;
@@ -506,14 +550,14 @@ static void _print_execute_selected_command(print_ui_runtime_s* runtime)
     taskENTER_CRITICAL(&s_print_lock);
     cmd_count = runtime->cmd_count;
     selected = runtime->selected_cmd;
-    printer_ready = runtime->printer_ready;
+    _ready_ = runtime->printer_ready;
     taskEXIT_CRITICAL(&s_print_lock);
 
     if ((cmd_count == 0U) || (selected >= cmd_count)) {
         return;
     }
 
-    if (!printer_ready) {
+    if (!_ready_) {
         ret = _print_try_init_printer(runtime);
         if (ret != ESP_OK) {
             _print_set_action_text(runtime, "Run blocked, init err=%d", (int)ret);
@@ -526,6 +570,10 @@ static void _print_execute_selected_command(print_ui_runtime_s* runtime)
     }
 
     ret = s_print_cmds[selected].exec();
+
+    if ((ret == ESP_OK) && (s_print_cmds[selected].exec == _print_cmd_image)) {
+        s_print_image_count += 2U;
+    }
 
     taskENTER_CRITICAL(&s_print_lock);
     runtime->last_cmd_err = ret;
@@ -544,7 +592,7 @@ static void _print_execute_selected_command(print_ui_runtime_s* runtime)
         );
     }
 
-    _print_poll_printer_status(runtime);
+    _obtain_print_profile(runtime);
 }
 
 /*
@@ -557,7 +605,7 @@ static void _print_sync_ui(void* param)
 {
     print_ui_runtime_s* runtime = (print_ui_runtime_s*)param;
     bool dirty = false;
-    bool printer_ready = false;
+    bool _ready_ = false;
     bool status_valid = false;
     uint8_t selected = 0U;
     uint8_t cmd_count = 0U;
@@ -585,7 +633,7 @@ static void _print_sync_ui(void* param)
 
     taskENTER_CRITICAL(&s_print_lock);
     if (runtime->dirty) {
-        printer_ready = runtime->printer_ready;
+        _ready_ = runtime->printer_ready;
         status_valid = runtime->status_valid;
         selected = runtime->selected_cmd;
         cmd_count = runtime->cmd_count;
@@ -603,12 +651,8 @@ static void _print_sync_ui(void* param)
         return;
     }
 
-    lv_label_set_text(runtime->status_title_label, printer_ready ? "Ready" : "Offline");
-    _print_apply_status_title_style(
-        runtime->status_title_label,
-        printer_ready,
-        status_valid
-    );
+    lv_label_set_text(runtime->status_title_label, _ready_ ? "Ready" : "Offline");
+    _print_apply_status_title_style(runtime->status_title_label, _ready_, status_valid);
     lv_label_set_text(runtime->status_detail_label, status_text);
     lv_label_set_text(runtime->action_label, action_text);
 
@@ -699,12 +743,17 @@ static void _print_ui_task(void* param)
     uint32_t retry_elapsed_ms = 0U;
     btn_status_e btn_val = Btn_Idle;
 
+    uint16_t alarm_tick_ = 0u;
+
 #ifdef PRINTER_UART_DTR_GPIO
     (void)gpio_set_direction(PRINTER_UART_DTR_GPIO, GPIO_MODE_INPUT);
     (void)gpio_set_pull_mode(PRINTER_UART_DTR_GPIO, GPIO_PULLUP_ONLY);
 #endif
 
     while (1) {
+        delay_ms(PRINT_UI_TASK_PERIOD_MS);
+
+        /* scan button state */
         btn_val = button_scan_state(&runtime->button_scan, PRINT_UI_TASK_PERIOD_MS);
         if ((btn_val == Btn_Both_Click) && (runtime->home_cb != NULL)) {
             runtime->home_cb(runtime->home_user_ctx);
@@ -719,12 +768,45 @@ static void _print_ui_task(void* param)
             _print_execute_selected_command(runtime);
         }
 
+        /* obtain print profile */
         poll_elapsed_ms += PRINT_UI_TASK_PERIOD_MS;
         if (poll_elapsed_ms >= PRINT_UI_STATUS_PERIOD_MS) {
             poll_elapsed_ms = 0U;
-            // _print_poll_printer_status(runtime);
+            _obtain_print_profile(runtime);
         }
 
+        /* alarm no paper */
+        alarm_tick_ += PRINT_UI_TASK_PERIOD_MS;
+        if (alarm_tick_ >= 5000) {
+            bool status_valid = false;
+            bool paper_out = false;
+
+            alarm_tick_ = 0;
+
+            taskENTER_CRITICAL(&s_print_lock);
+            status_valid = runtime->status_valid;
+            paper_out = (runtime->paper_detect_raw == 0U);
+            taskEXIT_CRITICAL(&s_print_lock);
+
+            if (status_valid && paper_out) {
+                speaker_alarm_no_paper();
+            }
+        }
+
+        /* automatic mode handling */
+        if (automatic_mode.en) {
+            automatic_mode.interval_ms += PRINT_UI_TASK_PERIOD_MS;
+            if (automatic_mode.interval_ms >= AUTO_PRINT_INTERVAL_MS) {
+                if (runtime->status_valid && runtime->paper_detect_raw) {
+                    printer_image_via_bin("dragon.bin");
+                    s_print_image_count++;
+                    _print_cmd_text();
+                }
+                automatic_mode.interval_ms = 0;
+            }
+        }
+
+        /* retry printer initialization */
         taskENTER_CRITICAL(&s_print_lock);
         if (!runtime->printer_ready) {
             retry_elapsed_ms += PRINT_UI_TASK_PERIOD_MS;
@@ -738,8 +820,6 @@ static void _print_ui_task(void* param)
             retry_elapsed_ms = 0U;
             (void)_print_try_init_printer(runtime);
         }
-
-        delay_ms(PRINT_UI_TASK_PERIOD_MS);
     }
 }
 
@@ -1061,7 +1141,7 @@ lv_obj_t* print_create_screen(
 
     ret = _print_try_init_printer(&s_print_runtime);
     if (ret == ESP_OK) {
-        _print_poll_printer_status(&s_print_runtime);
+        _obtain_print_profile(&s_print_runtime);
     }
     _print_sync_ui(&s_print_runtime);
 

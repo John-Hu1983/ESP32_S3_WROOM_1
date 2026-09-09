@@ -117,8 +117,8 @@
 #define PRINTER_UART_DTR_GPIO              (GPIO_NUM_15)
 
 /* Vr */
-#define VR_ADC_IO                          (GPIO_NUM_1)
-#define VR_ADC_CHANNEL                     (ADC_CHANNEL_0)
+#define VR_ADC_IO                          (GPIO_NUM_4)
+#define VR_ADC_CHANNEL                     (ADC_CHANNEL_3)
 
 // clang-format on
 

@@ -223,48 +223,6 @@ _printer_write_chunk(const uint8_t* data, size_t data_len, size_t chunk_bytes)
 }
 
 /*
- * brief : _printer_detect_status_raw_locked.
- * input : see parameters.
- * output: return value from this function.
- * type  : private
- */
-static esp_err_t _printer_detect_status_raw_locked(
-    uint8_t out_status[PRINTER_STATUS_DETECT_RESPONSE_LEN]
-)
-{
-    esp_err_t ret = ESP_OK;
-    int rx_len = 0;
-    TickType_t wait_ticks = pdMS_TO_TICKS((TickType_t)s_printer.write_timeout_ms);
-    uint8_t cmd[2] = { 0x1BU, 0x76U };
-
-    if (!s_printer.initialized) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    if (out_status == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    (void)uart_flush_input(s_printer.uart_port);
-
-    ret = _printer_write_block(cmd, sizeof(cmd));
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    rx_len = uart_read_bytes(
-        s_printer.uart_port,
-        out_status,
-        PRINTER_STATUS_DETECT_RESPONSE_LEN,
-        wait_ticks
-    );
-    if (rx_len != (int)PRINTER_STATUS_DETECT_RESPONSE_LEN) {
-        return ESP_ERR_TIMEOUT;
-    }
-
-    return ESP_OK;
-}
-
-/*
  * brief : printer_init.
  * input : see parameters.
  * output: return value from this function.
@@ -512,6 +470,9 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
     const int calibration = 210;
     esp_err_t ret = ESP_OK;
     uint8_t raw[PRINTER_STATUS_DETECT_RESPONSE_LEN] = { 0 };
+    int rx_len = 0;
+    TickType_t wait_ticks = pdMS_TO_TICKS((TickType_t)s_printer.write_timeout_ms);
+    uint8_t cmd[2] = { 0x1BU, 0x76U };
 
     if (!s_printer.initialized) {
         return ESP_ERR_INVALID_STATE;
@@ -525,18 +486,39 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
         return ret;
     }
 
-    ret = _printer_detect_status_raw_locked(raw);
+    (void)uart_flush_input(s_printer.uart_port);
+
+    ret = _printer_write_block(cmd, sizeof(cmd));
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    rx_len = uart_read_bytes(
+        s_printer.uart_port,
+        raw,
+        PRINTER_STATUS_DETECT_RESPONSE_LEN,
+        wait_ticks
+    );
     _printer_give_lock();
     if (ret != ESP_OK) {
         return ret;
     }
 
-    out_status->tph_temperature_celsius = raw[1];
-    out_status->paper_detect_raw = user_common_read_u16_be(&raw[2]) >> 2;
-    out_status->working_voltage_raw = (uint16_t)(user_common_read_u16_be(&raw[4]) * 5 / 8);
-    if (out_status->working_voltage_raw > calibration) {
-        out_status->working_voltage_raw -= calibration;
+    if (rx_len == 1) {
+        out_status->tph_temperature_celsius = (raw[0] & (1 << 6)) ? 40u : 22u;
+        out_status->paper_detect_raw = (raw[0] & (1 << 2)) ? 0u : 1u;
+        out_status->working_voltage_raw = bsp_read_battery_mv();
     }
+    else if (rx_len == PRINTER_STATUS_DETECT_RESPONSE_LEN) {
+        out_status->tph_temperature_celsius = raw[1];
+        out_status->paper_detect_raw = user_common_read_u16_be(&raw[2]) >> 2;
+        out_status->working_voltage_raw =
+            (uint16_t)(user_common_read_u16_be(&raw[4]) * 5 / 8);
+        if (out_status->working_voltage_raw > calibration) {
+            out_status->working_voltage_raw -= calibration;
+        }
+    }
+
     return ESP_OK;
 }
 

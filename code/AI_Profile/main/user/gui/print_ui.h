@@ -61,8 +61,20 @@ typedef struct {
     char action_text[PRINT_UI_TEXT_LEN];
 } print_ui_runtime_s;
 
-lv_obj_t* print_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
-                              ui_menu_home_cb_t home_cb, void* home_user_ctx);
+#define AUTO_PRINT_INTERVAL_MS    (5000U)
+typedef struct {
+    bool en;
+    uint16_t interval_ms;
+
+} print_auto_test_s;
+
+lv_obj_t* print_create_screen(
+    lv_obj_t* parent,
+    lv_coord_t area_w,
+    lv_coord_t area_h,
+    ui_menu_home_cb_t home_cb,
+    void* home_user_ctx
+);
 void print_destroy_screen(lv_obj_t* screen);
 
 #ifdef __cplusplus

@@ -1028,6 +1028,11 @@ if(NOT LANG_DIR STREQUAL "en-US")
 endif()
 
 file(GLOB COMMON_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/common/*.ogg)
+set(PAPER_OUT_SOUND ${CMAKE_CURRENT_SOURCE_DIR}/assets/common/paper_out.ogg)
+if(EXISTS ${PAPER_OUT_SOUND})
+    list(APPEND COMMON_SOUNDS ${PAPER_OUT_SOUND})
+endif()
+list(REMOVE_DUPLICATES COMMON_SOUNDS)
 
 # If target chip is ESP32, exclude specific files to avoid build errors
 if(CONFIG_IDF_TARGET_ESP32)
@@ -1165,6 +1170,8 @@ add_custom_command(
             --output "${LANG_HEADER}"
     DEPENDS
         ${LANG_JSON}
+        ${LANG_SOUNDS}
+        ${COMMON_SOUNDS}
         ${PROJECT_DIR}/scripts/gen_lang.py
     COMMENT "Generating ${LANG_DIR} language config"
 )
