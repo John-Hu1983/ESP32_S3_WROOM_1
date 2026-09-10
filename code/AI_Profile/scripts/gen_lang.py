@@ -50,6 +50,26 @@ def get_sound_files(directory):
         return []
     return [f for f in os.listdir(directory) if f.endswith('.ogg')]
 
+def build_sound_block(base_name):
+    return f'''
+        extern const char ogg_{base_name}_start[] asm("_binary_{base_name}_ogg_start");
+        extern const char ogg_{base_name}_end[] asm("_binary_{base_name}_ogg_end");
+        static const std::string_view OGG_{base_name.upper()} {{
+        static_cast<const char*>(ogg_{base_name}_start),
+        static_cast<size_t>(ogg_{base_name}_end - ogg_{base_name}_start)
+        }};'''
+
+def build_paper_out_alias_block(base_name):
+    if base_name != 'paper_out':
+        return None
+    return '''
+        extern const char paper_out_ogg_start[] asm("_binary_paper_out_ogg_start");
+        extern const char paper_out_ogg_end[] asm("_binary_paper_out_ogg_end");
+        [[maybe_unused]] static const std::string_view PAPER_OUT_OGG {
+        static_cast<const char*>(paper_out_ogg_start),
+        static_cast<size_t>(paper_out_ogg_end - paper_out_ogg_start)
+        };'''
+
 def generate_header(lang_code, output_path):
     # 从输出路径推导项目结构
     # output_path 通常是 main/assets/lang_config.h
@@ -131,6 +151,8 @@ def generate_header(lang_code, output_path):
     print(f"  - Common sounds: {common_sound_count} sounds")
     if sound_fallback_count > 0:
         print(f"  - Sound fallback to en-US: {sound_fallback_count} sounds")
+
+    paper_out_alias_added = False
     
     # 生成语言特定音效常量
     for file in sorted(all_sound_files):
@@ -140,25 +162,23 @@ def generate_header(lang_code, output_path):
             sound_lang = lang_code.replace('-', '_').lower()
         else:
             sound_lang = 'en_us'
-            
-        sounds.append(f'''
-        extern const char ogg_{base_name}_start[] asm("_binary_{base_name}_ogg_start");
-        extern const char ogg_{base_name}_end[] asm("_binary_{base_name}_ogg_end");
-        static const std::string_view OGG_{base_name.upper()} {{
-        static_cast<const char*>(ogg_{base_name}_start),
-        static_cast<size_t>(ogg_{base_name}_end - ogg_{base_name}_start)
-        }};''')
+
+        sounds.append(build_sound_block(base_name))
+
+        alias_block = build_paper_out_alias_block(base_name)
+        if (alias_block is not None) and (not paper_out_alias_added):
+            sounds.append(alias_block)
+            paper_out_alias_added = True
     
     # 生成公共音效常量
     for file in sorted(common_sounds):
         base_name = os.path.splitext(file)[0]
-        sounds.append(f'''
-        extern const char ogg_{base_name}_start[] asm("_binary_{base_name}_ogg_start");
-        extern const char ogg_{base_name}_end[] asm("_binary_{base_name}_ogg_end");
-        static const std::string_view OGG_{base_name.upper()} {{
-        static_cast<const char*>(ogg_{base_name}_start),
-        static_cast<size_t>(ogg_{base_name}_end - ogg_{base_name}_start)
-        }};''')
+        sounds.append(build_sound_block(base_name))
+
+        alias_block = build_paper_out_alias_block(base_name)
+        if (alias_block is not None) and (not paper_out_alias_added):
+            sounds.append(alias_block)
+            paper_out_alias_added = True
 
     # 填充模板
     content = HEADER_TEMPLATE.format(

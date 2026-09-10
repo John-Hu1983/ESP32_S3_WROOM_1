@@ -1,6 +1,8 @@
 #pragma once
 
+#include "user/common/user_common.h"
 #include "user/desktop/desktop_app.h"
+#include "user/common/user_facility.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,9 +63,9 @@ typedef struct {
     char action_text[PRINT_UI_TEXT_LEN];
 } print_ui_runtime_s;
 
-#define AUTO_PRINT_INTERVAL_MS    (5000U)
+#define AUTO_PRINT_INTERVAL_MS (5000U)
 typedef struct {
-    bool en;
+    Action_e action;
     uint16_t interval_ms;
 
 } print_auto_test_s;

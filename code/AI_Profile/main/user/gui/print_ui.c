@@ -4,10 +4,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "user/common/user_app_notify.h"
+#include "user/common/user_facility.h"
 #include "user/device/dev_printer.h"
 
 #define TAG "print_ui"
+
+DECLARE_OGG_ASSET(paper_out);
 
 static print_ui_runtime_s s_print_runtime;
 static portMUX_TYPE s_print_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -198,8 +200,17 @@ static esp_err_t _print_cmd_qrcode(void)
  */
 static esp_err_t _print_cmd_Auto(void)
 {
-    automatic_mode.en = (automatic_mode.en == true) ? false : true;
+    if (automatic_mode.action == Act_Start) {
+        automatic_mode.action = Act_Stop;
+    }
+    else if (automatic_mode.action == Act_Stop) {
+        automatic_mode.action = Act_Start;
+    }
+    else if (automatic_mode.action == Act_Pause) {
+        automatic_mode.action = Act_Start;
+    }
     automatic_mode.interval_ms = AUTO_PRINT_INTERVAL_MS;
+
     return ESP_OK;
 }
 
@@ -778,23 +789,15 @@ static void _print_ui_task(void* param)
         /* alarm no paper */
         alarm_tick_ += PRINT_UI_TASK_PERIOD_MS;
         if (alarm_tick_ >= 5000) {
-            bool status_valid = false;
-            bool paper_out = false;
-
             alarm_tick_ = 0;
-
-            taskENTER_CRITICAL(&s_print_lock);
-            status_valid = runtime->status_valid;
-            paper_out = (runtime->paper_detect_raw == 0U);
-            taskEXIT_CRITICAL(&s_print_lock);
-
-            if (status_valid && paper_out) {
-                speaker_alarm_no_paper();
+            if (runtime->status_valid) {
+                if (runtime->paper_detect_raw == 0U)
+                    speaker_play_assets(paper_out_ogg_start, paper_out_ogg_end);
             }
         }
 
         /* automatic mode handling */
-        if (automatic_mode.en) {
+        if (automatic_mode.action == Act_Start) {
             automatic_mode.interval_ms += PRINT_UI_TASK_PERIOD_MS;
             if (automatic_mode.interval_ms >= AUTO_PRINT_INTERVAL_MS) {
                 if (runtime->status_valid && runtime->paper_detect_raw) {

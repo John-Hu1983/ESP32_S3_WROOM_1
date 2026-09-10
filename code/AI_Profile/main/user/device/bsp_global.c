@@ -2,6 +2,8 @@
 
 #include <rom/ets_sys.h>
 
+#include "user/common/user_facility.h"
+
 #define TAG "bsp_global"
 
 static adc_oneshot_unit_handle_t s_bsp_adc_unit_handle = NULL;
@@ -305,5 +307,6 @@ void bsp_init_total(void)
     _bsp_init_pwm(GPBA02B_PORT_C, 1, GPBA02B_PWM_FREQ_1343HZ_DIV32, 12);
     _bsp_init_button();
     bsp_reset_lcd();
+    speaker_set_volume(90);
     desktop_start_task();
 }
