@@ -22,6 +22,14 @@ static portMUX_TYPE s_about_lock = portMUX_INITIALIZER_UNLOCKED;
 static void _about_ui_timer_cb(lv_timer_t* timer);
 
 /*
+ * brief : _about_step_task_view.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
+static void _about_step_task_view(about_ui_runtime_s* runtime, bool content_move_up);
+
+/*
  * brief : _about_obj_valid.
  * input : see parameters.
  * output: return value from this function.
@@ -251,6 +259,9 @@ static void _about_sync_ui(void* param) {
     char psram_text[ABOUT_INFO_TEXT_LEN];
     about_task_row_s rows[ABOUT_TASKLIST_MAX_ROWS];
     uint16_t row_count = 0U;
+    uint16_t view_offset = 0U;
+    uint16_t view_rows = 0U;
+    uint16_t show_rows = 0U;
     bool dirty = false;
 
     taskENTER_CRITICAL(&s_about_lock);
@@ -268,6 +279,9 @@ static void _about_sync_ui(void* param) {
             memcpy(rows, runtime->task_rows, sizeof(about_task_row_s) * row_count);
         }
 
+        view_offset = runtime->task_view_offset;
+        view_rows = runtime->task_view_rows;
+
         runtime->dirty = false;
         dirty = true;
     }
@@ -282,8 +296,21 @@ static void _about_sync_ui(void* param) {
     lv_label_set_text(runtime->ram_value_label, ram_text);
     lv_label_set_text(runtime->psram_value_label, psram_text);
 
+    if (view_rows == 0U) {
+        view_rows = 1U;
+    }
+
+    if (row_count > 0U) {
+        uint16_t max_offset = 0U;
+        if (row_count > view_rows) {
+            max_offset = (uint16_t)(row_count - view_rows);
+        }
+        if (view_offset > max_offset) {
+            view_offset = max_offset;
+        }
+    }
+
     lv_obj_t* table = runtime->tasklist_table;
-    lv_table_set_row_cnt(table, (uint16_t)(row_count + 1U));
     lv_table_set_cell_value(table, 0U, 0U, "Task");
     lv_table_set_cell_value(table, 0U, 1U, "S");
     lv_table_set_cell_value(table, 0U, 2U, "P");
@@ -298,14 +325,24 @@ static void _about_sync_ui(void* param) {
         return;
     }
 
-    for (uint16_t i = 0; i < row_count; i++) {
+    show_rows = row_count;
+    if (show_rows > view_rows) {
+        show_rows = view_rows;
+    }
+    if ((view_offset + show_rows) > row_count) {
+        view_offset = (uint16_t)(row_count - show_rows);
+    }
+
+    lv_table_set_row_cnt(table, (uint16_t)(show_rows + 1U));
+    for (uint16_t i = 0; i < show_rows; i++) {
+        uint16_t src_idx = (uint16_t)(view_offset + i);
         char prio_text[8];
         char stack_text[12];
-        snprintf(prio_text, sizeof(prio_text), "%u", (unsigned)rows[i].priority);
-        snprintf(stack_text, sizeof(stack_text), "%u", (unsigned)rows[i].stack_high_watermark);
+        snprintf(prio_text, sizeof(prio_text), "%u", (unsigned)rows[src_idx].priority);
+        snprintf(stack_text, sizeof(stack_text), "%u", (unsigned)rows[src_idx].stack_high_watermark);
 
-        lv_table_set_cell_value(table, (uint16_t)(i + 1U), 0U, rows[i].name);
-        lv_table_set_cell_value(table, (uint16_t)(i + 1U), 1U, rows[i].state);
+        lv_table_set_cell_value(table, (uint16_t)(i + 1U), 0U, rows[src_idx].name);
+        lv_table_set_cell_value(table, (uint16_t)(i + 1U), 1U, rows[src_idx].state);
         lv_table_set_cell_value(table, (uint16_t)(i + 1U), 2U, prio_text);
         lv_table_set_cell_value(table, (uint16_t)(i + 1U), 3U, stack_text);
     }
@@ -329,6 +366,52 @@ static void _about_ui_timer_cb(lv_timer_t* timer) {
 }
 
 /*
+ * brief : _about_step_task_view.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
+static void _about_step_task_view(about_ui_runtime_s* runtime, bool content_move_up) {
+    uint16_t row_count = 0U;
+    uint16_t view_rows = 0U;
+    uint16_t view_offset = 0U;
+    uint16_t max_offset = 0U;
+
+    if (runtime == NULL) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&s_about_lock);
+    row_count = runtime->task_row_count;
+    if (row_count > ABOUT_TASKLIST_MAX_ROWS) {
+        row_count = ABOUT_TASKLIST_MAX_ROWS;
+    }
+
+    view_rows = runtime->task_view_rows;
+    if (view_rows == 0U) {
+        view_rows = 1U;
+    }
+
+    view_offset = runtime->task_view_offset;
+    if (row_count > view_rows) {
+        max_offset = (uint16_t)(row_count - view_rows);
+    }
+
+    if (content_move_up) {
+        if (view_offset < max_offset) {
+            runtime->task_view_offset = (uint16_t)(view_offset + 1U);
+            runtime->dirty = true;
+        }
+    } else {
+        if (view_offset > 0U) {
+            runtime->task_view_offset = (uint16_t)(view_offset - 1U);
+            runtime->dirty = true;
+        }
+    }
+    taskEXIT_CRITICAL(&s_about_lock);
+}
+
+/*
  * brief : _about_refresh_info.
  * input : see parameters.
  * output: none.
@@ -337,6 +420,7 @@ static void _about_ui_timer_cb(lv_timer_t* timer) {
 static void _about_refresh_info(about_ui_runtime_s* runtime) {
     about_task_row_s rows[ABOUT_TASKLIST_MAX_ROWS] = {0};
     uint16_t row_count = 0U;
+    uint16_t max_offset = 0U;
     uint64_t total_runtime = 0U;
     uint64_t idle_runtime = 0U;
 
@@ -353,6 +437,19 @@ static void _about_refresh_info(about_ui_runtime_s* runtime) {
     if (row_count > 0U) {
         memcpy(runtime->task_rows, rows, sizeof(about_task_row_s) * row_count);
     }
+
+    if (runtime->task_view_rows == 0U) {
+        runtime->task_view_rows = 1U;
+    }
+    if (runtime->task_row_count > runtime->task_view_rows) {
+        max_offset = (uint16_t)(runtime->task_row_count - runtime->task_view_rows);
+        if (runtime->task_view_offset > max_offset) {
+            runtime->task_view_offset = max_offset;
+        }
+    } else {
+        runtime->task_view_offset = 0U;
+    }
+
     runtime->dirty = true;
     taskEXIT_CRITICAL(&s_about_lock);
 }
@@ -366,11 +463,16 @@ static void _about_refresh_info(about_ui_runtime_s* runtime) {
 static void _about_ui_task(void* param) {
     about_ui_runtime_s* runtime = (about_ui_runtime_s*)param;
     uint32_t refresh_elapsed_ms = ABOUT_REFRESH_PERIOD_MS;
+    btn_status_e btn_val = Btn_Idle;
 
     while (1) {
-        btn_status_e btn_val = button_scan_state(&runtime->button_scan, ABOUT_TASK_PERIOD_MS);
+        btn_val = button_scan_state(&runtime->button_scan, ABOUT_TASK_PERIOD_MS);
         if ((btn_val == Btn_Both_Click) && (runtime->home_cb != NULL)) {
             runtime->home_cb(runtime->home_user_ctx);
+        } else if (btn_val == Btn_Up_Click) {
+            _about_step_task_view(runtime, true);
+        } else if (btn_val == Btn_Down_Click) {
+            _about_step_task_view(runtime, false);
         }
 
         if (refresh_elapsed_ms >= ABOUT_REFRESH_PERIOD_MS) {
@@ -391,6 +493,14 @@ static void _about_ui_task(void* param) {
  */
 lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                               ui_menu_home_cb_t home_cb, void* home_user_ctx) {
+    lv_obj_t* screen = NULL;
+    lv_obj_t* panel = NULL;
+    lv_coord_t panel_top = 0;
+    lv_coord_t panel_h = 0;
+    lv_coord_t table_w = 0;
+    lv_coord_t data_h = 0;
+    uint16_t task_view_rows = 1U;
+
     if (parent == NULL) {
         return NULL;
     }
@@ -403,8 +513,10 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
     memset(&s_about_runtime, 0, sizeof(s_about_runtime));
     s_about_runtime.home_cb = home_cb;
     s_about_runtime.home_user_ctx = home_user_ctx;
+    s_about_runtime.task_view_offset = 0U;
+    s_about_runtime.task_view_rows = 1U;
 
-    lv_obj_t* screen = lv_obj_create(parent);
+    screen = lv_obj_create(parent);
     lv_obj_set_size(screen, area_w, area_h);
     lv_obj_set_pos(screen, 0, 0);
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x1C1B1A), 0);
@@ -413,15 +525,11 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
     lv_obj_set_style_radius(screen, 0, 0);
     lv_obj_set_style_pad_all(screen, 2, 0);
 
-    lv_obj_t* title = lv_label_create(screen);
-    lv_label_set_text(title, "About / System");
-    lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
-
     const lv_coord_t key_x = 0;
     const lv_coord_t value_x = 72;
-    const lv_coord_t row_y0 = 18;
-    const lv_coord_t row_gap = 16;
+    const lv_coord_t row_y0 = 2;
+    const lv_coord_t row_gap = 15;
+    const lv_coord_t table_row_step = 20;
 
     lv_obj_t* idf_key = lv_label_create(screen);
     lv_obj_set_style_text_color(idf_key, lv_color_white(), 0);
@@ -464,19 +572,15 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
                    (lv_coord_t)(row_y0 + row_gap * 3));
     lv_label_set_text(s_about_runtime.psram_value_label, "--");
 
-    lv_obj_t* tasklist_title = lv_label_create(screen);
-    lv_obj_set_style_text_color(tasklist_title, lv_color_white(), 0);
-    lv_obj_align(tasklist_title, LV_ALIGN_TOP_LEFT, 0, 84);
-    lv_label_set_text(tasklist_title, "TaskList:");
-
-    lv_coord_t panel_h = (lv_coord_t)(area_h - 106);
+    panel_top = (lv_coord_t)(row_y0 + row_gap * 4 + 6);
+    panel_h = (lv_coord_t)(area_h - panel_top - 2);
     if (panel_h < 36) {
         panel_h = 36;
     }
 
-    lv_obj_t* panel = lv_obj_create(screen);
+    panel = lv_obj_create(screen);
     lv_obj_set_size(panel, lv_pct(100), panel_h);
-    lv_obj_align(panel, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_obj_align(panel, LV_ALIGN_TOP_LEFT, 0, panel_top);
     lv_obj_set_style_bg_color(panel, lv_color_hex(0x202020), 0);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(panel, 1, 0);
@@ -496,7 +600,7 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
     lv_table_set_col_cnt(s_about_runtime.tasklist_table, 4U);
     lv_table_set_row_cnt(s_about_runtime.tasklist_table, 2U);
 
-    lv_coord_t table_w = (lv_coord_t)(area_w - 8);
+    table_w = (lv_coord_t)(area_w - 8);
     if (table_w < 120) {
         table_w = 120;
     }
@@ -510,6 +614,19 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
     lv_table_set_cell_value(s_about_runtime.tasklist_table, 0U, 2U, "P");
     lv_table_set_cell_value(s_about_runtime.tasklist_table, 0U, 3U, "Stack");
     lv_table_set_cell_value(s_about_runtime.tasklist_table, 1U, 0U, "collecting...");
+
+    data_h = (lv_coord_t)(panel_h - 8);
+    if (data_h > table_row_step) {
+        task_view_rows = (uint16_t)(data_h / table_row_step);
+    }
+    if (task_view_rows == 0U) {
+        task_view_rows = 1U;
+    }
+    if (task_view_rows > ABOUT_TASKLIST_MAX_ROWS) {
+        task_view_rows = ABOUT_TASKLIST_MAX_ROWS;
+    }
+    s_about_runtime.task_view_rows = task_view_rows;
+    s_about_runtime.task_view_offset = 0U;
 
     s_about_runtime.ui_sync_timer =
         lv_timer_create(_about_ui_timer_cb, ABOUT_TASK_PERIOD_MS, &s_about_runtime);
@@ -574,6 +691,8 @@ void about_destroy_screen(lv_obj_t* screen) {
     s_about_runtime.root = NULL;
     s_about_runtime.dirty = false;
     s_about_runtime.task_row_count = 0U;
+    s_about_runtime.task_view_offset = 0U;
+    s_about_runtime.task_view_rows = 0U;
     taskEXIT_CRITICAL(&s_about_lock);
 
     if (_about_obj_valid(screen)) {

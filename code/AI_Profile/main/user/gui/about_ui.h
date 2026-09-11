@@ -43,6 +43,8 @@ typedef struct {
     char ram_text[ABOUT_INFO_TEXT_LEN];
     char psram_text[ABOUT_INFO_TEXT_LEN];
     uint16_t task_row_count;
+    uint16_t task_view_offset;
+    uint16_t task_view_rows;
     about_task_row_s task_rows[ABOUT_TASKLIST_MAX_ROWS];
 } about_ui_runtime_s;
 

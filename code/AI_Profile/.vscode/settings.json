@@ -58,5 +58,6 @@
         "sdkconfig.defaults.esp32p4": true,
         "sdkconfig.defaults.esp32s31": true
     },
-    "idf.customExtraVars": {}
+    "idf.customExtraVars": {},
+    "idf.portWin": "COM2"
 }

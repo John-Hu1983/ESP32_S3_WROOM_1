@@ -8,9 +8,9 @@
 #include "user/gui/file_ui.h"
 #include "user/gui/gallery_ui.h"
 #include "user/gui/mic_ui.h"
-#include "user/gui/print_ui.h"
 #include "user/gui/oscilloscope_ui.h"
 #include "user/gui/pidm_ui.h"
+#include "user/gui/print_ui.h"
 #include "user/gui/rfid_ui.h"
 #include "user/gui/setting_ui.h"
 #include "user/gui/wifi_ui.h"
@@ -213,7 +213,8 @@ static bool _desktop_set_grid_hidden(bool hidden)
 
     if (hidden) {
         lv_obj_add_flag(s_icon_op.desktop_grid, LV_OBJ_FLAG_HIDDEN);
-    } else {
+    }
+    else {
         lv_obj_remove_flag(s_icon_op.desktop_grid, LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -402,7 +403,8 @@ static void _desktop_set_icon_state(uint32_t icon_index, bool selected)
         lv_obj_set_style_border_width(btn, 2, 0);
         lv_obj_set_style_border_color(btn, lv_color_white(), 0);
         lv_obj_set_style_border_opa(btn, LV_OPA_COVER, 0);
-    } else {
+    }
+    else {
         lv_obj_set_style_border_width(btn, 0, 0);
     }
 
@@ -473,10 +475,12 @@ static void _desktop_destroy_active_ui(void)
             && _desktop_obj_valid(s_icon_op.active_ui_root)) {
             icon->destroy_screen(s_icon_op.active_ui_root);
             s_icon_op.active_ui_root = NULL;
-        } else {
+        }
+        else {
             _desktop_del_obj(&s_icon_op.active_ui_root);
         }
-    } else {
+    }
+    else {
         _desktop_del_obj(&s_icon_op.active_ui_root);
     }
 
@@ -595,11 +599,13 @@ static void _desktop_active_icons(btn_status_e btn_val)
 
         if (next_index < 0) {
             next_index = is_up ? ((int)DESKTOP_ICON_COUNT - 1) : 0;
-        } else {
+        }
+        else {
             next_index += step;
             if (next_index < 0) {
                 next_index = (int)DESKTOP_ICON_COUNT - 1;
-            } else if (next_index >= (int)DESKTOP_ICON_COUNT) {
+            }
+            else if (next_index >= (int)DESKTOP_ICON_COUNT) {
                 next_index = 0;
             }
         }
@@ -669,12 +675,15 @@ static void _probe_net_state(void)
         net_online_next = true;
         if (ap_info.rssi >= -65) {
             net_symbol_next = MATERIAL_SYMBOLS_WIFI;
-        } else if (ap_info.rssi >= -75) {
+        }
+        else if (ap_info.rssi >= -75) {
             net_symbol_next = MATERIAL_SYMBOLS_WIFI_2_BAR;
-        } else {
+        }
+        else {
             net_symbol_next = MATERIAL_SYMBOLS_WIFI_1_BAR;
         }
-    } else {
+    }
+    else {
         ret = esp_wifi_get_mode(&wifi_mode);
         if ((ret == ESP_OK)
             && ((wifi_mode == WIFI_MODE_AP) || (wifi_mode == WIFI_MODE_APSTA))) {
@@ -906,12 +915,14 @@ static void _show_message_detail(void)
             has_msg = true;
             msg_dirty = s_desktop_msg_dirty;
             s_desktop_msg_dirty = false;
-        } else {
+        }
+        else {
             s_desktop_msg_active = false;
             s_desktop_msg_dirty = false;
             msg_expired = true;
         }
-    } else if (s_desktop_msg_active) {
+    }
+    else if (s_desktop_msg_active) {
         s_desktop_msg_active = false;
         s_desktop_msg_dirty = false;
         msg_expired = true;
@@ -991,10 +1002,12 @@ static void _gain_real_time(void)
 
         if (localtime_r(&cur_time, &tm_info) != NULL) {
             snprintf(hhmm, sizeof(hhmm), "%02d:%02d", tm_info.tm_hour, tm_info.tm_min);
-        } else {
+        }
+        else {
             snprintf(hhmm, sizeof(hhmm), "--:--");
         }
-    } else {
+    }
+    else {
         up_sec = (uint64_t)esp_timer_get_time() / 1000000ULL;
         hh = (uint32_t)((up_sec / 3600ULL) % 24ULL);
         mm = (uint32_t)((up_sec / 60ULL) % 60ULL);
@@ -1036,7 +1049,8 @@ static void _show_weather_detail(void)
     temp_ok = _desktop_read_temp(&temp_val);
     if (temp_ok) {
         snprintf(temp_text, sizeof(temp_text), "%.0fC", temp_val);
-    } else {
+    }
+    else {
         snprintf(temp_text, sizeof(temp_text), "--C");
     }
 
