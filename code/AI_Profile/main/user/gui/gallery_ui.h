@@ -18,9 +18,9 @@ typedef struct {
 	btn_scan_s button_scan;
 } gallery_ui_runtime_s;
 
-lv_obj_t* gallery_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* gallery_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
 								ui_menu_home_cb_t home_cb, void* home_user_ctx);
-void gallery_destroy_screen(lv_obj_t* screen);
+void gallery_close_screen(lv_obj_t* screen);
 
 #ifdef __cplusplus
 }

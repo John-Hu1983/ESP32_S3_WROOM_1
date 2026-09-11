@@ -70,14 +70,14 @@ typedef struct {
 
 } print_auto_test_s;
 
-lv_obj_t* print_create_screen(
+lv_obj_t* print_open_screen(
     lv_obj_t* parent,
     lv_coord_t area_w,
     lv_coord_t area_h,
     ui_menu_home_cb_t home_cb,
     void* home_user_ctx
 );
-void print_destroy_screen(lv_obj_t* screen);
+void print_close_screen(lv_obj_t* screen);
 
 #ifdef __cplusplus
 }

@@ -28,7 +28,7 @@ static void _mic_ui_task(void* param) {
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* mic_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* mic_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                             ui_menu_home_cb_t home_cb, void* home_user_ctx) {
     if (parent == NULL) {
         return NULL;
@@ -66,12 +66,12 @@ lv_obj_t* mic_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area
 }
 
 /*
- * brief : mic_destroy_screen.
+ * brief : mic_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void mic_destroy_screen(lv_obj_t* screen) {
+void mic_close_screen(lv_obj_t* screen) {
     if (s_mic_runtime.task_handle != NULL) {
         vTaskDelete(s_mic_runtime.task_handle);
         s_mic_runtime.task_handle = NULL;

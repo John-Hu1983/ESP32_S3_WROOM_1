@@ -9,7 +9,7 @@
 
 Backlight::Backlight() {
     // 创建背光渐变定时器
-    const esp_timer_create_args_t timer_args = {
+    const esp_timer_open_args_t timer_args = {
         .callback = [](void* arg) {
             auto self = static_cast<Backlight*>(arg);
             self->OnTransitionTimer();

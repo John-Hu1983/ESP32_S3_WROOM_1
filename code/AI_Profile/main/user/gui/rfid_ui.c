@@ -622,7 +622,7 @@ static void _rfid_ui_task(void* param)
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* rfid_create_screen(
+lv_obj_t* rfid_open_screen(
     lv_obj_t* parent,
     lv_coord_t area_w,
     lv_coord_t area_h,
@@ -889,12 +889,12 @@ lv_obj_t* rfid_create_screen(
 }
 
 /*
- * brief : rfid_destroy_screen.
+ * brief : rfid_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void rfid_destroy_screen(lv_obj_t* screen)
+void rfid_close_screen(lv_obj_t* screen)
 {
     esp_err_t ret = ESP_OK;
 

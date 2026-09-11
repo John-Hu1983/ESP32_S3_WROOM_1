@@ -486,12 +486,12 @@ static void _about_ui_task(void* param) {
 }
 
 /*
- * brief : about_create_screen.
+ * brief : about_open_screen.
  * input : see parameters.
  * output: return value from this function.
  * type  : public
  */
-lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* about_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                               ui_menu_home_cb_t home_cb, void* home_user_ctx) {
     lv_obj_t* screen = NULL;
     lv_obj_t* panel = NULL;
@@ -663,12 +663,12 @@ lv_obj_t* about_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
 }
 
 /*
- * brief : about_destroy_screen.
+ * brief : about_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void about_destroy_screen(lv_obj_t* screen) {
+void about_close_screen(lv_obj_t* screen) {
     if (s_about_runtime.ui_sync_timer != NULL) {
         lv_timer_delete(s_about_runtime.ui_sync_timer);
         s_about_runtime.ui_sync_timer = NULL;

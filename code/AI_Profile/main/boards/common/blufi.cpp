@@ -389,7 +389,7 @@ void Blufi::_security_deinit() {
     psa_cipher_abort(&m_sec->enc_operation);
     psa_cipher_abort(&m_sec->dec_operation);
     if (m_sec->aes_key != PSA_KEY_ID_NULL) {
-        psa_destroy_key(m_sec->aes_key);
+        psa_close_key(m_sec->aes_key);
     }
     free(m_sec->dh_param);
     memset(m_sec, 0, sizeof(BlufiSecurity));
@@ -430,7 +430,7 @@ void Blufi::_dh_negotiate_data_handler(uint8_t* data, int len, uint8_t** output_
             m_sec->enc_operation = psa_cipher_operation_init();
             m_sec->dec_operation = psa_cipher_operation_init();
             if (m_sec->aes_key != PSA_KEY_ID_NULL) {
-                psa_destroy_key(m_sec->aes_key);
+                psa_close_key(m_sec->aes_key);
                 m_sec->aes_key = PSA_KEY_ID_NULL;
             }
 
@@ -521,7 +521,7 @@ void Blufi::_dh_negotiate_data_handler(uint8_t* data, int len, uint8_t** output_
             if (status != PSA_SUCCESS || public_key_len != kDhKeyBytes) {
                 ESP_LOGE(BLUFI_TAG, "psa_export_public_key failed: %d, length: %u", status,
                          static_cast<unsigned>(public_key_len));
-                psa_destroy_key(private_key);
+                psa_close_key(private_key);
                 btc_blufi_report_error(ESP_BLUFI_MAKE_PUBLIC_ERROR);
                 return;
             }
@@ -529,7 +529,7 @@ void Blufi::_dh_negotiate_data_handler(uint8_t* data, int len, uint8_t** output_
             status = psa_raw_key_agreement(PSA_ALG_FFDH, private_key, peer_public_key,
                                            peer_public_key_len, m_sec->share_key,
                                            sizeof(m_sec->share_key), &m_sec->share_len);
-            psa_destroy_key(private_key);
+            psa_close_key(private_key);
             if (status != PSA_SUCCESS) {
                 ESP_LOGE(BLUFI_TAG, "psa_raw_key_agreement failed: %d", status);
                 btc_blufi_report_error(ESP_BLUFI_ENCRYPT_ERROR);
@@ -591,7 +591,7 @@ void Blufi::_dh_negotiate_data_handler(uint8_t* data, int len, uint8_t** output_
                 ESP_LOGE(BLUFI_TAG, "PSA cipher setup failed: %d", status);
                 psa_cipher_abort(&m_sec->enc_operation);
                 psa_cipher_abort(&m_sec->dec_operation);
-                psa_destroy_key(m_sec->aes_key);
+                psa_close_key(m_sec->aes_key);
                 m_sec->aes_key = PSA_KEY_ID_NULL;
                 btc_blufi_report_error(ESP_BLUFI_ENCRYPT_ERROR);
                 return;

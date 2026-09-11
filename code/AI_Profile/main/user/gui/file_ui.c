@@ -28,7 +28,7 @@ static void _file_ui_task(void* param) {
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* file_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* file_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                              ui_menu_home_cb_t home_cb, void* home_user_ctx) {
     if (parent == NULL) {
         return NULL;
@@ -66,12 +66,12 @@ lv_obj_t* file_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t are
 }
 
 /*
- * brief : file_destroy_screen.
+ * brief : file_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void file_destroy_screen(lv_obj_t* screen) {
+void file_close_screen(lv_obj_t* screen) {
     if (s_file_runtime.task_handle != NULL) {
         vTaskDelete(s_file_runtime.task_handle);
         s_file_runtime.task_handle = NULL;

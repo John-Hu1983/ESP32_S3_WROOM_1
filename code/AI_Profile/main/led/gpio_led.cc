@@ -70,7 +70,7 @@ GpioLed::GpioLed(gpio_num_t gpio, int output_invert, ledc_timer_t timer_num, led
     };
     ledc_cb_register(ledc_channel_.speed_mode, ledc_channel_.channel, &ledc_callbacks, this);
 
-    esp_timer_create_args_t blink_timer_args = {
+    esp_timer_open_args_t blink_timer_args = {
         .callback = [](void *arg) {
             auto led = static_cast<GpioLed*>(arg);
             led->OnBlinkTimer();

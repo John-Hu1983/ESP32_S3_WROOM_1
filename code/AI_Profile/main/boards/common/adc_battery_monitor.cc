@@ -42,7 +42,7 @@ AdcBatteryMonitor::AdcBatteryMonitor(adc_unit_t adc_unit, adc_channel_t adc_chan
     adc_battery_estimation_handle_ = adc_battery_estimation_create(&adc_cfg);
 
     // Initialize timer
-    esp_timer_create_args_t timer_cfg = {
+    esp_timer_open_args_t timer_cfg = {
         .callback = [](void *arg) {
             AdcBatteryMonitor *self = (AdcBatteryMonitor *)arg;
             self->CheckBatteryStatus();

@@ -33,7 +33,7 @@ Application::Application() {
     aec_mode_ = kAecOff;
 #endif
 
-    esp_timer_create_args_t clock_timer_args = {.callback =
+    esp_timer_open_args_t clock_timer_args = {.callback =
                                                     [](void* arg) {
                                                         Application* app = (Application*)arg;
                                                         xEventGroupSetBits(app->event_group_,

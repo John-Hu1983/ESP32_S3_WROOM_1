@@ -1378,7 +1378,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(json.loads(output.getvalue()), wake_words)
 
-    def test_build_does_not_create_zip_by_default(self):
+    def test_build_does_not_open_zip_by_default(self):
         with (
             mock.patch.object(build, "_detect_idf_version", return_value=(6, 0, 2)),
             mock.patch.object(build, "_board_type_exists", return_value=True),

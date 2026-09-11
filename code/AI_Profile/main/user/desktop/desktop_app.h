@@ -79,24 +79,24 @@ LV_FONT_DECLARE(DESKTOP_SYMBOL_FONT);
 
 typedef void (*ui_menu_home_cb_t)(void* user_ctx);
 
-typedef lv_obj_t* (*ui_menu_create_fn_t)(
+typedef lv_obj_t* (*ui_menu_open_fn_t)(
     lv_obj_t* parent,
     lv_coord_t area_w,
     lv_coord_t area_h,
     ui_menu_home_cb_t home_cb,
     void* home_user_ctx
 );
-typedef void (*ui_menu_destroy_fn_t)(lv_obj_t* screen);
+typedef void (*ui_menu_close_fn_t)(lv_obj_t* screen);
 
-typedef ui_menu_create_fn_t desktop_ui_create_fn_t;
-typedef ui_menu_destroy_fn_t desktop_ui_destroy_fn_t;
+typedef ui_menu_open_fn_t desktop_ui_open_fn_t;
+typedef ui_menu_close_fn_t desktop_ui_close_fn_t;
 
 typedef struct {
     const char* symbol;
     const char* name;
     uint32_t color_hex;
-    desktop_ui_create_fn_t create_screen;
-    desktop_ui_destroy_fn_t destroy_screen;
+    desktop_ui_open_fn_t create_screen;
+    desktop_ui_close_fn_t destroy_screen;
 } desktop_icon_s;
 
 typedef struct {

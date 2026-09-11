@@ -2,6 +2,9 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.16)
 
+# Work around Windows command-line length limits for large ESP-IDF builds.
+set(CMAKE_NINJA_FORCE_RESPONSE_FILE ON)
+
 # Add this line to disable the specific warning
 add_compile_options(-Wno-missing-field-initializers)
 

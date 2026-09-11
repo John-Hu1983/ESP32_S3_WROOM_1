@@ -28,7 +28,7 @@ static constexpr int CONNECT_TIMEOUT_SEC = 60;
 
 WifiBoard::WifiBoard() {
     // Create connection timeout timer
-    esp_timer_create_args_t timer_args = {
+    esp_timer_open_args_t timer_args = {
         .callback = OnWifiConnectTimeout,
         .arg = this,
         .dispatch_method = ESP_TIMER_TASK,

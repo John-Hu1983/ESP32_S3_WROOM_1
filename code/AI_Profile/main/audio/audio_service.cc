@@ -106,7 +106,7 @@ void AudioService::Initialize(AudioCodec* codec) {
         }
     });
 
-    esp_timer_create_args_t audio_power_timer_args = {
+    esp_timer_open_args_t audio_power_timer_args = {
         .callback = [](void* arg) {
             AudioService* audio_service = (AudioService*)arg;
             audio_service->CheckAndUpdateAudioPowerState();

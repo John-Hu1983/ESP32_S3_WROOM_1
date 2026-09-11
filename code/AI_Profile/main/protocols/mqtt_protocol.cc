@@ -14,7 +14,7 @@ MqttProtocol::MqttProtocol() {
     event_group_handle_ = xEventGroupCreate();
 
     // Initialize reconnect timer
-    esp_timer_create_args_t reconnect_timer_args = {
+    esp_timer_open_args_t reconnect_timer_args = {
         .callback =
             [](void* arg) {
                 MqttProtocol* protocol = (MqttProtocol*)arg;
@@ -56,7 +56,7 @@ MqttProtocol::~MqttProtocol() {
     {
         std::lock_guard<std::mutex> lock(crypto_mutex_);
         if (aes_key_id_ != PSA_KEY_ID_NULL) {
-            psa_destroy_key(aes_key_id_);
+            psa_close_key(aes_key_id_);
             aes_key_id_ = PSA_KEY_ID_NULL;
         }
     }
@@ -438,7 +438,7 @@ void MqttProtocol::ParseServerHello(const cJSON* root) {
     {
         std::lock_guard<std::mutex> lock(crypto_mutex_);
         if (aes_key_id_ != PSA_KEY_ID_NULL) {
-            psa_destroy_key(aes_key_id_);
+            psa_close_key(aes_key_id_);
             aes_key_id_ = PSA_KEY_ID_NULL;
         }
 

@@ -30,7 +30,7 @@ static void _bsp_init_adc_cali(void)
         .atten = BSP_BATTERY_ADC_ATTEN,
         .bitwidth = BSP_BATTERY_ADC_BITWIDTH,
     };
-    ret = adc_cali_create_scheme_curve_fitting(&cali_cfg, &s_bsp_adc_cali_handle);
+    ret = adc_cali_open_scheme_curve_fitting(&cali_cfg, &s_bsp_adc_cali_handle);
 #elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
     adc_cali_line_fitting_config_t cali_cfg = {
         .unit_id = s_bsp_adc_unit,
@@ -38,7 +38,7 @@ static void _bsp_init_adc_cali(void)
         .bitwidth = BSP_BATTERY_ADC_BITWIDTH,
         .default_vref = 0,
     };
-    ret = adc_cali_create_scheme_line_fitting(&cali_cfg, &s_bsp_adc_cali_handle);
+    ret = adc_cali_open_scheme_line_fitting(&cali_cfg, &s_bsp_adc_cali_handle);
 #endif
 
     if (ret == ESP_OK) {

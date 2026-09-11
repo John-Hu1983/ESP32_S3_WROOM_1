@@ -29,7 +29,7 @@ static void _setting_ui_task(void* param) {
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* setting_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* config_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                                 ui_menu_home_cb_t home_cb, void* home_user_ctx) {
     if (parent == NULL) {
         return NULL;
@@ -67,12 +67,12 @@ lv_obj_t* setting_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t 
 }
 
 /*
- * brief : setting_destroy_screen.
+ * brief : config_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void setting_destroy_screen(lv_obj_t* screen) {
+void config_close_screen(lv_obj_t* screen) {
     if (s_setting_runtime.task_handle != NULL) {
         vTaskDelete(s_setting_runtime.task_handle);
         s_setting_runtime.task_handle = NULL;

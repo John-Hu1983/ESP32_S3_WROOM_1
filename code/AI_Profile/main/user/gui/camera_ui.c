@@ -461,7 +461,7 @@ static void _camera_ui_timer_cb(lv_timer_t* timer)
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* camera_create_screen(
+lv_obj_t* camera_open_screen(
     lv_obj_t* parent,
     lv_coord_t area_w,
     lv_coord_t area_h,
@@ -586,12 +586,12 @@ lv_obj_t* camera_create_screen(
 }
 
 /*
- * brief : camera_destroy_screen.
+ * brief : camera_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void camera_destroy_screen(lv_obj_t* screen)
+void camera_close_screen(lv_obj_t* screen)
 {
     if (s_camera_runtime.ui_sync_timer != NULL) {
         lv_timer_delete(s_camera_runtime.ui_sync_timer);

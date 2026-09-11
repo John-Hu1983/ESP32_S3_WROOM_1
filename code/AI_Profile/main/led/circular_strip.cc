@@ -25,7 +25,7 @@ CircularStrip::CircularStrip(gpio_num_t gpio, uint16_t max_leds) : max_leds_(max
     ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip_));
     led_strip_clear(led_strip_);
 
-    esp_timer_create_args_t strip_timer_args = {
+    esp_timer_open_args_t strip_timer_args = {
         .callback = [](void *arg) {
             auto strip = static_cast<CircularStrip*>(arg);
             std::lock_guard<std::mutex> lock(strip->mutex_);

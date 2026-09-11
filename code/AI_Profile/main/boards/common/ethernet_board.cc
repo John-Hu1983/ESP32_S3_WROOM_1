@@ -82,7 +82,7 @@ void EthernetBoard::NetworkTask() {
         return;
     }
 
-    ret = esp_event_loop_create_default();
+    ret = esp_event_loop_open_default();
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "Failed to create default event loop: %s", esp_err_to_name(ret));
         OnNetworkEvent(NetworkEvent::Disconnected);

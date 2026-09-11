@@ -82,7 +82,7 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
     current_theme_ = LvglThemeManager::GetInstance().GetTheme(theme_name);
 
     // Create a timer to hide the preview image
-    esp_timer_create_args_t preview_timer_args = {
+    esp_timer_open_args_t preview_timer_args = {
         .callback =
             [](void* arg) {
                 LcdDisplay* display = static_cast<LcdDisplay*>(arg);

@@ -28,7 +28,7 @@ static void _wifi_ui_task(void* param) {
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* wifi_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* wifi_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                              ui_menu_home_cb_t home_cb, void* home_user_ctx) {
     if (parent == NULL) {
         return NULL;
@@ -66,12 +66,12 @@ lv_obj_t* wifi_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t are
 }
 
 /*
- * brief : wifi_destroy_screen.
+ * brief : wifi_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void wifi_destroy_screen(lv_obj_t* screen) {
+void wifi_close_screen(lv_obj_t* screen) {
     if (s_wifi_runtime.task_handle != NULL) {
         vTaskDelete(s_wifi_runtime.task_handle);
         s_wifi_runtime.task_handle = NULL;

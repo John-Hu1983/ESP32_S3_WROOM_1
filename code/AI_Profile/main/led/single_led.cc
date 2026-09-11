@@ -29,7 +29,7 @@ SingleLed::SingleLed(gpio_num_t gpio) {
     ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip_));
     led_strip_clear(led_strip_);
 
-    esp_timer_create_args_t blink_timer_args = {
+    esp_timer_open_args_t blink_timer_args = {
         .callback = [](void *arg) {
             auto led = static_cast<SingleLed*>(arg);
             led->OnBlinkTimer();

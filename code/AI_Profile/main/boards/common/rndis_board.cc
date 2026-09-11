@@ -37,7 +37,7 @@ void RndisBoard::StartNetwork() {
     }
      /* Initialize default TCP/IP stack */
      ESP_ERROR_CHECK(esp_netif_init());
-     ESP_ERROR_CHECK(esp_event_loop_create_default());
+     ESP_ERROR_CHECK(esp_event_loop_open_default());
  
      s_event_group = xEventGroupCreate();
      esp_event_handler_register(IOT_ETH_EVENT, ESP_EVENT_ANY_ID, iot_event_handle, this);

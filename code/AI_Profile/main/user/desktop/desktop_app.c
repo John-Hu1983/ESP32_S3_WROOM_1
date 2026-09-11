@@ -18,30 +18,18 @@
 #define TAG "desktop"
 
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
-    { LV_SYMBOL_VIDEO,
-      "Camera",
-      0xE95420,
-      camera_create_screen,
-      camera_destroy_screen },
-    { LV_SYMBOL_IMAGE,
-      "Gallery",
-      0xD94B3D,
-      gallery_create_screen,
-      gallery_destroy_screen },
-    { LV_SYMBOL_AUDIO, "Print", 0x77216F, print_create_screen, print_destroy_screen },
-    { LV_SYMBOL_LIST, "Scope", 0xF27C38, scope_create_screen, scope_destroy_screen },
-    { LV_SYMBOL_WIFI, "WiFi", 0xC0563F, wifi_create_screen, wifi_destroy_screen },
-    { LV_SYMBOL_BLUETOOTH, "BT", 0xB65C2C, bt_create_screen, bt_destroy_screen },
-    { LV_SYMBOL_FILE, "File", 0xE19A35, file_create_screen, file_destroy_screen },
-    { LV_SYMBOL_VOLUME_MAX, "Mic", 0x8F6745, mic_create_screen, mic_destroy_screen },
-    { LV_SYMBOL_BELL, "PIDM", 0xC23B4A, pidm_create_screen, pidm_destroy_screen },
-    { LV_SYMBOL_REFRESH, "RFID", 0x8A3D5D, rfid_create_screen, rfid_destroy_screen },
-    { LV_SYMBOL_SETTINGS,
-      "Setting",
-      0xA8703A,
-      setting_create_screen,
-      setting_destroy_screen },
-    { LV_SYMBOL_WARNING, "About", 0x6F4A34, about_create_screen, about_destroy_screen },
+    { LV_SYMBOL_VIDEO, "Camera", 0xE95420, camera_open_screen, camera_close_screen },
+    { LV_SYMBOL_IMAGE, "Gallery", 0xD94B3D, gallery_open_screen, gallery_close_screen },
+    { LV_SYMBOL_AUDIO, "Print", 0x77216F, print_open_screen, print_close_screen },
+    { LV_SYMBOL_LIST, "Scope", 0xF27C38, scope_open_screen, scope_close_screen },
+    { LV_SYMBOL_WIFI, "WiFi", 0xC0563F, wifi_open_screen, wifi_close_screen },
+    { LV_SYMBOL_BLUETOOTH, "BT", 0xB65C2C, bt_open_screen, bt_close_screen },
+    { LV_SYMBOL_FILE, "File", 0xE19A35, file_open_screen, file_close_screen },
+    { LV_SYMBOL_VOLUME_MAX, "Mic", 0x8F6745, mic_open_screen, mic_close_screen },
+    { LV_SYMBOL_BELL, "PIDM", 0xC23B4A, pidm_open_screen, pidm_close_screen },
+    { LV_SYMBOL_REFRESH, "RFID", 0x8A3D5D, rfid_open_screen, rfid_close_screen },
+    { LV_SYMBOL_SETTINGS, "Config", 0xA8703A, config_open_screen, config_close_screen },
+    { LV_SYMBOL_WARNING, "About", 0x6F4A34, about_open_screen, about_close_screen },
 };
 
 static lv_display_t* s_lv_display;
@@ -463,7 +451,7 @@ static void _desktop_select_icon(uint32_t next_index)
  * output: none.
  * type  : private
  */
-static void _desktop_destroy_active_ui(void)
+static void _desktop_close_active_ui(void)
 {
     if (!s_icon_op.ui_active) {
         return;
@@ -513,7 +501,7 @@ static void _desktop_leave_subui(void)
         return;
     }
 
-    _desktop_destroy_active_ui();
+    _desktop_close_active_ui();
 
     if (!_desktop_set_grid_hidden(false)) {
         _desktop_rebuild_home_content();
@@ -1097,7 +1085,7 @@ esp_err_t desktop_start_task(void)
     esp_err_t ret;
     st7365p_cfg_t panel_cfg;
     size_t draw_buf_pixels;
-    esp_timer_create_args_t tick_timer_args = {
+    esp_timer_open_args_t tick_timer_args = {
         .callback = desktop_tick_event,
         .arg = NULL,
         .dispatch_method = ESP_TIMER_TASK,

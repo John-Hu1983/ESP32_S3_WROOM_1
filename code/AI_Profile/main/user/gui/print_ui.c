@@ -292,12 +292,12 @@ _print_apply_status_title_style(lv_obj_t* label, bool printer_ready, bool status
 }
 
 /*
- * brief : _print_create_metric_card.
+ * brief : _print_open_metric_card.
  * input : see parameters.
  * output: return value from this function.
  * type  : private
  */
-static lv_obj_t* _print_create_metric_card(
+static lv_obj_t* _print_open_metric_card(
     lv_obj_t* parent,
     lv_align_t align,
     lv_coord_t x_ofs,
@@ -832,7 +832,7 @@ static void _print_ui_task(void* param)
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* print_create_screen(
+lv_obj_t* print_open_screen(
     lv_obj_t* parent,
     lv_coord_t area_w,
     lv_coord_t area_h,
@@ -957,7 +957,7 @@ lv_obj_t* print_create_screen(
     lv_obj_set_style_pad_bottom(metrics_panel, 4, 0);
     lv_obj_clear_flag(metrics_panel, LV_OBJ_FLAG_SCROLLABLE);
 
-    if (_print_create_metric_card(
+    if (_print_open_metric_card(
             metrics_panel,
             LV_ALIGN_LEFT_MID,
             0,
@@ -973,7 +973,7 @@ lv_obj_t* print_create_screen(
         return NULL;
     }
 
-    if (_print_create_metric_card(
+    if (_print_open_metric_card(
             metrics_panel,
             LV_ALIGN_CENTER,
             0,
@@ -989,7 +989,7 @@ lv_obj_t* print_create_screen(
         return NULL;
     }
 
-    if (_print_create_metric_card(
+    if (_print_open_metric_card(
             metrics_panel,
             LV_ALIGN_RIGHT_MID,
             0,
@@ -1172,12 +1172,12 @@ lv_obj_t* print_create_screen(
 }
 
 /*
- * brief : print_destroy_screen.
+ * brief : print_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void print_destroy_screen(lv_obj_t* screen)
+void print_close_screen(lv_obj_t* screen)
 {
     esp_err_t ret = ESP_OK;
 

@@ -38,9 +38,9 @@ typedef struct {
 	char status_text[CAMERA_UI_STATUS_TEXT_LEN];
 } camera_ui_runtime_s;
 
-lv_obj_t* camera_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* camera_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
 							   ui_menu_home_cb_t home_cb, void* home_user_ctx);
-void camera_destroy_screen(lv_obj_t* screen);
+void camera_close_screen(lv_obj_t* screen);
 
 #ifdef __cplusplus
 }

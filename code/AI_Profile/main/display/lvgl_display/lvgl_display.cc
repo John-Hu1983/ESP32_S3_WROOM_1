@@ -20,7 +20,7 @@
 LvglDisplay::LvglDisplay() {
     dynamic_glyph_cache_ = std::make_unique<DynamicGlyphCache>();
     // Notification timer
-    esp_timer_create_args_t notification_timer_args = {
+    esp_timer_open_args_t notification_timer_args = {
         .callback =
             [](void* arg) {
                 LvglDisplay* display = static_cast<LvglDisplay*>(arg);

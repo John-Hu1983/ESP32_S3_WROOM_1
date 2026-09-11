@@ -29,7 +29,7 @@ static void _scope_ui_task(void* param) {
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* scope_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
+lv_obj_t* scope_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
                               ui_menu_home_cb_t home_cb, void* home_user_ctx) {
     if (parent == NULL) {
         return NULL;
@@ -67,12 +67,12 @@ lv_obj_t* scope_create_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t ar
 }
 
 /*
- * brief : scope_destroy_screen.
+ * brief : scope_close_screen.
  * input : see parameters.
  * output: none.
  * type  : public
  */
-void scope_destroy_screen(lv_obj_t* screen) {
+void scope_close_screen(lv_obj_t* screen) {
     if (s_scope_runtime.task_handle != NULL) {
         vTaskDelete(s_scope_runtime.task_handle);
         s_scope_runtime.task_handle = NULL;
