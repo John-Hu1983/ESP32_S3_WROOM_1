@@ -1085,7 +1085,7 @@ esp_err_t desktop_start_task(void)
     esp_err_t ret;
     st7365p_cfg_t panel_cfg;
     size_t draw_buf_pixels;
-    esp_timer_open_args_t tick_timer_args = {
+    esp_timer_create_args_t tick_timer_args = {
         .callback = desktop_tick_event,
         .arg = NULL,
         .dispatch_method = ESP_TIMER_TASK,

@@ -12,8 +12,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "user/inc/user_config.h"
-#include "user/device/bsp_global.h"
+#include "user/inc/bsp_config.h"
+#include "user/bsp/bsp_global.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,3 +89,4 @@ esp_err_t st7365p_reset_sequency(void);
 #ifdef __cplusplus
 }
 #endif
+

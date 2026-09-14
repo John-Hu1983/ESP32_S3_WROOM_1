@@ -5,7 +5,7 @@
 
 #include "esp_camera.h"
 #include "esp_err.h"
-#include "user/inc/user_config.h"
+#include "user/inc/bsp_config.h"
 
 #if defined(CAM_IO_SCCB_SDA) && defined(CAM_IO_SCCB_SCL) && defined(CAM_IO_HREF) \
     && defined(CAM_IO_VSYNC) && defined(CAM_IO_PCLK) && defined(CAM_IO_D0)          \
@@ -58,3 +58,4 @@ camera_fb_t *bf20a6_cam_fb_get(void);
 void bf20a6_cam_fb_return(camera_fb_t *fb);
 /* Control external camera light pin exposed by GPBA02B. */
 esp_err_t bf20a6_cam_set_light(bool enable);
+

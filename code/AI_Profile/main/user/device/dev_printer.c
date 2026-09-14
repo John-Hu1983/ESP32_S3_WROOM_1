@@ -22,7 +22,7 @@ static printer_ctx_t s_printer = {
  */
 static int _printer_uart_pin_num(gpio_num_t io_num)
 {
-    if (user_common_gpio_is_valid(io_num)) {
+    if (bsp_common_gpio_is_valid(io_num)) {
         return (int)io_num;
     }
     return UART_PIN_NO_CHANGE;
@@ -36,16 +36,16 @@ static int _printer_uart_pin_num(gpio_num_t io_num)
  */
 static void _printer_release_io(void)
 {
-    if (user_common_gpio_is_valid(s_printer.tx_io_num)) {
+    if (bsp_common_gpio_is_valid(s_printer.tx_io_num)) {
         (void)gpio_reset_pin(s_printer.tx_io_num);
     }
-    if (user_common_gpio_is_valid(s_printer.rx_io_num)) {
+    if (bsp_common_gpio_is_valid(s_printer.rx_io_num)) {
         (void)gpio_reset_pin(s_printer.rx_io_num);
     }
-    if (user_common_gpio_is_valid(s_printer.rts_io_num)) {
+    if (bsp_common_gpio_is_valid(s_printer.rts_io_num)) {
         (void)gpio_reset_pin(s_printer.rts_io_num);
     }
-    if (user_common_gpio_is_valid(s_printer.cts_io_num)) {
+    if (bsp_common_gpio_is_valid(s_printer.cts_io_num)) {
         (void)gpio_reset_pin(s_printer.cts_io_num);
     }
 }
@@ -62,16 +62,16 @@ static void _printer_release_io_from_config(const printer_cfg_t* cfg)
         return;
     }
 
-    if (user_common_gpio_is_valid(cfg->tx_io_num)) {
+    if (bsp_common_gpio_is_valid(cfg->tx_io_num)) {
         (void)gpio_reset_pin(cfg->tx_io_num);
     }
-    if (user_common_gpio_is_valid(cfg->rx_io_num)) {
+    if (bsp_common_gpio_is_valid(cfg->rx_io_num)) {
         (void)gpio_reset_pin(cfg->rx_io_num);
     }
-    if (user_common_gpio_is_valid(cfg->rts_io_num)) {
+    if (bsp_common_gpio_is_valid(cfg->rts_io_num)) {
         (void)gpio_reset_pin(cfg->rts_io_num);
     }
-    if (user_common_gpio_is_valid(cfg->cts_io_num)) {
+    if (bsp_common_gpio_is_valid(cfg->cts_io_num)) {
         (void)gpio_reset_pin(cfg->cts_io_num);
     }
 }
@@ -176,7 +176,7 @@ static bool _printer_text_is_ascii(const char* text)
 static esp_err_t _printer_wait_flow_ready(void)
 {
 #ifdef PRINTER_UART_DTR_GPIO
-    if (user_common_gpio_is_valid(PRINTER_UART_DTR_GPIO)) {
+    if (bsp_common_gpio_is_valid(PRINTER_UART_DTR_GPIO)) {
         while (gpio_get_level(PRINTER_UART_DTR_GPIO) != 0) {
             delay_ms(10u);
         }
@@ -254,7 +254,7 @@ esp_err_t printer_init(const printer_cfg_t* config)
     }
 
     if ((cfg->uart_port < UART_NUM_0) || (cfg->uart_port >= UART_NUM_MAX)
-        || (cfg->baud_rate <= 0) || !user_common_gpio_is_valid(cfg->tx_io_num)
+        || (cfg->baud_rate <= 0) || !bsp_common_gpio_is_valid(cfg->tx_io_num)
         || (cfg->tx_buffer_size <= 0) || (cfg->rx_buffer_size < 0)
         || (cfg->queue_size < 0) || (cfg->write_timeout_ms == 0U)
         || (cfg->lock_timeout_ms == 0U)) {
@@ -511,9 +511,9 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
     }
     else if (rx_len == PRINTER_STATUS_DETECT_RESPONSE_LEN) {
         out_status->tph_temperature_celsius = raw[1];
-        out_status->paper_detect_raw = user_common_read_u16_be(&raw[2]) >> 2;
+        out_status->paper_detect_raw = bsp_common_read_u16_be(&raw[2]) >> 2;
         out_status->working_voltage_raw =
-            (uint16_t)(user_common_read_u16_be(&raw[4]) * 5 / 8);
+            (uint16_t)(bsp_common_read_u16_be(&raw[4]) * 5 / 8);
         if (out_status->working_voltage_raw > calibration) {
             out_status->working_voltage_raw -= calibration;
         }

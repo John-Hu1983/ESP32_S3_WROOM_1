@@ -36,8 +36,19 @@ void RndisBoard::StartNetwork() {
         ESP_ERROR_CHECK(nvs_flash_init());
     }
      /* Initialize default TCP/IP stack */
-     ESP_ERROR_CHECK(esp_netif_init());
-     ESP_ERROR_CHECK(esp_event_loop_open_default());
+     ret = esp_netif_init();
+     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+         ESP_LOGE(TAG, "esp_netif_init failed: %s", esp_err_to_name(ret));
+         OnNetworkEvent(NetworkEvent::Disconnected);
+         return;
+     }
+
+     ret = esp_event_loop_create_default();
+     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+         ESP_LOGE(TAG, "create default event loop failed: %s", esp_err_to_name(ret));
+         OnNetworkEvent(NetworkEvent::Disconnected);
+         return;
+     }
  
      s_event_group = xEventGroupCreate();
      esp_event_handler_register(IOT_ETH_EVENT, ESP_EVENT_ANY_ID, iot_event_handle, this);

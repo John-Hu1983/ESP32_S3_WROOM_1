@@ -8,7 +8,7 @@
 #include "esp_err.h"
 
 #include <stddef.h>
-#include "user/inc/user_config.h"
+#include "user/inc/bsp_config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -141,3 +141,4 @@ esp_err_t gpba02b_port_read(gpba02b_port_t port, uint8_t* value);
 #ifdef __cplusplus
 }
 #endif
+

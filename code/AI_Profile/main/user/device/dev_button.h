@@ -14,7 +14,7 @@
 #include <material_symbols.h>
 #include "lvgl.h"
 
-#include "user/inc/user_config.h"
+#include "user/inc/bsp_config.h"
 #include "user/device/dev_st7365p.h"
 
 // clang-format off
@@ -63,3 +63,4 @@ typedef struct {
 } btn_scan_s;
 
 btn_status_e button_scan_state(btn_scan_s* scan, uint8_t ms);
+

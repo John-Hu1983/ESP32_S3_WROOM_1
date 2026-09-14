@@ -1,6 +1,6 @@
 #include "bt_ui.h"
 
-#include "user/communication/user_ble.h"
+#include "user/communication/ble/ble.h"
 
 #define TAG "bt_ui"
 
@@ -97,10 +97,10 @@ lv_obj_t* bt_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
     lv_label_set_text_fmt(
         info,
         "Name: %s\nService: %s\nRX: %s\nTX: %s\nSend PING from PC to test.",
-        USER_BLE_DEVICE_NAME,
-        USER_BLE_SERVICE_UUID,
-        USER_BLE_RX_CHAR_UUID,
-        USER_BLE_TX_CHAR_UUID
+        BLE_DEVICE_NAME,
+        BLE_SERVICE_UUID,
+        BLE_RX_CHAR_UUID,
+        BLE_TX_CHAR_UUID
     );
     lv_label_set_long_mode(info, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(info, area_w - 20);
@@ -108,14 +108,14 @@ lv_obj_t* bt_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,
     lv_obj_set_style_text_font(info, &DESKTOP_TEXT_FONT, 0);
     lv_obj_align(info, LV_ALIGN_TOP_LEFT, 10, 42);
 
-    user_ble_set_rx_callback(_bt_ble_rx_cb, NULL);
-    ble_ret = user_ble_start();
+    ble_set_rx_callback(_bt_ble_rx_cb, NULL);
+    ble_ret = ble_start();
     if (ble_ret != ESP_OK) {
         desktop_post_message("BLE start failed, please enable BT/NimBLE in sdkconfig.");
-        ESP_LOGE(TAG, "user_ble_start failed: %s", esp_err_to_name(ble_ret));
+        ESP_LOGE(TAG, "ble_start failed: %s", esp_err_to_name(ble_ret));
     }
     else {
-        desktop_post_message("BLE ready, open PC test tool and connect.");
+        desktop_post_message("BLE ready, open phone BLE scanner and search this name.");
     }
 
     BaseType_t task_ok = xTaskCreate(_bt_ui_task, "bt_ui", BT_UI_TASK_STACK_SIZE, &s_bt_runtime,
@@ -142,8 +142,8 @@ void bt_close_screen(lv_obj_t* screen) {
         s_bt_runtime.task_handle = NULL;
     }
 
-    user_ble_set_rx_callback(NULL, NULL);
-    user_ble_stop();
+    ble_set_rx_callback(NULL, NULL);
+    ble_stop();
 
     s_bt_runtime.home_cb = NULL;
     s_bt_runtime.home_user_ctx = NULL;
@@ -153,3 +153,5 @@ void bt_close_screen(lv_obj_t* screen) {
         lv_obj_del(screen);
     }
 }
+
+

@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "user/common/user_facility.h"
 #include "user/device/dev_printer.h"
 
 #define TAG "print_ui"

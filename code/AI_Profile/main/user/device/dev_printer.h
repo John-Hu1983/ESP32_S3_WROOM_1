@@ -11,9 +11,9 @@
 
 #include "freertos/semphr.h"
 
-#include "bsp_global.h"
-#include "user/common/user_common.h"
-#include "user/inc/user_config.h"
+#include "user/bsp/bsp_global.h"
+#include "user/bsp/bsp_common.h"
+#include "user/inc/bsp_config.h"
 #include "user/assets/access_assets.h"
 
 #ifdef __cplusplus
@@ -132,3 +132,4 @@ esp_err_t printer_image_via_bin(const char* bin_name);
 #ifdef __cplusplus
 }
 #endif
+

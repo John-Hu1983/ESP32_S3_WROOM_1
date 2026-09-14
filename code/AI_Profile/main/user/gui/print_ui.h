@@ -1,8 +1,8 @@
 #pragma once
 
-#include "user/common/user_common.h"
+#include "user/bsp/bsp_common.h"
 #include "user/desktop/desktop_app.h"
-#include "user/common/user_facility.h"
+#include "user/bsp/bsp_facility.h"
 
 #ifdef __cplusplus
 extern "C" {

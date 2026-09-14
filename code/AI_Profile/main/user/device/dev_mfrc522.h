@@ -10,9 +10,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "bsp_global.h"
+#include "user/bsp/bsp_global.h"
 #include "user/device/dev_gpba02b.h"
-#include "user/inc/user_config.h"
+#include "user/inc/bsp_config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -161,3 +161,4 @@ esp_err_t mfrc522_read_sector(
 #ifdef __cplusplus
 }
 #endif
+

@@ -2,6 +2,7 @@
 #include "display.h"
 #include "application.h"
 #include "audio_codec.h"
+#include <esp_event.h>
 #include <esp_log.h>
 #include <material_symbols.h>
 #include <cJSON.h>
@@ -10,16 +11,24 @@
 
 Nt26Board::Nt26Board(gpio_num_t tx_pin, gpio_num_t rx_pin, gpio_num_t dtr_pin, gpio_num_t ri_pin, gpio_num_t reset_pin)
     : tx_pin_(tx_pin), rx_pin_(rx_pin), dtr_pin_(dtr_pin), ri_pin_(ri_pin), reset_pin_(reset_pin) {
+    esp_err_t ret = ESP_OK;
 
     gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
-    esp_event_loop_open_default();
-    esp_netif_init();
+    ret = esp_event_loop_create_default();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "create default event loop failed: %s", esp_err_to_name(ret));
+    }
+
+    ret = esp_netif_init();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "esp_netif_init failed: %s", esp_err_to_name(ret));
+    }
     
     // Create PM lock handle
     esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "nt26_cpu", &pm_lock_cpu_max_);
     
     // Create network ready timeout timer
-    esp_timer_open_args_t timer_args = {
+    esp_timer_create_args_t timer_args = {
         .callback = OnNetworkReadyTimeout,
         .arg = this,
         .dispatch_method = ESP_TIMER_TASK,

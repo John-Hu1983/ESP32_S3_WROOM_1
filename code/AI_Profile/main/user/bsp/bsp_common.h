@@ -15,9 +15,9 @@ typedef enum {
     Act_Pause = 2,
 } Action_e;
 
-bool user_common_gpio_is_valid(gpio_num_t io_num);
-uint16_t user_common_read_u16_be(const uint8_t* data);
-uint16_t user_common_read_u16_le(const uint8_t* data);
+bool bsp_common_gpio_is_valid(gpio_num_t io_num);
+uint16_t bsp_common_read_u16_be(const uint8_t* data);
+uint16_t bsp_common_read_u16_le(const uint8_t* data);
 
 #ifdef __cplusplus
 }

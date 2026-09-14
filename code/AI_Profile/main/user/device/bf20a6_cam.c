@@ -1,5 +1,5 @@
 #include "bf20a6_cam.h"
-#include "bsp_global.h"
+#include "user/bsp/bsp_global.h"
 #include "esp_log.h"
 
 #if CONFIG_IDF_TARGET_ESP32S3

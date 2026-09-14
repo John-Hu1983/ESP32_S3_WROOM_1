@@ -9,7 +9,7 @@
 
 #include "application.h"
 #include "assets/lang_config.h"
-#include "user/device/bsp_global.h"
+#include "user/bsp/bsp_global.h"
 
 #define TAG "main"
 
