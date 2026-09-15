@@ -1,76 +1,3 @@
-#include "ble.h"
-
-#include "sdkconfig.h"
-
-#include <string.h>
-
-#include "esp_log.h"
-
-#if BLE_NIMBLE_AVAILABLE
-
-#include "esp_bt.h"
-
-#include "host/ble_hs.h"
-#include "host/util/util.h"
-#include "nimble/nimble_port.h"
-#include "nimble/nimble_port_freertos.h"
-#include "os/os_mbuf.h"
-#include "services/gap/ble_svc_gap.h"
-#include "services/gatt/ble_svc_gatt.h"
-
-#define TAG "ble"
-
-static bool s_init_done;
-static bool s_start_req;
-static bool s_sync_ready;
-static bool s_adv_running;
-static bool s_connected;
-static bool s_notify_enabled;
-
-static uint8_t s_addr_type;
-static uint16_t s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
-static uint16_t s_tx_val_handle;
-
-static char s_rx_text[BLE_MAX_TEXT_LEN + 1U];
-static char s_last_tx_text[BLE_MAX_TEXT_LEN + 1U];
-static uint16_t s_last_tx_len;
-
-static ble_rx_cb_t s_rx_cb;
-static void* s_rx_cb_ctx;
-
-static int _ble_gatt_access(
-    uint16_t conn_handle,
-    uint16_t attr_handle,
-    struct ble_gatt_access_ctxt* ctxt,
-    void* arg
-);
-
-static struct ble_gatt_chr_def s_ble_chrs[] = {
-    {
-        .uuid = BLE_UUID16_DECLARE(BLE_RX_CHAR_UUID16),
-        .access_cb = _ble_gatt_access,
-        .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
-    },
-    {
-        .uuid = BLE_UUID16_DECLARE(BLE_TX_CHAR_UUID16),
-        .access_cb = _ble_gatt_access,
-        .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
-        .val_handle = &s_tx_val_handle,
-    },
-    { 0 }
-};
-
-static const struct ble_gatt_svc_def s_ble_svcs[] = {
-    {
-        .type = BLE_GATT_SVC_TYPE_PRIMARY,
-        .uuid = BLE_UUID16_DECLARE(BLE_SERVICE_UUID16),
-        .characteristics = s_ble_chrs,
-    },
-    { 0 }
-};
-
-static int _ble_gap_event(struct ble_gap_event* event, void* arg);
-
 /*
  * BLE workflow map (NimBLE enabled)
  *
@@ -106,6 +33,205 @@ static int _ble_gap_event(struct ble_gap_event* event, void* arg);
  *    - ble_stop() clears start intent, terminates active link,
  *      stops advertising, then stops/deinitializes NimBLE cleanly.
  */
+#include "ble.h"
+
+#include "sdkconfig.h"
+
+#include <string.h>
+
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+
+#include "esp_bt.h"
+
+#include "host/ble_hs.h"
+#include "host/util/util.h"
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "os/os_mbuf.h"
+#include "services/gap/ble_svc_gap.h"
+#include "services/gatt/ble_svc_gatt.h"
+
+#define TAG "ble"
+
+static bool s_init_done;
+static bool s_start_req;
+static bool s_sync_ready;
+static bool s_adv_running;
+static bool s_connected;
+static bool s_notify_enabled;
+
+static uint8_t s_addr_type;
+static uint16_t s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+static uint16_t s_tx_val_handle;
+
+static char s_rx_text[BLE_MAX_TEXT_LEN + 1U];
+static char s_last_tx_text[BLE_MAX_TEXT_LEN + 1U];
+static uint16_t s_last_tx_len;
+
+static ble_rx_cb_t s_rx_cb;
+static void* s_rx_cb_ctx;
+
+static ble_debug_item_s* s_debug_fifo;
+static uint16_t s_debug_head;
+static uint16_t s_debug_tail;
+static uint16_t s_debug_used;
+static uint32_t s_debug_seq;
+static uint32_t s_debug_rx_total;
+static uint32_t s_debug_tx_total;
+static uint32_t s_debug_dropped_total;
+static bool s_debug_fifo_ready;
+static bool s_debug_has_last_rx;
+static bool s_debug_has_last_tx;
+static ble_debug_item_s s_debug_last_rx;
+static ble_debug_item_s s_debug_last_tx;
+static portMUX_TYPE s_debug_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static void _ble_debug_fifo_init(void);
+static void _ble_debug_capture(ble_debug_dir_e dir, const char* text, uint16_t len);
+
+static int _ble_gatt_access(
+    uint16_t conn_handle,
+    uint16_t attr_handle,
+    struct ble_gatt_access_ctxt* ctxt,
+    void* arg
+);
+
+static struct ble_gatt_chr_def s_ble_chrs[] = {
+    {
+        .uuid = BLE_UUID16_DECLARE(BLE_RX_CHAR_UUID16),
+        .access_cb = _ble_gatt_access,
+        .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+    },
+    {
+        .uuid = BLE_UUID16_DECLARE(BLE_TX_CHAR_UUID16),
+        .access_cb = _ble_gatt_access,
+        .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
+        .val_handle = &s_tx_val_handle,
+    },
+    { 0 }
+};
+
+static const struct ble_gatt_svc_def s_ble_svcs[] = {
+    {
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = BLE_UUID16_DECLARE(BLE_SERVICE_UUID16),
+        .characteristics = s_ble_chrs,
+    },
+    { 0 }
+};
+
+static int _ble_gap_event(struct ble_gap_event* event, void* arg);
+
+/*
+ * brief  : _ble_debug_fifo_init.
+ * input  : none.
+ * output : none.
+ * type   : private
+ * theme  : allocate a large FIFO in PSRAM for BLE RX/TX debug traces and
+ *          fall back to internal RAM only if PSRAM allocation is unavailable.
+ */
+static void _ble_debug_fifo_init(void)
+{
+    size_t fifo_bytes = sizeof(ble_debug_item_s) * BLE_DEBUG_FIFO_CAPACITY;
+
+    if (s_debug_fifo != NULL) {
+        return;
+    }
+
+    s_debug_fifo = (ble_debug_item_s*)
+        heap_caps_malloc(fifo_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_debug_fifo != NULL) {
+        s_debug_fifo_ready = true;
+        ESP_LOGI(
+            TAG,
+            "BLE debug FIFO ready in PSRAM, items=%u bytes=%u",
+            (unsigned)BLE_DEBUG_FIFO_CAPACITY,
+            (unsigned)fifo_bytes
+        );
+        return;
+    }
+
+    s_debug_fifo = (ble_debug_item_s*)
+        heap_caps_malloc(fifo_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (s_debug_fifo != NULL) {
+        s_debug_fifo_ready = true;
+        ESP_LOGW(
+            TAG,
+            "BLE debug FIFO fallback to internal RAM, items=%u bytes=%u",
+            (unsigned)BLE_DEBUG_FIFO_CAPACITY,
+            (unsigned)fifo_bytes
+        );
+        return;
+    }
+
+    s_debug_fifo_ready = false;
+    ESP_LOGE(TAG, "BLE debug FIFO alloc failed, bytes=%u", (unsigned)fifo_bytes);
+}
+
+/*
+ * brief  : _ble_debug_capture.
+ * input  : dir indicates RX/TX; text points to payload bytes; len is text size.
+ * output : none.
+ * type   : private
+ * theme  : capture BLE traffic into a FIFO and track latest RX/TX snapshots for
+ *          debug UI without affecting transport behavior.
+ */
+static void _ble_debug_capture(ble_debug_dir_e dir, const char* text, uint16_t len)
+{
+    ble_debug_item_s item;
+    uint16_t copy_len = len;
+
+    if (text == NULL) {
+        return;
+    }
+
+    if (copy_len > BLE_DEBUG_TEXT_MAX_LEN) {
+        copy_len = BLE_DEBUG_TEXT_MAX_LEN;
+    }
+
+    memset(&item, 0, sizeof(item));
+    item.timestamp_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    item.len = copy_len;
+    item.dir = dir;
+    memcpy(item.text, text, copy_len);
+    item.text[copy_len] = '\0';
+
+    taskENTER_CRITICAL(&s_debug_lock);
+
+    if (dir == Ble_Debug_Dir_Rx) {
+        s_debug_rx_total++;
+        s_debug_last_rx = item;
+        s_debug_has_last_rx = true;
+    }
+    else {
+        s_debug_tx_total++;
+        s_debug_last_tx = item;
+        s_debug_has_last_tx = true;
+    }
+
+    s_debug_seq++;
+    item.seq = s_debug_seq;
+
+    if (s_debug_fifo_ready && (s_debug_fifo != NULL)) {
+        if (s_debug_used >= BLE_DEBUG_FIFO_CAPACITY) {
+            s_debug_tail = (uint16_t)((s_debug_tail + 1U) % BLE_DEBUG_FIFO_CAPACITY);
+            s_debug_used--;
+            s_debug_dropped_total++;
+        }
+
+        s_debug_fifo[s_debug_head] = item;
+        s_debug_head = (uint16_t)((s_debug_head + 1U) % BLE_DEBUG_FIFO_CAPACITY);
+        s_debug_used++;
+    }
+    else {
+        s_debug_dropped_total++;
+    }
+
+    taskEXIT_CRITICAL(&s_debug_lock);
+}
 
 /*
  * brief  : _ble_trim_eol.
@@ -378,6 +504,7 @@ static int _ble_gatt_access(
         s_rx_text[rx_len] = '\0';
         rx_len = _ble_trim_eol(s_rx_text, rx_len);
         ESP_LOGI(TAG, "RX: %s", s_rx_text);
+        _ble_debug_capture(Ble_Debug_Dir_Rx, s_rx_text, rx_len);
 
         if (s_rx_cb != NULL) {
             s_rx_cb((const uint8_t*)s_rx_text, rx_len, s_rx_cb_ctx);
@@ -498,6 +625,8 @@ esp_err_t ble_init(void)
     int rc = 0;
     esp_err_t err = ESP_OK;
     esp_bt_controller_status_t bt_status = ESP_BT_CONTROLLER_STATUS_IDLE;
+
+    _ble_debug_fifo_init();
 
     if (s_init_done) {
         return ESP_OK;
@@ -694,104 +823,79 @@ esp_err_t ble_send_text(const char* text)
     memcpy(s_last_tx_text, text, text_len);
     s_last_tx_text[text_len] = '\0';
     s_last_tx_len = (uint16_t)text_len;
+    _ble_debug_capture(Ble_Debug_Dir_Tx, s_last_tx_text, s_last_tx_len);
 
     return _ble_push_notify((const uint8_t*)s_last_tx_text, s_last_tx_len);
 }
 
-#else
-
-#define TAG "ble"
-
-/*
- * brief  : ble_init.
- * input  : none.
- * output : ESP_ERR_NOT_SUPPORTED.
- * type   : public
- * theme  : provide a stable API surface when BLE is disabled at build time,
- *          while clearly reporting unsupported capability.
- */
-esp_err_t ble_init(void)
+bool ble_debug_fifo_pop(ble_debug_item_s* item)
 {
-    ESP_LOGW(TAG, "BLE is disabled in sdkconfig");
-    return ESP_ERR_NOT_SUPPORTED;
+    bool has_item = false;
+
+    if (item == NULL) {
+        return false;
+    }
+
+    taskENTER_CRITICAL(&s_debug_lock);
+    if (s_debug_fifo_ready && (s_debug_fifo != NULL) && (s_debug_used > 0U)) {
+        *item = s_debug_fifo[s_debug_tail];
+        s_debug_tail = (uint16_t)((s_debug_tail + 1U) % BLE_DEBUG_FIFO_CAPACITY);
+        s_debug_used--;
+        has_item = true;
+    }
+    taskEXIT_CRITICAL(&s_debug_lock);
+
+    return has_item;
 }
 
-/*
- * brief  : ble_start.
- * input  : none.
- * output : ESP_ERR_NOT_SUPPORTED.
- * type   : public
- * theme  : keep caller flow predictable by returning a deterministic failure
- *          code instead of missing symbols or undefined behavior.
- */
-esp_err_t ble_start(void)
+bool ble_debug_get_last_rx(ble_debug_item_s* item)
 {
-    return ESP_ERR_NOT_SUPPORTED;
+    bool has_item = false;
+
+    if (item == NULL) {
+        return false;
+    }
+
+    taskENTER_CRITICAL(&s_debug_lock);
+    if (s_debug_has_last_rx) {
+        *item = s_debug_last_rx;
+        has_item = true;
+    }
+    taskEXIT_CRITICAL(&s_debug_lock);
+
+    return has_item;
 }
 
-/*
- * brief  : ble_stop.
- * input  : none.
- * output : none.
- * type   : public
- * theme  : preserve stop-call compatibility in no-BLE builds as a no-op.
- */
-void ble_stop(void)
-{}
-
-/*
- * brief  : ble_is_ready.
- * input  : none.
- * output : always false.
- * type   : public
- * theme  : expose explicit unavailable state for feature gating in upper
- *          modules when BLE support is compiled out.
- */
-bool ble_is_ready(void)
+bool ble_debug_get_last_tx(ble_debug_item_s* item)
 {
-    return false;
+    bool has_item = false;
+
+    if (item == NULL) {
+        return false;
+    }
+
+    taskENTER_CRITICAL(&s_debug_lock);
+    if (s_debug_has_last_tx) {
+        *item = s_debug_last_tx;
+        has_item = true;
+    }
+    taskEXIT_CRITICAL(&s_debug_lock);
+
+    return has_item;
 }
 
-/*
- * brief  : ble_is_connected.
- * input  : none.
- * output : always false.
- * type   : public
- * theme  : keep connection-status checks safe and deterministic in no-BLE
- *          firmware variants.
- */
-bool ble_is_connected(void)
+void ble_debug_get_stats(ble_debug_stats_s* stats)
 {
-    return false;
+    if (stats == NULL) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&s_debug_lock);
+    stats->fifo_ready = s_debug_fifo_ready;
+    stats->fifo_used = s_debug_used;
+    stats->fifo_capacity = BLE_DEBUG_FIFO_CAPACITY;
+    stats->rx_total = s_debug_rx_total;
+    stats->tx_total = s_debug_tx_total;
+    stats->dropped_total = s_debug_dropped_total;
+    taskEXIT_CRITICAL(&s_debug_lock);
 }
-
-/*
- * brief  : ble_set_rx_callback.
- * input  : cb is ignored; user_ctx is ignored.
- * output : none.
- * type   : public
- * theme  : preserve API compatibility so application code can register hooks
- *          unconditionally across BLE and non-BLE builds.
- */
-void ble_set_rx_callback(ble_rx_cb_t cb, void* user_ctx)
-{
-    (void)cb;
-    (void)user_ctx;
-}
-
-/*
- * brief  : ble_send_text.
- * input  : text is ignored.
- * output : ESP_ERR_NOT_SUPPORTED.
- * type   : public
- * theme  : provide explicit runtime feedback when sending is requested in a
- *          firmware image without BLE capability.
- */
-esp_err_t ble_send_text(const char* text)
-{
-    (void)text;
-    return ESP_ERR_NOT_SUPPORTED;
-}
-
-#endif
-

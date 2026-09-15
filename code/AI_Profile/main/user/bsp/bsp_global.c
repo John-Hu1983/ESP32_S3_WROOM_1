@@ -3,6 +3,7 @@
 #include <rom/ets_sys.h>
 
 #include "user/bsp/bsp_facility.h"
+#include "user/communication/ble/ble.h"
 
 #define TAG "bsp_global"
 
@@ -180,7 +181,8 @@ void bsp_init_adc_converter(void)
         return;
     }
 
-    ret = adc_oneshot_config_channel(s_bsp_adc_unit_handle, s_bsp_adc_channel, &chan_cfg);
+    ret =
+        adc_oneshot_config_channel(s_bsp_adc_unit_handle, s_bsp_adc_channel, &chan_cfg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "adc config channel failed: %s", esp_err_to_name(ret));
         (void)adc_oneshot_del_unit(s_bsp_adc_unit_handle);
@@ -213,7 +215,8 @@ uint16_t bsp_read_battery_mv(void)
     uint32_t i = 0U;
     uint32_t raw_sum = 0U;
     uint32_t ok_count = 0U;
-    uint32_t total_samples = BSP_BATTERY_ADC_DISCARD_COUNT + BSP_BATTERY_ADC_SAMPLE_COUNT;
+    uint32_t total_samples =
+        BSP_BATTERY_ADC_DISCARD_COUNT + BSP_BATTERY_ADC_SAMPLE_COUNT;
     uint32_t battery_mv = 0U;
     int raw = 0;
     int adc_mv = 0;
@@ -292,14 +295,14 @@ void bsp_reset_lcd(void)
 }
 
 /*
- * brief : Initialize board-level peripheral chain and user desktop services.
+ * brief : Prepare hardware by initializing necessary peripherals.
  * input : none.
  * output: none.
  * type  : public
  */
-void bsp_init_total(void)
+void bsp_prepare_hw(void)
 {
-    ESP_LOGI(TAG, "Initializing BSP...");
+    ESP_LOGI(TAG, "Initializing HW...");
     ESP_ERROR_CHECK(gpba02b_init_object());
     _bsp_set_power(true);
     bsp_set_audio_ctrl(true);
@@ -307,6 +310,29 @@ void bsp_init_total(void)
     _bsp_init_pwm(GPBA02B_PORT_C, 1, GPBA02B_PWM_FREQ_1343HZ_DIV32, 12);
     _bsp_init_button();
     bsp_reset_lcd();
+}
+
+/*
+ * brief : Initialize board-level peripheral chain and user desktop services.
+ * input : none.
+ * output: none.
+ * type  : public
+ */
+void bsp_init_env(void)
+{
+    esp_err_t ble_ret = ESP_OK;
+
     speaker_set_volume(90);
+    ble_ret = ble_start();
+    if (ble_ret != ESP_OK) {
+        ESP_LOGE(
+            TAG,
+            "ble_start failed in bsp_init_env: %s",
+            esp_err_to_name(ble_ret)
+        );
+    }
+    else {
+        ESP_LOGI(TAG, "BLE background service started");
+    }
     desktop_start_task();
 }

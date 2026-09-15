@@ -30,13 +30,13 @@ esp_err_t desktop_start_task(void);
 #define BSP_BATTERY_DIVIDER_BOTTOM_KOHM       (68U)
 #define BSP_BATTERY_DIVIDER_TOTAL_KOHM        (BSP_BATTERY_DIVIDER_TOP_KOHM + BSP_BATTERY_DIVIDER_BOTTOM_KOHM)
 // clang-format on
-
+void bsp_prepare_hw(void);
 void bsp_init_adc_converter(void);
 uint16_t bsp_read_battery_mv(void);
 
 void bsp_reset_lcd(void);
 void bsp_set_audio_ctrl(bool enable);
-void bsp_init_total(void);
+void bsp_init_env(void);
 
 #ifdef __cplusplus
 }
