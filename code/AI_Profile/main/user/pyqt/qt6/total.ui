@@ -38,6 +38,140 @@ QTabBar::tab:selected {
 QTabBar::tab:hover:!selected {
     background-color: #112840;
     color: #cce6ff;
+}
+QWidget#steering_tab {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #050c17, stop:0.55 #071428, stop:1 #040912);
+}
+QWidget#steering_tab QLabel {
+    color: #afc1d4;
+    font-family: Bahnschrift;
+    font-size: 10pt;
+}
+QWidget#steering_tab QFrame#steering_hero_card {
+    border: 1px solid #10314b;
+    border-radius: 12px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #10263f, stop:1 #0a1728);
+}
+QWidget#steering_tab QLabel#steering_hero_title {
+    color: #63e6ff;
+    font-size: 14pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+QWidget#steering_tab QLabel#steering_hero_subtitle {
+    color: #8fb1cf;
+}
+QWidget#steering_tab QFrame#scope_card,
+QWidget#steering_tab QFrame#pid_card,
+QWidget#steering_tab QFrame#setpoint_card,
+QWidget#steering_tab QFrame#runtime_card {
+    border: 1px solid #0f2b44;
+    border-radius: 11px;
+    background-color: #081427;
+}
+QWidget#steering_tab QLabel#scope_title,
+QWidget#steering_tab QLabel#pid_title,
+QWidget#steering_tab QLabel#setpoint_title,
+QWidget#steering_tab QLabel#runtime_title,
+QWidget#steering_tab QLabel#telemetry_raw_title {
+    color: #57dbff;
+    font-size: 11pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+QWidget#steering_tab QLabel#scope_hint,
+QWidget#steering_tab QLabel#runtime_hint,
+QWidget#steering_tab QLabel#setpoint_hint {
+    color: #7d97af;
+}
+QWidget#steering_tab QLabel#scope_live_badge {
+    color: #7fffcf;
+    border: 1px solid #20543f;
+    border-radius: 7px;
+    background-color: #0a3025;
+    padding: 2px 8px;
+    font-weight: 700;
+}
+QWidget#steering_tab QFrame#scope_host {
+    border: 1px solid #1a3a55;
+    border-radius: 8px;
+    background-color: #040b16;
+}
+QWidget#steering_tab QPlainTextEdit#telemetry_raw_view {
+    border: 1px solid #1e425f;
+    border-radius: 8px;
+    background-color: #030913;
+    color: #9fe7c0;
+    selection-background-color: #184e73;
+    font-family: Consolas;
+    font-size: 10pt;
+}
+QWidget#steering_tab QPushButton {
+    border: 1px solid #20506f;
+    border-radius: 7px;
+    background-color: #0d2136;
+    color: #d2e6fb;
+    min-height: 28px;
+    padding: 2px 10px;
+}
+QWidget#steering_tab QPushButton:hover {
+    border-color: #2f88be;
+    background-color: #12304b;
+}
+QWidget#steering_tab QPushButton:pressed {
+    background-color: #153a5d;
+}
+QWidget#steering_tab QPushButton:disabled {
+    color: #5f7285;
+    border-color: #213246;
+    background-color: #0a1624;
+}
+QWidget#steering_tab QPushButton#setpoint_send_button,
+QWidget#steering_tab QPushButton#pid_apply_button,
+QWidget#steering_tab QPushButton#motor_enable_button,
+QWidget#steering_tab QPushButton#telemetry_send_button {
+    border-color: #2b8fbe;
+    color: #73ebff;
+    background-color: #10344f;
+}
+QWidget#steering_tab QPushButton#motor_stop_button {
+    border-color: #a65262;
+    color: #ffc0cb;
+    background-color: #311723;
+}
+QWidget#steering_tab QDoubleSpinBox,
+QWidget#steering_tab QComboBox,
+QWidget#steering_tab QLineEdit {
+    border: 1px solid #1f4f74;
+    border-radius: 7px;
+    background-color: #061021;
+    color: #b9d6ef;
+    min-height: 26px;
+    padding: 2px 8px;
+    font-family: Consolas;
+}
+QWidget#steering_tab QDoubleSpinBox:focus,
+QWidget#steering_tab QComboBox:focus,
+QWidget#steering_tab QLineEdit:focus {
+    border-color: #46d4ff;
+}
+QWidget#steering_tab QDial#angle_knob {
+    background-color: #07182d;
+    border: 1px solid #1a4366;
+    border-radius: 68px;
+}
+QWidget#steering_tab QLabel#knob_value_lab,
+QWidget#steering_tab QLabel#rt_conn_value,
+QWidget#steering_tab QLabel#rt_set_value,
+QWidget#steering_tab QLabel#rt_fb_value,
+QWidget#steering_tab QLabel#rt_err_value,
+QWidget#steering_tab QLabel#rt_pwm_value,
+QWidget#steering_tab QLabel#rt_rpm_value,
+QWidget#steering_tab QLabel#rt_vbus_value {
+    color: #7af0ff;
+    font-weight: 700;
 }</string>
   </property>
   <widget class="QWidget" name="centralwidget">
@@ -757,11 +891,745 @@ QTabBar::tab:hover:!selected {
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tab_2">
-       <attribute name="title">
-        <string>Reserved</string>
-       </attribute>
-      </widget>
+    <widget class="QWidget" name="steering_tab">
+     <attribute name="title">
+      <string>Steering Debug</string>
+     </attribute>
+     <layout class="QVBoxLayout" name="steering_root_layout">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <property name="leftMargin">
+       <number>12</number>
+      </property>
+      <property name="topMargin">
+       <number>12</number>
+      </property>
+      <property name="rightMargin">
+       <number>12</number>
+      </property>
+      <property name="bottomMargin">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="steering_hero_card">
+        <layout class="QVBoxLayout" name="steering_hero_layout">
+         <property name="spacing">
+        <number>2</number>
+         </property>
+         <property name="leftMargin">
+        <number>14</number>
+         </property>
+         <property name="topMargin">
+        <number>10</number>
+         </property>
+         <property name="rightMargin">
+        <number>14</number>
+         </property>
+         <property name="bottomMargin">
+        <number>10</number>
+         </property>
+         <item>
+        <widget class="QLabel" name="steering_hero_title">
+         <property name="text">
+          <string>STEERING ENGINE DEBUG CONSOLE</string>
+         </property>
+        </widget>
+         </item>
+         <item>
+        <widget class="QLabel" name="steering_hero_subtitle">
+         <property name="text">
+          <string>DC Motor + Variable Resistor closed-loop tuning and live telemetry</string>
+         </property>
+        </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QSplitter" name="steering_vertical_splitter">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="childrenCollapsible">
+         <bool>false</bool>
+        </property>
+        <widget class="QFrame" name="scope_card">
+         <layout class="QVBoxLayout" name="scope_card_layout">
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <property name="leftMargin">
+         <number>12</number>
+        </property>
+        <property name="topMargin">
+         <number>10</number>
+        </property>
+        <property name="rightMargin">
+         <number>12</number>
+        </property>
+        <property name="bottomMargin">
+         <number>10</number>
+        </property>
+        <item>
+         <layout class="QHBoxLayout" name="scope_header_row">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="scope_title">
+            <property name="text">
+             <string>SCOPE WAVEFORM</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="scope_hint">
+            <property name="text">
+             <string>Setpoint / Feedback / PWM</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="scope_header_spacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+            <width>40</width>
+            <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QLabel" name="scope_window_lab">
+            <property name="text">
+             <string>Window</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="scope_window_combo">
+            <item>
+             <property name="text">
+            <string>8 s</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+            <string>12 s</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+            <string>20 s</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+            <string>30 s</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="scope_pause_button">
+            <property name="text">
+             <string>Pause</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="scope_clear_button">
+            <property name="text">
+             <string>Clear</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="scope_live_badge">
+            <property name="text">
+             <string>LIVE</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QFrame" name="scope_host">
+          <layout class="QVBoxLayout" name="scope_host_layout">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+          </layout>
+         </widget>
+        </item>
+         </layout>
+        </widget>
+        <widget class="QSplitter" name="steering_bottom_splitter">
+         <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="childrenCollapsible">
+        <bool>false</bool>
+         </property>
+         <widget class="QWidget" name="control_column">
+        <layout class="QVBoxLayout" name="control_column_layout">
+         <property name="spacing">
+          <number>10</number>
+         </property>
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QFrame" name="pid_card">
+           <layout class="QVBoxLayout" name="pid_card_layout">
+            <property name="spacing">
+             <number>8</number>
+            </property>
+            <property name="leftMargin">
+             <number>12</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>12</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="pid_title">
+            <property name="text">
+             <string>PID TUNING</string>
+            </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QGridLayout" name="pid_grid">
+            <property name="horizontalSpacing">
+             <number>8</number>
+            </property>
+            <property name="verticalSpacing">
+             <number>8</number>
+            </property>
+            <item row="0" column="0">
+             <widget class="QLabel" name="kp_lab">
+              <property name="text">
+               <string>Kp</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QDoubleSpinBox" name="kp_spin">
+              <property name="decimals">
+               <number>4</number>
+              </property>
+              <property name="maximum">
+               <double>200.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>1.200000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="2">
+             <widget class="QLabel" name="ki_lab">
+              <property name="text">
+               <string>Ki</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="3">
+             <widget class="QDoubleSpinBox" name="ki_spin">
+              <property name="decimals">
+               <number>4</number>
+              </property>
+              <property name="maximum">
+               <double>200.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>0.080000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="kd_lab">
+              <property name="text">
+               <string>Kd</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QDoubleSpinBox" name="kd_spin">
+              <property name="decimals">
+               <number>4</number>
+              </property>
+              <property name="maximum">
+               <double>200.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>0.010000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="2">
+             <widget class="QLabel" name="pid_out_limit_lab">
+              <property name="text">
+               <string>Output Limit</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="3">
+             <widget class="QDoubleSpinBox" name="pid_out_limit_spin">
+              <property name="decimals">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <double>100.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>70.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="pid_button_row">
+            <property name="spacing">
+             <number>8</number>
+            </property>
+            <item>
+             <widget class="QPushButton" name="pid_apply_button">
+              <property name="text">
+               <string>Apply PID</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pid_reset_i_button">
+              <property name="text">
+               <string>Reset Integral</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="pid_button_spacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QFrame" name="setpoint_card">
+           <layout class="QVBoxLayout" name="setpoint_card_layout">
+            <property name="spacing">
+             <number>8</number>
+            </property>
+            <property name="leftMargin">
+             <number>12</number>
+            </property>
+            <property name="topMargin">
+             <number>10</number>
+            </property>
+            <property name="rightMargin">
+             <number>12</number>
+            </property>
+            <property name="bottomMargin">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="setpoint_title">
+            <property name="text">
+             <string>STEERING COMMAND</string>
+            </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="setpoint_body_row">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QFrame" name="knob_frame">
+              <layout class="QVBoxLayout" name="knob_frame_layout">
+               <property name="spacing">
+                <number>6</number>
+               </property>
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>10</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>10</number>
+               </property>
+               <item>
+                <widget class="QDial" name="angle_knob">
+                 <property name="minimumSize">
+                <size>
+                 <width>136</width>
+                 <height>136</height>
+                </size>
+                 </property>
+                 <property name="maximumSize">
+                <size>
+                 <width>136</width>
+                 <height>136</height>
+                </size>
+                 </property>
+                 <property name="minimum">
+                <number>-900</number>
+                 </property>
+                 <property name="maximum">
+                <number>900</number>
+                 </property>
+                 <property name="singleStep">
+                <number>2</number>
+                 </property>
+                 <property name="pageStep">
+                <number>10</number>
+                 </property>
+                 <property name="notchesVisible">
+                <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="knob_value_lab">
+                 <property name="text">
+                <string>0.0 deg</string>
+                 </property>
+                 <property name="alignment">
+                <set>Qt::AlignCenter</set>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <layout class="QVBoxLayout" name="setpoint_right_layout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <layout class="QGridLayout" name="setpoint_grid">
+                <property name="horizontalSpacing">
+                 <number>8</number>
+                </property>
+                <property name="verticalSpacing">
+                 <number>8</number>
+                </property>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="angle_set_lab">
+                <property name="text">
+                 <string>Target Angle (deg)</string>
+                </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QDoubleSpinBox" name="angle_set_spin">
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="minimum">
+                 <double>-90.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>90.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.500000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="setpoint_button_row">
+                <property name="spacing">
+                 <number>8</number>
+                </property>
+                <item>
+                 <widget class="QPushButton" name="setpoint_send_button">
+                <property name="text">
+                 <string>Send Setpoint</string>
+                </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="motor_enable_button">
+                <property name="text">
+                 <string>Enable Motor</string>
+                </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="motor_stop_button">
+                <property name="text">
+                 <string>Emergency Stop</string>
+                </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <widget class="QLabel" name="setpoint_hint">
+                <property name="text">
+                 <string>Knob is 0.1 deg resolution. Use Emergency Stop when needed.</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="setpoint_bottom_spacer">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                <width>20</width>
+                <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+         </widget>
+         <widget class="QFrame" name="runtime_card">
+        <layout class="QVBoxLayout" name="runtime_card_layout">
+         <property name="spacing">
+          <number>8</number>
+         </property>
+         <property name="leftMargin">
+          <number>12</number>
+         </property>
+         <property name="topMargin">
+          <number>10</number>
+         </property>
+         <property name="rightMargin">
+          <number>12</number>
+         </property>
+         <property name="bottomMargin">
+          <number>10</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="runtime_title">
+           <property name="text">
+            <string>REAL-TIME PARAMETERS</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QGridLayout" name="runtime_grid">
+           <property name="horizontalSpacing">
+            <number>8</number>
+           </property>
+           <property name="verticalSpacing">
+            <number>6</number>
+           </property>
+           <item row="0" column="0">
+            <widget class="QLabel" name="rt_conn_lab">
+             <property name="text">
+            <string>Connection</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="rt_conn_value">
+             <property name="text">
+            <string>Disconnected</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="rt_set_lab">
+             <property name="text">
+            <string>Setpoint</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLabel" name="rt_set_value">
+             <property name="text">
+            <string>0.0 deg</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="rt_fb_lab">
+             <property name="text">
+            <string>Feedback</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLabel" name="rt_fb_value">
+             <property name="text">
+            <string>0.0 deg</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="rt_err_lab">
+             <property name="text">
+            <string>Error</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLabel" name="rt_err_value">
+             <property name="text">
+            <string>0.0 deg</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="rt_pwm_lab">
+             <property name="text">
+            <string>PWM Output</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLabel" name="rt_pwm_value">
+             <property name="text">
+            <string>0.0 %</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="rt_rpm_lab">
+             <property name="text">
+            <string>Motor Speed</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QLabel" name="rt_rpm_value">
+             <property name="text">
+            <string>0.0 rpm</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="rt_vbus_lab">
+             <property name="text">
+            <string>Bus Voltage</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QLabel" name="rt_vbus_value">
+             <property name="text">
+            <string>0.0 V</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QLabel" name="runtime_hint">
+           <property name="text">
+            <string>Tip: firmware telemetry supports formats like set=12.5, fb=11.9, pwm=28, rpm=320</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="telemetry_raw_title">
+           <property name="text">
+            <string>RAW TELEMETRY</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPlainTextEdit" name="telemetry_raw_view">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="placeholderText">
+            <string>RX/TX log and parsed steering telemetry</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="telemetry_cmd_row">
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <item>
+            <widget class="QLineEdit" name="telemetry_cmd_edit">
+             <property name="placeholderText">
+            <string>Manual command, e.g. STEER_PID kp=1.3 ki=0.05 kd=0.01</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="telemetry_send_button">
+             <property name="text">
+            <string>Send Manual CMD</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+         </widget>
+        </widget>
+       </widget>
+      </item>
+     </layout>
+    </widget>
      </widget>
     </item>
    </layout>

@@ -37,6 +37,140 @@ class Ui_MainWindow(object):
 "QTabBar::tab:hover:!selected {\n"
 "    background-color: #112840;\n"
 "    color: #cce6ff;\n"
+"}\n"
+"QWidget#steering_tab {\n"
+"    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,\n"
+"        stop:0 #050c17, stop:0.55 #071428, stop:1 #040912);\n"
+"}\n"
+"QWidget#steering_tab QLabel {\n"
+"    color: #afc1d4;\n"
+"    font-family: Bahnschrift;\n"
+"    font-size: 10pt;\n"
+"}\n"
+"QWidget#steering_tab QFrame#steering_hero_card {\n"
+"    border: 1px solid #10314b;\n"
+"    border-radius: 12px;\n"
+"    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,\n"
+"        stop:0 #10263f, stop:1 #0a1728);\n"
+"}\n"
+"QWidget#steering_tab QLabel#steering_hero_title {\n"
+"    color: #63e6ff;\n"
+"    font-size: 14pt;\n"
+"    font-weight: 700;\n"
+"    letter-spacing: 1px;\n"
+"}\n"
+"QWidget#steering_tab QLabel#steering_hero_subtitle {\n"
+"    color: #8fb1cf;\n"
+"}\n"
+"QWidget#steering_tab QFrame#scope_card,\n"
+"QWidget#steering_tab QFrame#pid_card,\n"
+"QWidget#steering_tab QFrame#setpoint_card,\n"
+"QWidget#steering_tab QFrame#runtime_card {\n"
+"    border: 1px solid #0f2b44;\n"
+"    border-radius: 11px;\n"
+"    background-color: #081427;\n"
+"}\n"
+"QWidget#steering_tab QLabel#scope_title,\n"
+"QWidget#steering_tab QLabel#pid_title,\n"
+"QWidget#steering_tab QLabel#setpoint_title,\n"
+"QWidget#steering_tab QLabel#runtime_title,\n"
+"QWidget#steering_tab QLabel#telemetry_raw_title {\n"
+"    color: #57dbff;\n"
+"    font-size: 11pt;\n"
+"    font-weight: 700;\n"
+"    letter-spacing: 1px;\n"
+"}\n"
+"QWidget#steering_tab QLabel#scope_hint,\n"
+"QWidget#steering_tab QLabel#runtime_hint,\n"
+"QWidget#steering_tab QLabel#setpoint_hint {\n"
+"    color: #7d97af;\n"
+"}\n"
+"QWidget#steering_tab QLabel#scope_live_badge {\n"
+"    color: #7fffcf;\n"
+"    border: 1px solid #20543f;\n"
+"    border-radius: 7px;\n"
+"    background-color: #0a3025;\n"
+"    padding: 2px 8px;\n"
+"    font-weight: 700;\n"
+"}\n"
+"QWidget#steering_tab QFrame#scope_host {\n"
+"    border: 1px solid #1a3a55;\n"
+"    border-radius: 8px;\n"
+"    background-color: #040b16;\n"
+"}\n"
+"QWidget#steering_tab QPlainTextEdit#telemetry_raw_view {\n"
+"    border: 1px solid #1e425f;\n"
+"    border-radius: 8px;\n"
+"    background-color: #030913;\n"
+"    color: #9fe7c0;\n"
+"    selection-background-color: #184e73;\n"
+"    font-family: Consolas;\n"
+"    font-size: 10pt;\n"
+"}\n"
+"QWidget#steering_tab QPushButton {\n"
+"    border: 1px solid #20506f;\n"
+"    border-radius: 7px;\n"
+"    background-color: #0d2136;\n"
+"    color: #d2e6fb;\n"
+"    min-height: 28px;\n"
+"    padding: 2px 10px;\n"
+"}\n"
+"QWidget#steering_tab QPushButton:hover {\n"
+"    border-color: #2f88be;\n"
+"    background-color: #12304b;\n"
+"}\n"
+"QWidget#steering_tab QPushButton:pressed {\n"
+"    background-color: #153a5d;\n"
+"}\n"
+"QWidget#steering_tab QPushButton:disabled {\n"
+"    color: #5f7285;\n"
+"    border-color: #213246;\n"
+"    background-color: #0a1624;\n"
+"}\n"
+"QWidget#steering_tab QPushButton#setpoint_send_button,\n"
+"QWidget#steering_tab QPushButton#pid_apply_button,\n"
+"QWidget#steering_tab QPushButton#motor_enable_button,\n"
+"QWidget#steering_tab QPushButton#telemetry_send_button {\n"
+"    border-color: #2b8fbe;\n"
+"    color: #73ebff;\n"
+"    background-color: #10344f;\n"
+"}\n"
+"QWidget#steering_tab QPushButton#motor_stop_button {\n"
+"    border-color: #a65262;\n"
+"    color: #ffc0cb;\n"
+"    background-color: #311723;\n"
+"}\n"
+"QWidget#steering_tab QDoubleSpinBox,\n"
+"QWidget#steering_tab QComboBox,\n"
+"QWidget#steering_tab QLineEdit {\n"
+"    border: 1px solid #1f4f74;\n"
+"    border-radius: 7px;\n"
+"    background-color: #061021;\n"
+"    color: #b9d6ef;\n"
+"    min-height: 26px;\n"
+"    padding: 2px 8px;\n"
+"    font-family: Consolas;\n"
+"}\n"
+"QWidget#steering_tab QDoubleSpinBox:focus,\n"
+"QWidget#steering_tab QComboBox:focus,\n"
+"QWidget#steering_tab QLineEdit:focus {\n"
+"    border-color: #46d4ff;\n"
+"}\n"
+"QWidget#steering_tab QDial#angle_knob {\n"
+"    background-color: #07182d;\n"
+"    border: 1px solid #1a4366;\n"
+"    border-radius: 68px;\n"
+"}\n"
+"QWidget#steering_tab QLabel#knob_value_lab,\n"
+"QWidget#steering_tab QLabel#rt_conn_value,\n"
+"QWidget#steering_tab QLabel#rt_set_value,\n"
+"QWidget#steering_tab QLabel#rt_fb_value,\n"
+"QWidget#steering_tab QLabel#rt_err_value,\n"
+"QWidget#steering_tab QLabel#rt_pwm_value,\n"
+"QWidget#steering_tab QLabel#rt_rpm_value,\n"
+"QWidget#steering_tab QLabel#rt_vbus_value {\n"
+"    color: #7af0ff;\n"
+"    font-weight: 700;\n"
 "}")
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)
         self.centralwidget.setObjectName("centralwidget")
@@ -306,9 +440,295 @@ class Ui_MainWindow(object):
         self.io_layout.addLayout(self.quick_row)
         self.ble_root_layout.addWidget(self.body_splitter)
         self.tabWidget.addTab(self.ble_tab, "")
-        self.tab_2 = QtWidgets.QWidget()
-        self.tab_2.setObjectName("tab_2")
-        self.tabWidget.addTab(self.tab_2, "")
+        self.steering_tab = QtWidgets.QWidget()
+        self.steering_tab.setObjectName("steering_tab")
+        self.steering_root_layout = QtWidgets.QVBoxLayout(self.steering_tab)
+        self.steering_root_layout.setContentsMargins(12, 12, 12, 12)
+        self.steering_root_layout.setSpacing(10)
+        self.steering_root_layout.setObjectName("steering_root_layout")
+        self.steering_hero_card = QtWidgets.QFrame(parent=self.steering_tab)
+        self.steering_hero_card.setObjectName("steering_hero_card")
+        self.steering_hero_layout = QtWidgets.QVBoxLayout(self.steering_hero_card)
+        self.steering_hero_layout.setContentsMargins(14, 10, 14, 10)
+        self.steering_hero_layout.setSpacing(2)
+        self.steering_hero_layout.setObjectName("steering_hero_layout")
+        self.steering_hero_title = QtWidgets.QLabel(parent=self.steering_hero_card)
+        self.steering_hero_title.setObjectName("steering_hero_title")
+        self.steering_hero_layout.addWidget(self.steering_hero_title)
+        self.steering_hero_subtitle = QtWidgets.QLabel(parent=self.steering_hero_card)
+        self.steering_hero_subtitle.setObjectName("steering_hero_subtitle")
+        self.steering_hero_layout.addWidget(self.steering_hero_subtitle)
+        self.steering_root_layout.addWidget(self.steering_hero_card)
+        self.steering_vertical_splitter = QtWidgets.QSplitter(parent=self.steering_tab)
+        self.steering_vertical_splitter.setOrientation(QtCore.Qt.Orientation.Vertical)
+        self.steering_vertical_splitter.setChildrenCollapsible(False)
+        self.steering_vertical_splitter.setObjectName("steering_vertical_splitter")
+        self.scope_card = QtWidgets.QFrame(parent=self.steering_vertical_splitter)
+        self.scope_card.setObjectName("scope_card")
+        self.scope_card_layout = QtWidgets.QVBoxLayout(self.scope_card)
+        self.scope_card_layout.setContentsMargins(12, 10, 12, 10)
+        self.scope_card_layout.setSpacing(8)
+        self.scope_card_layout.setObjectName("scope_card_layout")
+        self.scope_header_row = QtWidgets.QHBoxLayout()
+        self.scope_header_row.setSpacing(8)
+        self.scope_header_row.setObjectName("scope_header_row")
+        self.scope_title = QtWidgets.QLabel(parent=self.scope_card)
+        self.scope_title.setObjectName("scope_title")
+        self.scope_header_row.addWidget(self.scope_title)
+        self.scope_hint = QtWidgets.QLabel(parent=self.scope_card)
+        self.scope_hint.setObjectName("scope_hint")
+        self.scope_header_row.addWidget(self.scope_hint)
+        spacerItem3 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
+        self.scope_header_row.addItem(spacerItem3)
+        self.scope_window_lab = QtWidgets.QLabel(parent=self.scope_card)
+        self.scope_window_lab.setObjectName("scope_window_lab")
+        self.scope_header_row.addWidget(self.scope_window_lab)
+        self.scope_window_combo = QtWidgets.QComboBox(parent=self.scope_card)
+        self.scope_window_combo.setObjectName("scope_window_combo")
+        self.scope_window_combo.addItem("")
+        self.scope_window_combo.addItem("")
+        self.scope_window_combo.addItem("")
+        self.scope_window_combo.addItem("")
+        self.scope_header_row.addWidget(self.scope_window_combo)
+        self.scope_pause_button = QtWidgets.QPushButton(parent=self.scope_card)
+        self.scope_pause_button.setObjectName("scope_pause_button")
+        self.scope_header_row.addWidget(self.scope_pause_button)
+        self.scope_clear_button = QtWidgets.QPushButton(parent=self.scope_card)
+        self.scope_clear_button.setObjectName("scope_clear_button")
+        self.scope_header_row.addWidget(self.scope_clear_button)
+        self.scope_live_badge = QtWidgets.QLabel(parent=self.scope_card)
+        self.scope_live_badge.setObjectName("scope_live_badge")
+        self.scope_header_row.addWidget(self.scope_live_badge)
+        self.scope_card_layout.addLayout(self.scope_header_row)
+        self.scope_host = QtWidgets.QFrame(parent=self.scope_card)
+        self.scope_host.setObjectName("scope_host")
+        self.scope_host_layout = QtWidgets.QVBoxLayout(self.scope_host)
+        self.scope_host_layout.setContentsMargins(0, 0, 0, 0)
+        self.scope_host_layout.setSpacing(0)
+        self.scope_host_layout.setObjectName("scope_host_layout")
+        self.scope_card_layout.addWidget(self.scope_host)
+        self.steering_bottom_splitter = QtWidgets.QSplitter(parent=self.steering_vertical_splitter)
+        self.steering_bottom_splitter.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.steering_bottom_splitter.setChildrenCollapsible(False)
+        self.steering_bottom_splitter.setObjectName("steering_bottom_splitter")
+        self.control_column = QtWidgets.QWidget(parent=self.steering_bottom_splitter)
+        self.control_column.setObjectName("control_column")
+        self.control_column_layout = QtWidgets.QVBoxLayout(self.control_column)
+        self.control_column_layout.setContentsMargins(0, 0, 0, 0)
+        self.control_column_layout.setSpacing(10)
+        self.control_column_layout.setObjectName("control_column_layout")
+        self.pid_card = QtWidgets.QFrame(parent=self.control_column)
+        self.pid_card.setObjectName("pid_card")
+        self.pid_card_layout = QtWidgets.QVBoxLayout(self.pid_card)
+        self.pid_card_layout.setContentsMargins(12, 10, 12, 10)
+        self.pid_card_layout.setSpacing(8)
+        self.pid_card_layout.setObjectName("pid_card_layout")
+        self.pid_title = QtWidgets.QLabel(parent=self.pid_card)
+        self.pid_title.setObjectName("pid_title")
+        self.pid_card_layout.addWidget(self.pid_title)
+        self.pid_grid = QtWidgets.QGridLayout()
+        self.pid_grid.setSpacing(8)
+        self.pid_grid.setObjectName("pid_grid")
+        self.kp_lab = QtWidgets.QLabel(parent=self.pid_card)
+        self.kp_lab.setObjectName("kp_lab")
+        self.pid_grid.addWidget(self.kp_lab, 0, 0, 1, 1)
+        self.kp_spin = QtWidgets.QDoubleSpinBox(parent=self.pid_card)
+        self.kp_spin.setDecimals(4)
+        self.kp_spin.setMaximum(200.0)
+        self.kp_spin.setProperty("value", 1.2)
+        self.kp_spin.setObjectName("kp_spin")
+        self.pid_grid.addWidget(self.kp_spin, 0, 1, 1, 1)
+        self.ki_lab = QtWidgets.QLabel(parent=self.pid_card)
+        self.ki_lab.setObjectName("ki_lab")
+        self.pid_grid.addWidget(self.ki_lab, 0, 2, 1, 1)
+        self.ki_spin = QtWidgets.QDoubleSpinBox(parent=self.pid_card)
+        self.ki_spin.setDecimals(4)
+        self.ki_spin.setMaximum(200.0)
+        self.ki_spin.setProperty("value", 0.08)
+        self.ki_spin.setObjectName("ki_spin")
+        self.pid_grid.addWidget(self.ki_spin, 0, 3, 1, 1)
+        self.kd_lab = QtWidgets.QLabel(parent=self.pid_card)
+        self.kd_lab.setObjectName("kd_lab")
+        self.pid_grid.addWidget(self.kd_lab, 1, 0, 1, 1)
+        self.kd_spin = QtWidgets.QDoubleSpinBox(parent=self.pid_card)
+        self.kd_spin.setDecimals(4)
+        self.kd_spin.setMaximum(200.0)
+        self.kd_spin.setProperty("value", 0.01)
+        self.kd_spin.setObjectName("kd_spin")
+        self.pid_grid.addWidget(self.kd_spin, 1, 1, 1, 1)
+        self.pid_out_limit_lab = QtWidgets.QLabel(parent=self.pid_card)
+        self.pid_out_limit_lab.setObjectName("pid_out_limit_lab")
+        self.pid_grid.addWidget(self.pid_out_limit_lab, 1, 2, 1, 1)
+        self.pid_out_limit_spin = QtWidgets.QDoubleSpinBox(parent=self.pid_card)
+        self.pid_out_limit_spin.setDecimals(1)
+        self.pid_out_limit_spin.setMaximum(100.0)
+        self.pid_out_limit_spin.setProperty("value", 70.0)
+        self.pid_out_limit_spin.setObjectName("pid_out_limit_spin")
+        self.pid_grid.addWidget(self.pid_out_limit_spin, 1, 3, 1, 1)
+        self.pid_card_layout.addLayout(self.pid_grid)
+        self.pid_button_row = QtWidgets.QHBoxLayout()
+        self.pid_button_row.setSpacing(8)
+        self.pid_button_row.setObjectName("pid_button_row")
+        self.pid_apply_button = QtWidgets.QPushButton(parent=self.pid_card)
+        self.pid_apply_button.setObjectName("pid_apply_button")
+        self.pid_button_row.addWidget(self.pid_apply_button)
+        self.pid_reset_i_button = QtWidgets.QPushButton(parent=self.pid_card)
+        self.pid_reset_i_button.setObjectName("pid_reset_i_button")
+        self.pid_button_row.addWidget(self.pid_reset_i_button)
+        spacerItem4 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
+        self.pid_button_row.addItem(spacerItem4)
+        self.pid_card_layout.addLayout(self.pid_button_row)
+        self.control_column_layout.addWidget(self.pid_card)
+        self.setpoint_card = QtWidgets.QFrame(parent=self.control_column)
+        self.setpoint_card.setObjectName("setpoint_card")
+        self.setpoint_card_layout = QtWidgets.QVBoxLayout(self.setpoint_card)
+        self.setpoint_card_layout.setContentsMargins(12, 10, 12, 10)
+        self.setpoint_card_layout.setSpacing(8)
+        self.setpoint_card_layout.setObjectName("setpoint_card_layout")
+        self.setpoint_title = QtWidgets.QLabel(parent=self.setpoint_card)
+        self.setpoint_title.setObjectName("setpoint_title")
+        self.setpoint_card_layout.addWidget(self.setpoint_title)
+        self.setpoint_body_row = QtWidgets.QHBoxLayout()
+        self.setpoint_body_row.setSpacing(10)
+        self.setpoint_body_row.setObjectName("setpoint_body_row")
+        self.knob_frame = QtWidgets.QFrame(parent=self.setpoint_card)
+        self.knob_frame.setObjectName("knob_frame")
+        self.knob_frame_layout = QtWidgets.QVBoxLayout(self.knob_frame)
+        self.knob_frame_layout.setContentsMargins(10, 10, 10, 10)
+        self.knob_frame_layout.setSpacing(6)
+        self.knob_frame_layout.setObjectName("knob_frame_layout")
+        self.angle_knob = QtWidgets.QDial(parent=self.knob_frame)
+        self.angle_knob.setMinimumSize(QtCore.QSize(136, 136))
+        self.angle_knob.setMaximumSize(QtCore.QSize(136, 136))
+        self.angle_knob.setMinimum(-900)
+        self.angle_knob.setMaximum(900)
+        self.angle_knob.setSingleStep(2)
+        self.angle_knob.setPageStep(10)
+        self.angle_knob.setNotchesVisible(True)
+        self.angle_knob.setObjectName("angle_knob")
+        self.knob_frame_layout.addWidget(self.angle_knob)
+        self.knob_value_lab = QtWidgets.QLabel(parent=self.knob_frame)
+        self.knob_value_lab.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.knob_value_lab.setObjectName("knob_value_lab")
+        self.knob_frame_layout.addWidget(self.knob_value_lab)
+        self.setpoint_body_row.addWidget(self.knob_frame)
+        self.setpoint_right_layout = QtWidgets.QVBoxLayout()
+        self.setpoint_right_layout.setSpacing(8)
+        self.setpoint_right_layout.setObjectName("setpoint_right_layout")
+        self.setpoint_grid = QtWidgets.QGridLayout()
+        self.setpoint_grid.setSpacing(8)
+        self.setpoint_grid.setObjectName("setpoint_grid")
+        self.angle_set_lab = QtWidgets.QLabel(parent=self.setpoint_card)
+        self.angle_set_lab.setObjectName("angle_set_lab")
+        self.setpoint_grid.addWidget(self.angle_set_lab, 0, 0, 1, 1)
+        self.angle_set_spin = QtWidgets.QDoubleSpinBox(parent=self.setpoint_card)
+        self.angle_set_spin.setDecimals(1)
+        self.angle_set_spin.setMinimum(-90.0)
+        self.angle_set_spin.setMaximum(90.0)
+        self.angle_set_spin.setSingleStep(0.5)
+        self.angle_set_spin.setProperty("value", 0.0)
+        self.angle_set_spin.setObjectName("angle_set_spin")
+        self.setpoint_grid.addWidget(self.angle_set_spin, 0, 1, 1, 1)
+        self.setpoint_right_layout.addLayout(self.setpoint_grid)
+        self.setpoint_button_row = QtWidgets.QHBoxLayout()
+        self.setpoint_button_row.setSpacing(8)
+        self.setpoint_button_row.setObjectName("setpoint_button_row")
+        self.setpoint_send_button = QtWidgets.QPushButton(parent=self.setpoint_card)
+        self.setpoint_send_button.setObjectName("setpoint_send_button")
+        self.setpoint_button_row.addWidget(self.setpoint_send_button)
+        self.motor_enable_button = QtWidgets.QPushButton(parent=self.setpoint_card)
+        self.motor_enable_button.setObjectName("motor_enable_button")
+        self.setpoint_button_row.addWidget(self.motor_enable_button)
+        self.motor_stop_button = QtWidgets.QPushButton(parent=self.setpoint_card)
+        self.motor_stop_button.setObjectName("motor_stop_button")
+        self.setpoint_button_row.addWidget(self.motor_stop_button)
+        self.setpoint_right_layout.addLayout(self.setpoint_button_row)
+        self.setpoint_hint = QtWidgets.QLabel(parent=self.setpoint_card)
+        self.setpoint_hint.setObjectName("setpoint_hint")
+        self.setpoint_right_layout.addWidget(self.setpoint_hint)
+        spacerItem5 = QtWidgets.QSpacerItem(20, 20, QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.setpoint_right_layout.addItem(spacerItem5)
+        self.setpoint_body_row.addLayout(self.setpoint_right_layout)
+        self.setpoint_card_layout.addLayout(self.setpoint_body_row)
+        self.control_column_layout.addWidget(self.setpoint_card)
+        self.runtime_card = QtWidgets.QFrame(parent=self.steering_bottom_splitter)
+        self.runtime_card.setObjectName("runtime_card")
+        self.runtime_card_layout = QtWidgets.QVBoxLayout(self.runtime_card)
+        self.runtime_card_layout.setContentsMargins(12, 10, 12, 10)
+        self.runtime_card_layout.setSpacing(8)
+        self.runtime_card_layout.setObjectName("runtime_card_layout")
+        self.runtime_title = QtWidgets.QLabel(parent=self.runtime_card)
+        self.runtime_title.setObjectName("runtime_title")
+        self.runtime_card_layout.addWidget(self.runtime_title)
+        self.runtime_grid = QtWidgets.QGridLayout()
+        self.runtime_grid.setHorizontalSpacing(8)
+        self.runtime_grid.setVerticalSpacing(6)
+        self.runtime_grid.setObjectName("runtime_grid")
+        self.rt_conn_lab = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_conn_lab.setObjectName("rt_conn_lab")
+        self.runtime_grid.addWidget(self.rt_conn_lab, 0, 0, 1, 1)
+        self.rt_conn_value = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_conn_value.setObjectName("rt_conn_value")
+        self.runtime_grid.addWidget(self.rt_conn_value, 0, 1, 1, 1)
+        self.rt_set_lab = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_set_lab.setObjectName("rt_set_lab")
+        self.runtime_grid.addWidget(self.rt_set_lab, 1, 0, 1, 1)
+        self.rt_set_value = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_set_value.setObjectName("rt_set_value")
+        self.runtime_grid.addWidget(self.rt_set_value, 1, 1, 1, 1)
+        self.rt_fb_lab = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_fb_lab.setObjectName("rt_fb_lab")
+        self.runtime_grid.addWidget(self.rt_fb_lab, 2, 0, 1, 1)
+        self.rt_fb_value = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_fb_value.setObjectName("rt_fb_value")
+        self.runtime_grid.addWidget(self.rt_fb_value, 2, 1, 1, 1)
+        self.rt_err_lab = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_err_lab.setObjectName("rt_err_lab")
+        self.runtime_grid.addWidget(self.rt_err_lab, 3, 0, 1, 1)
+        self.rt_err_value = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_err_value.setObjectName("rt_err_value")
+        self.runtime_grid.addWidget(self.rt_err_value, 3, 1, 1, 1)
+        self.rt_pwm_lab = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_pwm_lab.setObjectName("rt_pwm_lab")
+        self.runtime_grid.addWidget(self.rt_pwm_lab, 4, 0, 1, 1)
+        self.rt_pwm_value = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_pwm_value.setObjectName("rt_pwm_value")
+        self.runtime_grid.addWidget(self.rt_pwm_value, 4, 1, 1, 1)
+        self.rt_rpm_lab = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_rpm_lab.setObjectName("rt_rpm_lab")
+        self.runtime_grid.addWidget(self.rt_rpm_lab, 5, 0, 1, 1)
+        self.rt_rpm_value = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_rpm_value.setObjectName("rt_rpm_value")
+        self.runtime_grid.addWidget(self.rt_rpm_value, 5, 1, 1, 1)
+        self.rt_vbus_lab = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_vbus_lab.setObjectName("rt_vbus_lab")
+        self.runtime_grid.addWidget(self.rt_vbus_lab, 6, 0, 1, 1)
+        self.rt_vbus_value = QtWidgets.QLabel(parent=self.runtime_card)
+        self.rt_vbus_value.setObjectName("rt_vbus_value")
+        self.runtime_grid.addWidget(self.rt_vbus_value, 6, 1, 1, 1)
+        self.runtime_card_layout.addLayout(self.runtime_grid)
+        self.runtime_hint = QtWidgets.QLabel(parent=self.runtime_card)
+        self.runtime_hint.setObjectName("runtime_hint")
+        self.runtime_card_layout.addWidget(self.runtime_hint)
+        self.telemetry_raw_title = QtWidgets.QLabel(parent=self.runtime_card)
+        self.telemetry_raw_title.setObjectName("telemetry_raw_title")
+        self.runtime_card_layout.addWidget(self.telemetry_raw_title)
+        self.telemetry_raw_view = QtWidgets.QPlainTextEdit(parent=self.runtime_card)
+        self.telemetry_raw_view.setReadOnly(True)
+        self.telemetry_raw_view.setObjectName("telemetry_raw_view")
+        self.runtime_card_layout.addWidget(self.telemetry_raw_view)
+        self.telemetry_cmd_row = QtWidgets.QHBoxLayout()
+        self.telemetry_cmd_row.setSpacing(8)
+        self.telemetry_cmd_row.setObjectName("telemetry_cmd_row")
+        self.telemetry_cmd_edit = QtWidgets.QLineEdit(parent=self.runtime_card)
+        self.telemetry_cmd_edit.setObjectName("telemetry_cmd_edit")
+        self.telemetry_cmd_row.addWidget(self.telemetry_cmd_edit)
+        self.telemetry_send_button = QtWidgets.QPushButton(parent=self.runtime_card)
+        self.telemetry_send_button.setObjectName("telemetry_send_button")
+        self.telemetry_cmd_row.addWidget(self.telemetry_send_button)
+        self.runtime_card_layout.addLayout(self.telemetry_cmd_row)
+        self.steering_root_layout.addWidget(self.steering_vertical_splitter)
+        self.tabWidget.addTab(self.steering_tab, "")
         self.verticalLayout.addWidget(self.tabWidget)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(parent=MainWindow)
@@ -366,4 +786,50 @@ class Ui_MainWindow(object):
         self.get_status_button.setText(_translate("MainWindow", "GET_STATUS"))
         self.reboot_button.setText(_translate("MainWindow", "REBOOT"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.ble_tab), _translate("MainWindow", "BLE Config"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Reserved"))
+        self.steering_hero_title.setText(_translate("MainWindow", "STEERING ENGINE DEBUG CONSOLE"))
+        self.steering_hero_subtitle.setText(_translate("MainWindow", "DC Motor + Variable Resistor closed-loop tuning and live telemetry"))
+        self.scope_title.setText(_translate("MainWindow", "SCOPE WAVEFORM"))
+        self.scope_hint.setText(_translate("MainWindow", "Setpoint / Feedback / PWM"))
+        self.scope_window_lab.setText(_translate("MainWindow", "Window"))
+        self.scope_window_combo.setItemText(0, _translate("MainWindow", "8 s"))
+        self.scope_window_combo.setItemText(1, _translate("MainWindow", "12 s"))
+        self.scope_window_combo.setItemText(2, _translate("MainWindow", "20 s"))
+        self.scope_window_combo.setItemText(3, _translate("MainWindow", "30 s"))
+        self.scope_pause_button.setText(_translate("MainWindow", "Pause"))
+        self.scope_clear_button.setText(_translate("MainWindow", "Clear"))
+        self.scope_live_badge.setText(_translate("MainWindow", "LIVE"))
+        self.pid_title.setText(_translate("MainWindow", "PID TUNING"))
+        self.kp_lab.setText(_translate("MainWindow", "Kp"))
+        self.ki_lab.setText(_translate("MainWindow", "Ki"))
+        self.kd_lab.setText(_translate("MainWindow", "Kd"))
+        self.pid_out_limit_lab.setText(_translate("MainWindow", "Output Limit"))
+        self.pid_apply_button.setText(_translate("MainWindow", "Apply PID"))
+        self.pid_reset_i_button.setText(_translate("MainWindow", "Reset Integral"))
+        self.setpoint_title.setText(_translate("MainWindow", "STEERING COMMAND"))
+        self.knob_value_lab.setText(_translate("MainWindow", "0.0 deg"))
+        self.angle_set_lab.setText(_translate("MainWindow", "Target Angle (deg)"))
+        self.setpoint_send_button.setText(_translate("MainWindow", "Send Setpoint"))
+        self.motor_enable_button.setText(_translate("MainWindow", "Enable Motor"))
+        self.motor_stop_button.setText(_translate("MainWindow", "Emergency Stop"))
+        self.setpoint_hint.setText(_translate("MainWindow", "Knob is 0.1 deg resolution. Use Emergency Stop when needed."))
+        self.runtime_title.setText(_translate("MainWindow", "REAL-TIME PARAMETERS"))
+        self.rt_conn_lab.setText(_translate("MainWindow", "Connection"))
+        self.rt_conn_value.setText(_translate("MainWindow", "Disconnected"))
+        self.rt_set_lab.setText(_translate("MainWindow", "Setpoint"))
+        self.rt_set_value.setText(_translate("MainWindow", "0.0 deg"))
+        self.rt_fb_lab.setText(_translate("MainWindow", "Feedback"))
+        self.rt_fb_value.setText(_translate("MainWindow", "0.0 deg"))
+        self.rt_err_lab.setText(_translate("MainWindow", "Error"))
+        self.rt_err_value.setText(_translate("MainWindow", "0.0 deg"))
+        self.rt_pwm_lab.setText(_translate("MainWindow", "PWM Output"))
+        self.rt_pwm_value.setText(_translate("MainWindow", "0.0 %"))
+        self.rt_rpm_lab.setText(_translate("MainWindow", "Motor Speed"))
+        self.rt_rpm_value.setText(_translate("MainWindow", "0.0 rpm"))
+        self.rt_vbus_lab.setText(_translate("MainWindow", "Bus Voltage"))
+        self.rt_vbus_value.setText(_translate("MainWindow", "0.0 V"))
+        self.runtime_hint.setText(_translate("MainWindow", "Tip: firmware telemetry supports formats like set=12.5, fb=11.9, pwm=28, rpm=320"))
+        self.telemetry_raw_title.setText(_translate("MainWindow", "RAW TELEMETRY"))
+        self.telemetry_raw_view.setPlaceholderText(_translate("MainWindow", "RX/TX log and parsed steering telemetry"))
+        self.telemetry_cmd_edit.setPlaceholderText(_translate("MainWindow", "Manual command, e.g. STEER_PID kp=1.3 ki=0.05 kd=0.01"))
+        self.telemetry_send_button.setText(_translate("MainWindow", "Send Manual CMD"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.steering_tab), _translate("MainWindow", "Steering Debug"))
