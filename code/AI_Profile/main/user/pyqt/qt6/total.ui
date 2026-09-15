@@ -1305,45 +1305,81 @@ QWidget#steering_tab QLabel#rt_vbus_value {
                 <number>10</number>
                </property>
                <item>
-                <widget class="QDial" name="angle_knob">
-                 <property name="minimumSize">
-                <size>
-                 <width>136</width>
-                 <height>136</height>
-                </size>
-                 </property>
-                 <property name="maximumSize">
-                <size>
-                 <width>136</width>
-                 <height>136</height>
-                </size>
-                 </property>
-                 <property name="minimum">
-                <number>-900</number>
-                 </property>
-                 <property name="maximum">
-                <number>900</number>
-                 </property>
-                 <property name="singleStep">
-                <number>2</number>
-                 </property>
-                 <property name="pageStep">
-                <number>10</number>
-                 </property>
-                 <property name="notchesVisible">
-                <bool>true</bool>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLabel" name="knob_value_lab">
-                 <property name="text">
-                <string>0.0 deg</string>
-                 </property>
-                 <property name="alignment">
-                <set>Qt::AlignCenter</set>
-                 </property>
-                </widget>
+                    <widget class="QWidget" name="knob_overlay">
+                     <property name="minimumSize">
+                      <size>
+                       <width>136</width>
+                       <height>136</height>
+                      </size>
+                     </property>
+                     <property name="maximumSize">
+                      <size>
+                       <width>136</width>
+                       <height>136</height>
+                      </size>
+                     </property>
+                     <layout class="QGridLayout" name="knob_overlay_layout">
+                      <property name="horizontalSpacing">
+                       <number>0</number>
+                      </property>
+                      <property name="verticalSpacing">
+                       <number>0</number>
+                      </property>
+                      <property name="leftMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                       <number>0</number>
+                      </property>
+                      <item row="0" column="0">
+                       <widget class="QDial" name="angle_knob">
+                        <property name="minimumSize">
+                         <size>
+                          <width>136</width>
+                          <height>136</height>
+                         </size>
+                        </property>
+                        <property name="maximumSize">
+                         <size>
+                          <width>136</width>
+                          <height>136</height>
+                         </size>
+                        </property>
+                        <property name="minimum">
+                         <number>0</number>
+                        </property>
+                        <property name="maximum">
+                         <number>330</number>
+                        </property>
+                        <property name="singleStep">
+                         <number>1</number>
+                        </property>
+                        <property name="pageStep">
+                         <number>10</number>
+                        </property>
+                        <property name="notchesVisible">
+                         <bool>true</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="0" column="0">
+                       <widget class="QLabel" name="knob_value_lab">
+                        <property name="text">
+                         <string>0 deg</string>
+                        </property>
+                        <property name="alignment">
+                         <set>Qt::AlignCenter</set>
+                        </property>
+                       </widget>
+                      </item>
+                     </layout>
+                    </widget>
                </item>
               </layout>
              </widget>
@@ -1371,16 +1407,16 @@ QWidget#steering_tab QLabel#rt_vbus_value {
                 <item row="0" column="1">
                  <widget class="QDoubleSpinBox" name="angle_set_spin">
                 <property name="decimals">
-                 <number>1</number>
+                 <number>0</number>
                 </property>
                 <property name="minimum">
-                 <double>-90.000000000000000</double>
+                 <double>0.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <double>90.000000000000000</double>
+                 <double>330.000000000000000</double>
                 </property>
                 <property name="singleStep">
-                 <double>0.500000000000000</double>
+                 <double>1.000000000000000</double>
                 </property>
                 <property name="value">
                  <double>0.000000000000000</double>
@@ -1420,7 +1456,7 @@ QWidget#steering_tab QLabel#rt_vbus_value {
               <item>
                <widget class="QLabel" name="setpoint_hint">
                 <property name="text">
-                 <string>Knob is 0.1 deg resolution. Use Emergency Stop when needed.</string>
+                                 <string>Knob range: 0 to 330 deg, step: 1 deg. Use Emergency Stop when needed.</string>
                 </property>
                </widget>
               </item>
@@ -1621,6 +1657,13 @@ QWidget#steering_tab QLabel#rt_vbus_value {
              </property>
             </widget>
            </item>
+                     <item>
+                        <widget class="QPushButton" name="telemetry_clear_button">
+                         <property name="text">
+                            <string>Clear Raw Telemetry</string>
+                         </property>
+                        </widget>
+                     </item>
           </layout>
          </item>
         </layout>

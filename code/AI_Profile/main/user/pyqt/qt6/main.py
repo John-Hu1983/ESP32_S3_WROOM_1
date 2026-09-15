@@ -45,7 +45,7 @@ class MainWindow(QMainWindow):
         self.steering_tab_controller: SteeringTabController | None = None
         ui_path = Path(__file__).with_name("total.ui")
         uic.loadUi(str(ui_path), self)
-        self.setWindowTitle("PyQt6 Basic Project")
+        self.setWindowTitle("BLE - author: John Hu")
         self._init_tabs()
 
     def _init_tabs(self) -> None:

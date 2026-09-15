@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-from PyQt6.QtCore import QDateTime, Qt
+from PyQt6.QtCore import QDateTime, QTimer, Qt
 from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ble_manager import BleManager
+from user_config import UserConfigStore
 
 
 TWidget = TypeVar("TWidget", bound=QWidget)
@@ -26,6 +27,13 @@ class BleTabController:
         self._root = tab_root
         self._is_connected = False
         self._is_scanning = False
+        self._config = UserConfigStore()
+        self._auto_connect_pending = False
+        self._auto_scan_requested = False
+        self._auto_target_name = ""
+        self._auto_target_address = ""
+        self._last_connect_name = ""
+        self._last_connect_address = ""
 
         self.device_filter_edit: QLineEdit
         self.scan_button: QPushButton
@@ -56,6 +64,7 @@ class BleTabController:
         self.reboot_button: QPushButton
 
         self._collect_widgets()
+        self._load_saved_device_preference()
         self._apply_layout_tuning()
         self._apply_button_variants()
         self._apply_theme()
@@ -69,6 +78,7 @@ class BleTabController:
         self.send_button.setEnabled(False)
 
         self._apply_ble_config(notify=False)
+        self._schedule_auto_connect_if_enabled()
 
     def _collect_widgets(self) -> None:
         self.device_filter_edit = self._must_find(QLineEdit, "device_filter_edit")
@@ -123,6 +133,104 @@ class BleTabController:
         self.connect_button.setProperty("variant", "primary")
         self.disconnect_button.setProperty("variant", "danger")
         self.apply_config_button.setProperty("variant", "ghost")
+
+    def _load_saved_device_preference(self) -> None:
+        self._auto_target_name = self._config.last_device_name
+        self._auto_target_address = self._config.last_device_address
+
+        if self._auto_target_name:
+            self.device_filter_edit.setText(self._auto_target_name)
+        elif self._auto_target_address:
+            self.device_filter_edit.setText(self._auto_target_address)
+
+    def _schedule_auto_connect_if_enabled(self) -> None:
+        if not self._config.auto_connect_last_device:
+            return
+
+        if not self._auto_target_name and not self._auto_target_address:
+            return
+
+        self._auto_connect_pending = True
+        QTimer.singleShot(700, self._try_auto_connect_last_device)
+
+    def _try_auto_connect_last_device(self) -> None:
+        if not self._auto_connect_pending or self._is_connected:
+            return
+
+        self._apply_ble_config(notify=False)
+
+        if self._auto_target_address:
+            name = self._auto_target_name or self._auto_target_address
+            self._append_sys(
+                f"Auto connect: try last device {name} [{self._auto_target_address}]"
+            )
+            self._connect_to_device(name=name, address=self._auto_target_address)
+            QTimer.singleShot(2600, self._start_auto_scan_for_last_device)
+            return
+
+        self._start_auto_scan_for_last_device()
+
+    def _start_auto_scan_for_last_device(self) -> None:
+        if not self._auto_connect_pending or self._is_connected or self._is_scanning:
+            return
+
+        filter_text = self.device_filter_edit.text().strip()
+        if not filter_text:
+            filter_text = self._auto_target_name or self._auto_target_address
+            self.device_filter_edit.setText(filter_text)
+
+        self._append_sys(f"Auto connect: scan with filter '{filter_text or 'ALL'}'.")
+        self.device_list.clear()
+        self._auto_scan_requested = True
+        self._ble.scan(name_filter=filter_text, timeout_sec=6.0)
+
+    def _pick_auto_connect_item(self) -> QListWidgetItem | None:
+        target_address = self._auto_target_address.strip().lower()
+        target_name = self._normalize_device_name(self._auto_target_name)
+
+        for index in range(self.device_list.count()):
+            item = self.device_list.item(index)
+            if item is None:
+                continue
+
+            info = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(info, dict):
+                continue
+
+            name = str(info.get("name", "")).strip()
+            address = str(info.get("address", "")).strip().lower()
+
+            if target_address and address == target_address:
+                return item
+
+            if target_name and self._normalize_device_name(name) == target_name:
+                return item
+
+        return None
+
+    def _save_last_connected_device(self, connected_name: str) -> None:
+        name = connected_name.strip() or self._last_connect_name.strip()
+        address = self._last_connect_address.strip()
+
+        if not address:
+            item = self.device_list.currentItem()
+            if item is not None:
+                info = item.data(Qt.ItemDataRole.UserRole)
+                if isinstance(info, dict):
+                    address = str(info.get("address", "")).strip()
+                    if not name:
+                        name = str(info.get("name", "")).strip()
+
+        if not name and not address:
+            return
+
+        self._config.update_last_device(name=name or "Unknown", address=address)
+        self._auto_target_name = name or self._auto_target_name
+        self._auto_target_address = address or self._auto_target_address
+
+    @staticmethod
+    def _normalize_device_name(value: str) -> str:
+        return "".join(ch for ch in value.lower() if ch.isalnum())
 
     def _apply_theme(self) -> None:
         self._root.setStyleSheet(
@@ -331,6 +439,8 @@ class BleTabController:
         self._apply_ble_config(notify=True)
 
     def _on_scan_clicked(self) -> None:
+        self._auto_scan_requested = False
+        self._auto_connect_pending = False
         self._apply_ble_config(notify=False)
         self.device_list.clear()
         filter_text = self.device_filter_edit.text().strip()
@@ -354,10 +464,21 @@ class BleTabController:
             self._append_sys("Selected item has no BLE address.")
             return
 
+        self._auto_connect_pending = False
+        self._connect_to_device(name=name, address=address)
+
+    def _connect_to_device(self, name: str, address: str) -> None:
+        clean_name = name.strip() or "Unknown"
+        clean_address = address.strip()
+        if not clean_address:
+            return
+
+        self._last_connect_name = clean_name
+        self._last_connect_address = clean_address
         self._apply_ble_config(notify=False)
-        self.device_value.setText(name)
+        self.device_value.setText(clean_name)
         self._refresh_status_strip()
-        self._ble.connect_device(address=address, name=name)
+        self._ble.connect_device(address=clean_address, name=clean_name)
 
     def _on_send_clicked(self) -> None:
         text = self.tx_input.text().strip()
@@ -403,6 +524,33 @@ class BleTabController:
         self.scan_button.setText("SEARCH")
         self._append_sys(f"Scan finished: {count} device(s).")
 
+        if not self._auto_scan_requested or self._is_connected:
+            return
+
+        self._auto_scan_requested = False
+        match_item = self._pick_auto_connect_item()
+        if match_item is None:
+            self._auto_connect_pending = False
+            self._append_sys("Auto connect: no matching device in scan results.")
+            return
+
+        self.device_list.setCurrentItem(match_item)
+        info = match_item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(info, dict):
+            self._auto_connect_pending = False
+            self._append_sys("Auto connect: invalid scan result item.")
+            return
+
+        name = str(info.get("name", "Unknown"))
+        address = str(info.get("address", "")).strip()
+        if not address:
+            self._auto_connect_pending = False
+            self._append_sys("Auto connect: matched device has empty address.")
+            return
+
+        self._append_sys(f"Auto connect: matched {name} [{address}].")
+        self._connect_to_device(name=name, address=address)
+
     def _on_connected_changed(self, connected: bool, device_name: str) -> None:
         self._is_connected = connected
         self.connect_button.setEnabled(not connected)
@@ -410,8 +558,12 @@ class BleTabController:
         self.send_button.setEnabled(connected)
 
         if connected:
-            self.device_value.setText(device_name or "N/A")
-            self._append_sys(f"Connected to {device_name}.")
+            shown_name = device_name or self._last_connect_name or "N/A"
+            self.device_value.setText(shown_name)
+            self._auto_connect_pending = False
+            self._auto_scan_requested = False
+            self._save_last_connected_device(shown_name)
+            self._append_sys(f"Connected to {shown_name}.")
         else:
             self.device_value.setText("N/A")
             self._append_sys("Disconnected.")
@@ -425,6 +577,9 @@ class BleTabController:
         self._append_tx(text)
 
     def _on_ble_log(self, text: str) -> None:
+        plain = text.strip()
+        if plain.startswith("TX >") or plain.startswith("RX <"):
+            return
         self._append_sys(text)
 
     def _append_tx(self, text: str) -> None:

@@ -226,6 +226,7 @@ class SteeringTabController:
         self.telemetry_raw_view: QPlainTextEdit
         self.telemetry_cmd_edit: QLineEdit
         self.telemetry_send_button: QPushButton
+        self.telemetry_clear_button: QPushButton
 
         self._last_setpoint = 0.0
         self._last_feedback = 0.0
@@ -279,6 +280,9 @@ class SteeringTabController:
         self.telemetry_raw_view = self._must_find(QPlainTextEdit, "telemetry_raw_view")
         self.telemetry_cmd_edit = self._must_find(QLineEdit, "telemetry_cmd_edit")
         self.telemetry_send_button = self._must_find(QPushButton, "telemetry_send_button")
+        self.telemetry_clear_button = self._must_find(
+            QPushButton, "telemetry_clear_button"
+        )
 
     def _must_find(self, widget_type: type[TWidget], name: str) -> TWidget:
         widget = self._root.findChild(widget_type, name)
@@ -296,13 +300,17 @@ class SteeringTabController:
         self.scope_window_combo.setCurrentIndex(min(1, self.scope_window_combo.count() - 1))
         self._scope.set_window_seconds(self._current_scope_window_sec())
 
-        self.angle_knob.setRange(-900, 900)
-        self.angle_set_spin.setRange(-90.0, 90.0)
-        self.angle_set_spin.setSingleStep(0.5)
+        self.angle_knob.setRange(0, 330)
+        self.angle_set_spin.setRange(0.0, 330.0)
+        self.angle_set_spin.setDecimals(0)
+        self.angle_set_spin.setSingleStep(1.0)
         self.angle_set_spin.setValue(0.0)
-        self.knob_value_lab.setText("0.0 deg")
+        self.knob_value_lab.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+        )
+        self.knob_value_lab.setText("0 deg")
 
-        self.rt_set_value.setText("0.0 deg")
+        self.rt_set_value.setText("0 deg")
         self.rt_fb_value.setText("0.0 deg")
         self.rt_err_value.setText("0.0 deg")
         self.rt_pwm_value.setText("0.0 %")
@@ -328,6 +336,7 @@ class SteeringTabController:
         self.pid_reset_i_button.clicked.connect(self._on_reset_i_clicked)
 
         self.telemetry_send_button.clicked.connect(self._on_manual_send_clicked)
+        self.telemetry_clear_button.clicked.connect(self._on_clear_raw_telemetry_clicked)
         self.telemetry_cmd_edit.returnPressed.connect(self._on_manual_send_clicked)
 
         self._ble.connected_signal.connect(self._on_connected_changed)
@@ -382,28 +391,30 @@ class SteeringTabController:
         if self._angle_syncing:
             return
 
-        angle = value / 10.0
+        angle = float(value)
         self._angle_syncing = True
         self.angle_set_spin.setValue(angle)
         self._angle_syncing = False
 
-        self.knob_value_lab.setText(f"{angle:.1f} deg")
-        self.rt_set_value.setText(f"{angle:.1f} deg")
+        angle_int = int(round(angle))
+        self.knob_value_lab.setText(f"{angle_int} deg")
+        self.rt_set_value.setText(f"{angle_int} deg")
 
     def _on_angle_spin_changed(self, value: float) -> None:
         if self._angle_syncing:
             return
 
+        value_int = int(round(value))
         self._angle_syncing = True
-        self.angle_knob.setValue(int(round(value * 10.0)))
+        self.angle_knob.setValue(value_int)
         self._angle_syncing = False
 
-        self.knob_value_lab.setText(f"{value:.1f} deg")
-        self.rt_set_value.setText(f"{value:.1f} deg")
+        self.knob_value_lab.setText(f"{value_int} deg")
+        self.rt_set_value.setText(f"{value_int} deg")
 
     def _on_send_setpoint_clicked(self) -> None:
-        angle = self.angle_set_spin.value()
-        self._send_command(f"STEER_SET angle={angle:.1f}")
+        angle = int(round(self.angle_set_spin.value()))
+        self._send_command(f"STEER_SET angle={angle}")
 
     def _on_motor_enable_clicked(self) -> None:
         self._send_command("STEER_ENABLE 1")
@@ -429,6 +440,9 @@ class SteeringTabController:
             return
         self._send_command(text)
         self.telemetry_cmd_edit.clear()
+
+    def _on_clear_raw_telemetry_clicked(self) -> None:
+        self.telemetry_raw_view.clear()
 
     def _send_command(self, text: str) -> None:
         if not self._is_connected:
