@@ -16,5 +16,6 @@ main/mmap_generate_emoji.h
 .cache
 *.pyc
 *.bin
+!main/user/assets/printer/*.bin
 mmap_generate_*.h
 .clangd

@@ -2,7 +2,7 @@
 Language: Cpp
 BasedOnStyle: Google
 AccessModifierOffset: -4
-AlignAfterOpenBracket: BlockIndent
+AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
@@ -24,7 +24,7 @@ BraceWrapping:
   AfterClass: false
   AfterControlStatement: false
   AfterEnum: false
-  AfterFunction: true
+  AfterFunction: false
   AfterNamespace: false
   AfterObjCDeclaration: false
   AfterStruct: false

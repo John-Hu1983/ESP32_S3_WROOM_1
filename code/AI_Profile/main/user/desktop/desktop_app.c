@@ -12,25 +12,27 @@
 #include "user/gui/pidm_ui.h"
 #include "user/gui/print_ui.h"
 #include "user/gui/rfid_ui.h"
+#include "user/gui/servo_ui.h"
 #include "user/gui/setting_ui.h"
-#include "user/gui/wifi_ui.h"
 
 #define TAG "desktop"
 
+// clang-format off
 static const desktop_icon_s s_desktop_icons[DESKTOP_ICON_COUNT] = {
-    { LV_SYMBOL_VIDEO, "Camera", 0xE95420, camera_open_screen, camera_close_screen },
-    { LV_SYMBOL_IMAGE, "Gallery", 0xD94B3D, gallery_open_screen, gallery_close_screen },
-    { LV_SYMBOL_AUDIO, "Print", 0x77216F, print_open_screen, print_close_screen },
-    { LV_SYMBOL_LIST, "Scope", 0xF27C38, scope_open_screen, scope_close_screen },
-    { LV_SYMBOL_WIFI, "WiFi", 0xC0563F, wifi_open_screen, wifi_close_screen },
-    { LV_SYMBOL_BLUETOOTH, "BT", 0xB65C2C, bt_open_screen, bt_close_screen },
-    { LV_SYMBOL_FILE, "File", 0xE19A35, file_open_screen, file_close_screen },
-    { LV_SYMBOL_VOLUME_MAX, "Mic", 0x8F6745, mic_open_screen, mic_close_screen },
-    { LV_SYMBOL_BELL, "PIDM", 0xC23B4A, pidm_open_screen, pidm_close_screen },
-    { LV_SYMBOL_REFRESH, "RFID", 0x8A3D5D, rfid_open_screen, rfid_close_screen },
-    { LV_SYMBOL_SETTINGS, "Config", 0xA8703A, config_open_screen, config_close_screen },
-    { LV_SYMBOL_WARNING, "About", 0x6F4A34, about_open_screen, about_close_screen },
+{ LV_SYMBOL_VIDEO,      "Camera",  0xE95420,  camera_open_screen,  camera_close_screen },
+{ LV_SYMBOL_IMAGE,      "Gallery", 0xD94B3D,  gallery_open_screen, gallery_close_screen },
+{ LV_SYMBOL_AUDIO,      "Print",   0x77216F,  print_open_screen,   print_close_screen },
+{ LV_SYMBOL_LIST,       "Scope",   0xF27C38,  scope_open_screen,   scope_close_screen },
+{ LV_SYMBOL_UPLOAD,     "Servo",   0xC0563F,  servo_open_screen,   servo_close_screen },
+{ LV_SYMBOL_BLUETOOTH,  "BT",      0xB65C2C,  bt_open_screen,      bt_close_screen },
+{ LV_SYMBOL_FILE,       "File",    0xE19A35,  file_open_screen,    file_close_screen },
+{ LV_SYMBOL_PLAY,       "Mic",     0x8F6745,  mic_open_screen,     mic_close_screen },
+{ LV_SYMBOL_BELL,       "PIDM",    0xC23B4A,  pidm_open_screen,    pidm_close_screen },
+{ LV_SYMBOL_REFRESH,    "RFID",    0x8A3D5D,  rfid_open_screen,    rfid_close_screen },
+{ LV_SYMBOL_SETTINGS,   "config",  0xA8703A,  config_open_screen,  config_close_screen },
+{ LV_SYMBOL_WARNING,    "About",   0x6F4A34,  about_open_screen,   about_close_screen},
 };
+// clang-format on
 
 static lv_display_t* s_lv_display;
 static lv_color_t* s_lv_buf_1;

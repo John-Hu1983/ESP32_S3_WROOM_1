@@ -30,6 +30,18 @@ extern const uint8_t dragon_bin_start[] asm("_binary_dragon_bin_start");
 extern const uint8_t dragon_bin_end[] asm("_binary_dragon_bin_end");
 extern const uint8_t pirate_ship_bin_start[] asm("_binary_pirate_ship_bin_start");
 extern const uint8_t pirate_ship_bin_end[] asm("_binary_pirate_ship_bin_end");
+extern const uint8_t png_01_step_wedge_bin_start[] asm("_binary_01_step_wedge_bin_start");
+extern const uint8_t png_01_step_wedge_bin_end[] asm("_binary_01_step_wedge_bin_end");
+extern const uint8_t png_02_dot_comb_bin_start[] asm("_binary_02_dot_comb_bin_start");
+extern const uint8_t png_02_dot_comb_bin_end[] asm("_binary_02_dot_comb_bin_end");
+extern const uint8_t png_03_diagonal_bin_start[] asm("_binary_03_diagonal_bin_start");
+extern const uint8_t png_03_diagonal_bin_end[] asm("_binary_03_diagonal_bin_end");
+extern const uint8_t png_04_diagonal_inverted_bin_start[] asm("_binary_04_diagonal_inverted_bin_start");
+extern const uint8_t png_04_diagonal_inverted_bin_end[] asm("_binary_04_diagonal_inverted_bin_end");
+extern const uint8_t png_05_product_tiger_lineart_bin_start[] asm("_binary_05_product_tiger_lineart_bin_start");
+extern const uint8_t png_05_product_tiger_lineart_bin_end[] asm("_binary_05_product_tiger_lineart_bin_end");
+extern const uint8_t png_06_long_run_bin_start[] asm("_binary_06_long_run_bin_start");
+extern const uint8_t png_06_long_run_bin_end[] asm("_binary_06_long_run_bin_end");
 
 static const access_assets_bin_item_t s_access_assets_bins[] = {
     { "animation_girl.bin", animation_girl_bin_start, animation_girl_bin_end },
@@ -47,6 +59,12 @@ static const access_assets_bin_item_t s_access_assets_bins[] = {
     { "thankyou.bin", thankyou_bin_start, thankyou_bin_end },
     { "dragon.bin", dragon_bin_start, dragon_bin_end },
     { "pirate_ship.bin", pirate_ship_bin_start, pirate_ship_bin_end },
+    { "01_step_wedge.bin", png_01_step_wedge_bin_start, png_01_step_wedge_bin_end },
+    { "02_dot_comb.bin", png_02_dot_comb_bin_start, png_02_dot_comb_bin_end },
+    { "03_diagonal.bin", png_03_diagonal_bin_start, png_03_diagonal_bin_end },
+    { "04_diagonal_inverted.bin", png_04_diagonal_inverted_bin_start, png_04_diagonal_inverted_bin_end },
+    { "05_product_tiger_lineart.bin", png_05_product_tiger_lineart_bin_start, png_05_product_tiger_lineart_bin_end },
+    { "06_long_run.bin", png_06_long_run_bin_start, png_06_long_run_bin_end },
 };
 
 esp_err_t access_assets_get_bin(

@@ -1105,6 +1105,12 @@ set(PRINTER_ASSET_BINS
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/thankyou.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/dragon.bin"
     "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/pirate_ship.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/01_step_wedge.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/02_dot_comb.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/03_diagonal.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/04_diagonal_inverted.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/05_product_tiger_lineart.bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/user/assets/printer/06_long_run.bin"
 )
 
 idf_component_register(SRCS ${SOURCES}

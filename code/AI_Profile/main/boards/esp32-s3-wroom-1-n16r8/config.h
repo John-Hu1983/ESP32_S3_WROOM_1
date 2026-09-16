@@ -72,7 +72,7 @@
 #define MFRC522_DEFAULT_CLOCK_HZ             (8 * 1000 * 1000)
 #define MFRC522_RESET_PORT                   (GPBA02B_PORT_A)
 #define MFRC522_RESET_PIN                    (6)
-#define MFRC522_IRQ_PORT                     (GPBA02B_PORT_B)  // Reserved, software can poll IRQ state.
+#define MFRC522_IRQ_PORT                     (GPBA02B_PORT_B)  
 #define MFRC522_IRQ_PIN                      (4)
 
 /* PWM */
