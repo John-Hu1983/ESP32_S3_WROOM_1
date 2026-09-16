@@ -30,16 +30,21 @@ extern const uint8_t dragon_bin_start[] asm("_binary_dragon_bin_start");
 extern const uint8_t dragon_bin_end[] asm("_binary_dragon_bin_end");
 extern const uint8_t pirate_ship_bin_start[] asm("_binary_pirate_ship_bin_start");
 extern const uint8_t pirate_ship_bin_end[] asm("_binary_pirate_ship_bin_end");
-extern const uint8_t png_01_step_wedge_bin_start[] asm("_binary_01_step_wedge_bin_start");
+extern const uint8_t png_01_step_wedge_bin_start[] asm(
+    "_binary_01_step_wedge_bin_start");
 extern const uint8_t png_01_step_wedge_bin_end[] asm("_binary_01_step_wedge_bin_end");
 extern const uint8_t png_02_dot_comb_bin_start[] asm("_binary_02_dot_comb_bin_start");
 extern const uint8_t png_02_dot_comb_bin_end[] asm("_binary_02_dot_comb_bin_end");
 extern const uint8_t png_03_diagonal_bin_start[] asm("_binary_03_diagonal_bin_start");
 extern const uint8_t png_03_diagonal_bin_end[] asm("_binary_03_diagonal_bin_end");
-extern const uint8_t png_04_diagonal_inverted_bin_start[] asm("_binary_04_diagonal_inverted_bin_start");
-extern const uint8_t png_04_diagonal_inverted_bin_end[] asm("_binary_04_diagonal_inverted_bin_end");
-extern const uint8_t png_05_product_tiger_lineart_bin_start[] asm("_binary_05_product_tiger_lineart_bin_start");
-extern const uint8_t png_05_product_tiger_lineart_bin_end[] asm("_binary_05_product_tiger_lineart_bin_end");
+extern const uint8_t png_04_diagonal_inverted_bin_start[] asm(
+    "_binary_04_diagonal_inverted_bin_start");
+extern const uint8_t png_04_diagonal_inverted_bin_end[] asm(
+    "_binary_04_diagonal_inverted_bin_end");
+extern const uint8_t png_05_product_tiger_lineart_bin_start[] asm(
+    "_binary_05_product_tiger_lineart_bin_start");
+extern const uint8_t png_05_product_tiger_lineart_bin_end[] asm(
+    "_binary_05_product_tiger_lineart_bin_end");
 extern const uint8_t png_06_long_run_bin_start[] asm("_binary_06_long_run_bin_start");
 extern const uint8_t png_06_long_run_bin_end[] asm("_binary_06_long_run_bin_end");
 
@@ -62,17 +67,18 @@ static const access_assets_bin_item_t s_access_assets_bins[] = {
     { "01_step_wedge.bin", png_01_step_wedge_bin_start, png_01_step_wedge_bin_end },
     { "02_dot_comb.bin", png_02_dot_comb_bin_start, png_02_dot_comb_bin_end },
     { "03_diagonal.bin", png_03_diagonal_bin_start, png_03_diagonal_bin_end },
-    { "04_diagonal_inverted.bin", png_04_diagonal_inverted_bin_start, png_04_diagonal_inverted_bin_end },
-    { "05_product_tiger_lineart.bin", png_05_product_tiger_lineart_bin_start, png_05_product_tiger_lineart_bin_end },
+    { "04_diagonal_inverted.bin",
+      png_04_diagonal_inverted_bin_start,
+      png_04_diagonal_inverted_bin_end },
+    { "05_product_tiger_lineart.bin",
+      png_05_product_tiger_lineart_bin_start,
+      png_05_product_tiger_lineart_bin_end },
     { "06_long_run.bin", png_06_long_run_bin_start, png_06_long_run_bin_end },
 };
 
-esp_err_t access_assets_get_bin(
-    const char* bin_name,
-    const uint8_t** out_data,
-    size_t* out_data_len
-)
-{
+esp_err_t access_assets_get_bin(const char* bin_name,
+                                const uint8_t** out_data,
+                                size_t* out_data_len) {
     size_t idx = 0U;
     uintptr_t start_addr = 0U;
     uintptr_t end_addr = 0U;

@@ -20,8 +20,7 @@ static bool s_bsp_adc_cali_enabled = false;
  * output: none.
  * type  : private
  */
-static void _bsp_init_adc_cali(void)
-{
+static void _bsp_init_adc_cali(void) {
     esp_err_t ret = ESP_ERR_NOT_SUPPORTED;
 
 #if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
@@ -57,13 +56,10 @@ static void _bsp_init_adc_cali(void)
  * output: none.
  * type  : private
  */
-static void _bsp_set_power(bool enable)
-{
-    gpba02b_set_io_mode(
-        POWER_LOCK_IO_PORT,
-        POWER_LOCK_IO_PIN,
-        GPBA02B_IO_STYLE_OUTPUT_CMOS
-    );
+static void _bsp_set_power(bool enable) {
+    gpba02b_set_io_mode(POWER_LOCK_IO_PORT,
+                        POWER_LOCK_IO_PIN,
+                        GPBA02B_IO_STYLE_OUTPUT_CMOS);
     gpba02b_write_io_level(POWER_LOCK_IO_PORT, POWER_LOCK_IO_PIN, enable ? 1 : 0);
 }
 
@@ -73,9 +69,10 @@ static void _bsp_set_power(bool enable)
  * output: none.
  * type  : private
  */
-static void
-_bsp_init_pwm(gpba02b_port_t port, uint8_t pin, gpba02b_pwm_freq_t fre, uint8_t percent)
-{
+static void _bsp_init_pwm(gpba02b_port_t port,
+                          uint8_t pin,
+                          gpba02b_pwm_freq_t fre,
+                          uint8_t percent) {
     gpba02b_config_pwm_mode(port, pin);
     gpba02b_set_pwm_frequency(port, fre);
     gpba02b_set_pwm_duty(port, pin, percent);
@@ -87,18 +84,13 @@ _bsp_init_pwm(gpba02b_port_t port, uint8_t pin, gpba02b_pwm_freq_t fre, uint8_t 
  * output: none.
  * type  : private
  */
-static void _bsp_init_button(void)
-{
-    gpba02b_set_io_mode(
-        BUTTON_UP_IO_PORT,
-        BUTTON_UP_IO_PIN,
-        GPBA02B_IO_STYLE_INPUT_PULL_HIGH
-    );
-    gpba02b_set_io_mode(
-        BUTTON_DOWN_IO_PORT,
-        BUTTON_DOWN_IO_PIN,
-        GPBA02B_IO_STYLE_INPUT_PULL_HIGH
-    );
+static void _bsp_init_button(void) {
+    gpba02b_set_io_mode(BUTTON_UP_IO_PORT,
+                        BUTTON_UP_IO_PIN,
+                        GPBA02B_IO_STYLE_INPUT_PULL_HIGH);
+    gpba02b_set_io_mode(BUTTON_DOWN_IO_PORT,
+                        BUTTON_DOWN_IO_PIN,
+                        GPBA02B_IO_STYLE_INPUT_PULL_HIGH);
 }
 
 /*
@@ -106,8 +98,7 @@ static void _bsp_init_button(void)
  * input: ms - delay time in milliseconds.
  * output: None.
  */
-void delay_ms(uint32_t ms)
-{
+void delay_ms(uint32_t ms) {
     TickType_t ticks = pdMS_TO_TICKS(ms) < 1 ? 1 : pdMS_TO_TICKS(ms);
     vTaskDelay(ticks);
 }
@@ -118,8 +109,7 @@ void delay_ms(uint32_t ms)
  * output: none.
  * type  : public
  */
-void bsp_set_audio_ctrl(bool enable)
-{
+void bsp_set_audio_ctrl(bool enable) {
     gpba02b_set_io_mode(PDM_ENABLE_PORT, PDM_ENABLE_PIN, GPBA02B_IO_STYLE_OUTPUT_CMOS);
     gpba02b_write_io_level(PDM_ENABLE_PORT, PDM_ENABLE_PIN, enable ? 1 : 0);
 
@@ -133,8 +123,7 @@ void bsp_set_audio_ctrl(bool enable)
  * output: none.
  * type  : public
  */
-void bsp_init_adc_converter(void)
-{
+void bsp_init_adc_converter(void) {
     esp_err_t ret = ESP_OK;
     adc_unit_t detected_unit = BSP_BATTERY_ADC_UNIT;
     adc_channel_t detected_channel = VR_ADC_CHANNEL;
@@ -159,13 +148,11 @@ void bsp_init_adc_converter(void)
     else {
         s_bsp_adc_unit = BSP_BATTERY_ADC_UNIT;
         s_bsp_adc_channel = VR_ADC_CHANNEL;
-        ESP_LOGW(
-            TAG,
-            "adc io->channel map failed, use fallback unit=%d channel=%d err=%s",
-            (int)s_bsp_adc_unit,
-            (int)s_bsp_adc_channel,
-            esp_err_to_name(ret)
-        );
+        ESP_LOGW(TAG,
+                 "adc io->channel map failed, use fallback unit=%d channel=%d err=%s",
+                 (int)s_bsp_adc_unit,
+                 (int)s_bsp_adc_channel,
+                 esp_err_to_name(ret));
     }
 
     (void)gpio_reset_pin(VR_ADC_IO);
@@ -193,14 +180,12 @@ void bsp_init_adc_converter(void)
     _bsp_init_adc_cali();
     s_bsp_adc_ready = true;
 
-    ESP_LOGI(
-        TAG,
-        "battery adc ready: io=%d unit=%d channel=%d cali=%s",
-        (int)VR_ADC_IO,
-        (int)s_bsp_adc_unit,
-        (int)s_bsp_adc_channel,
-        s_bsp_adc_cali_enabled ? "on" : "off"
-    );
+    ESP_LOGI(TAG,
+             "battery adc ready: io=%d unit=%d channel=%d cali=%s",
+             (int)VR_ADC_IO,
+             (int)s_bsp_adc_unit,
+             (int)s_bsp_adc_channel,
+             s_bsp_adc_cali_enabled ? "on" : "off");
 }
 
 /*
@@ -209,8 +194,7 @@ void bsp_init_adc_converter(void)
  * output: battery voltage (mV).
  * type  : public
  */
-uint16_t bsp_read_battery_mv(void)
-{
+uint16_t bsp_read_battery_mv(void) {
     esp_err_t ret = ESP_OK;
     uint32_t i = 0U;
     uint32_t raw_sum = 0U;
@@ -279,13 +263,10 @@ uint16_t bsp_read_battery_mv(void)
  * output: none.
  * type  : public
  */
-void bsp_reset_lcd(void)
-{
-    gpba02b_set_io_mode(
-        LCD_IO_RESET_PORT,
-        LCD_IO_RESET_PIN,
-        GPBA02B_IO_STYLE_OUTPUT_CMOS
-    );
+void bsp_reset_lcd(void) {
+    gpba02b_set_io_mode(LCD_IO_RESET_PORT,
+                        LCD_IO_RESET_PIN,
+                        GPBA02B_IO_STYLE_OUTPUT_CMOS);
     gpba02b_write_io_level(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, 1);
     vTaskDelay(pdMS_TO_TICKS(10));
     gpba02b_write_io_level(LCD_IO_RESET_PORT, LCD_IO_RESET_PIN, 0);
@@ -300,8 +281,7 @@ void bsp_reset_lcd(void)
  * output: none.
  * type  : public
  */
-void bsp_prepare_hw(void)
-{
+void bsp_prepare_hw(void) {
     ESP_LOGI(TAG, "Initializing HW...");
     ESP_ERROR_CHECK(gpba02b_init_object());
     _bsp_set_power(true);
@@ -318,18 +298,13 @@ void bsp_prepare_hw(void)
  * output: none.
  * type  : public
  */
-void bsp_init_env(void)
-{
+void bsp_init_env(void) {
     esp_err_t ble_ret = ESP_OK;
 
     speaker_set_volume(90);
     ble_ret = ble_start();
     if (ble_ret != ESP_OK) {
-        ESP_LOGE(
-            TAG,
-            "ble_start failed in bsp_init_env: %s",
-            esp_err_to_name(ble_ret)
-        );
+        ESP_LOGE(TAG, "ble_start failed in bsp_init_env: %s", esp_err_to_name(ble_ret));
     }
     else {
         ESP_LOGI(TAG, "BLE background service started");

@@ -38,8 +38,7 @@ static const print_ui_cmd_s s_print_cmds[PRINT_UI_CMD_COUNT] = {
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_clear(void)
-{
+static esp_err_t _print_cmd_clear(void) {
     return printer_clear_cache();
 }
 
@@ -49,8 +48,7 @@ static esp_err_t _print_cmd_clear(void)
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_feed(void)
-{
+static esp_err_t _print_cmd_feed(void) {
     return printer_feed_lines(10U);
 }
 
@@ -60,8 +58,7 @@ static esp_err_t _print_cmd_feed(void)
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_image(void)
-{
+static esp_err_t _print_cmd_image(void) {
     // const char* bin[] = {
     //     "animation_girl.bin",
     //     "dragon.bin",
@@ -87,8 +84,7 @@ static esp_err_t _print_cmd_image(void)
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_text(void)
-{
+static esp_err_t _print_cmd_text(void) {
     esp_err_t ret = ESP_OK;
     uint16_t battery_mv = 0U;
     time_t now_sec = 0;
@@ -105,26 +101,22 @@ static esp_err_t _print_cmd_text(void)
     now_sec = time(NULL);
     tm_valid = (localtime_r(&now_sec, &tm_now) != NULL);
 
-    (void)snprintf(
-        line,
-        sizeof(line),
-        " Battery       : %4u mv\r\n",
-        (unsigned)battery_mv
-    );
+    (void)snprintf(line,
+                   sizeof(line),
+                   " Battery       : %4u mv\r\n",
+                   (unsigned)battery_mv);
     ret = printer_write_string(line);
     if (ret != ESP_OK) {
         return ret;
     }
 
     if (tm_valid) {
-        (void)snprintf(
-            line,
-            sizeof(line),
-            " RealTime    : %02d:%02d:%02d\r\n",
-            tm_now.tm_hour,
-            tm_now.tm_min,
-            tm_now.tm_sec
-        );
+        (void)snprintf(line,
+                       sizeof(line),
+                       " RealTime    : %02d:%02d:%02d\r\n",
+                       tm_now.tm_hour,
+                       tm_now.tm_min,
+                       tm_now.tm_sec);
     }
     else {
         (void)snprintf(line, sizeof(line), " RealTime    : --:--:--\r\n");
@@ -134,12 +126,10 @@ static esp_err_t _print_cmd_text(void)
         return ret;
     }
 
-    (void)snprintf(
-        line,
-        sizeof(line),
-        " Image         : %4u \r\n",
-        (unsigned)s_print_image_count
-    );
+    (void)snprintf(line,
+                   sizeof(line),
+                   " Image         : %4u \r\n",
+                   (unsigned)s_print_image_count);
     ret = printer_write_string(line);
     if (ret != ESP_OK) {
         return ret;
@@ -154,8 +144,7 @@ static esp_err_t _print_cmd_text(void)
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_qrcode(void)
-{
+static esp_err_t _print_cmd_qrcode(void) {
     static const uint8_t qr_payload[] = "https://xiao-zhi.local/qr-demo";
     esp_err_t ret = ESP_OK;
 
@@ -197,8 +186,7 @@ static esp_err_t _print_cmd_qrcode(void)
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_cmd_Auto(void)
-{
+static esp_err_t _print_cmd_Auto(void) {
     if (automatic_mode.action == Act_Start) {
         automatic_mode.action = Act_Stop;
     }
@@ -219,8 +207,7 @@ static esp_err_t _print_cmd_Auto(void)
  * output: return value from this function.
  * type  : private
  */
-static bool _print_obj_valid(lv_obj_t* obj)
-{
+static bool _print_obj_valid(lv_obj_t* obj) {
     return (obj != NULL) && lv_obj_is_valid(obj);
 }
 
@@ -230,14 +217,11 @@ static bool _print_obj_valid(lv_obj_t* obj)
  * output: none.
  * type  : private
  */
-static void _print_apply_command_tile_style(
-    lv_obj_t* btn,
-    lv_obj_t* symbol_label,
-    lv_obj_t* name_label,
-    uint32_t color_hex,
-    bool selected
-)
-{
+static void _print_apply_command_tile_style(lv_obj_t* btn,
+                                            lv_obj_t* symbol_label,
+                                            lv_obj_t* name_label,
+                                            uint32_t color_hex,
+                                            bool selected) {
     lv_color_t base_color = lv_color_hex(color_hex);
     lv_color_t text_color = lv_color_hex(0x1D3247);
     lv_color_t border_color = lv_color_hex(0xB6D2E8);
@@ -272,9 +256,9 @@ static void _print_apply_command_tile_style(
  * output: none.
  * type  : private
  */
-static void
-_print_apply_status_title_style(lv_obj_t* label, bool printer_ready, bool status_valid)
-{
+static void _print_apply_status_title_style(lv_obj_t* label,
+                                            bool printer_ready,
+                                            bool status_valid) {
     if (!_print_obj_valid(label)) {
         return;
     }
@@ -296,18 +280,15 @@ _print_apply_status_title_style(lv_obj_t* label, bool printer_ready, bool status
  * output: return value from this function.
  * type  : private
  */
-static lv_obj_t* _print_open_metric_card(
-    lv_obj_t* parent,
-    lv_align_t align,
-    lv_coord_t x_ofs,
-    const char* metric_icon,
-    const char* metric_name,
-    lv_color_t card_bg_color,
-    lv_color_t icon_color,
-    bool draw_right_sep,
-    lv_obj_t** out_value_label
-)
-{
+static lv_obj_t* _print_open_metric_card(lv_obj_t* parent,
+                                         lv_align_t align,
+                                         lv_coord_t x_ofs,
+                                         const char* metric_icon,
+                                         const char* metric_name,
+                                         lv_color_t card_bg_color,
+                                         lv_color_t icon_color,
+                                         bool draw_right_sep,
+                                         lv_obj_t** out_value_label) {
     lv_obj_t* card = NULL;
     lv_obj_t* icon_lab = NULL;
     lv_obj_t* name_lab = NULL;
@@ -379,8 +360,7 @@ static lv_obj_t* _print_open_metric_card(
  * output: none.
  * type  : private
  */
-static void _print_set_status_text(print_ui_runtime_s* runtime, const char* fmt, ...)
-{
+static void _print_set_status_text(print_ui_runtime_s* runtime, const char* fmt, ...) {
     char local_text[PRINT_UI_TEXT_LEN] = { 0 };
     va_list args;
 
@@ -404,8 +384,7 @@ static void _print_set_status_text(print_ui_runtime_s* runtime, const char* fmt,
  * output: none.
  * type  : private
  */
-static void _print_set_action_text(print_ui_runtime_s* runtime, const char* fmt, ...)
-{
+static void _print_set_action_text(print_ui_runtime_s* runtime, const char* fmt, ...) {
     char local_text[PRINT_UI_TEXT_LEN] = { 0 };
     va_list args;
 
@@ -429,8 +408,7 @@ static void _print_set_action_text(print_ui_runtime_s* runtime, const char* fmt,
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime)
-{
+static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime) {
     esp_err_t ret = ESP_FAIL;
 
     if (runtime == NULL) {
@@ -462,8 +440,7 @@ static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime)
  * output: none.
  * type  : private
  */
-static void _obtain_print_profile(print_ui_runtime_s* runtime)
-{
+static void _obtain_print_profile(print_ui_runtime_s* runtime) {
     esp_err_t ret = ESP_FAIL;
     printer_detect_status_t status = { 0 };
 
@@ -510,8 +487,7 @@ static void _obtain_print_profile(print_ui_runtime_s* runtime)
  * output: none.
  * type  : private
  */
-static void _print_select_command(print_ui_runtime_s* runtime, bool next)
-{
+static void _print_select_command(print_ui_runtime_s* runtime, bool next) {
     uint8_t cmd_count = 0U;
     uint8_t selected = 0U;
 
@@ -546,8 +522,7 @@ static void _print_select_command(print_ui_runtime_s* runtime, bool next)
  * output: none.
  * type  : private
  */
-static void _print_execute_selected_command(print_ui_runtime_s* runtime)
-{
+static void _print_execute_selected_command(print_ui_runtime_s* runtime) {
     esp_err_t ret = ESP_OK;
     uint8_t cmd_count = 0U;
     uint8_t selected = 0U;
@@ -594,12 +569,10 @@ static void _print_execute_selected_command(print_ui_runtime_s* runtime)
         _print_set_action_text(runtime, "Executed: %s", s_print_cmds[selected].name);
     }
     else {
-        _print_set_action_text(
-            runtime,
-            "Exec fail: %s (%d)",
-            s_print_cmds[selected].name,
-            (int)ret
-        );
+        _print_set_action_text(runtime,
+                               "Exec fail: %s (%d)",
+                               s_print_cmds[selected].name,
+                               (int)ret);
     }
 
     _obtain_print_profile(runtime);
@@ -611,8 +584,7 @@ static void _print_execute_selected_command(print_ui_runtime_s* runtime)
  * output: none.
  * type  : private
  */
-static void _print_sync_ui(void* param)
-{
+static void _print_sync_ui(void* param) {
     print_ui_runtime_s* runtime = (print_ui_runtime_s*)param;
     bool dirty = false;
     bool _ready_ = false;
@@ -680,44 +652,34 @@ static void _print_sync_ui(void* param)
 
         (void)snprintf(value_text, sizeof(value_text), "%u mV", (unsigned)voltage_raw);
         lv_label_set_text(runtime->voltage_value_label, value_text);
-        lv_obj_set_style_text_color(
-            runtime->voltage_value_label,
-            metric_value_color,
-            0
-        );
+        lv_obj_set_style_text_color(runtime->voltage_value_label,
+                                    metric_value_color,
+                                    0);
     }
     else {
         lv_label_set_text(runtime->temp_value_label, "--");
         lv_label_set_text(runtime->paper_value_label, "--");
         lv_label_set_text(runtime->voltage_value_label, "--");
-        lv_obj_set_style_text_color(
-            runtime->temp_value_label,
-            lv_color_hex(0x7F95A9),
-            0
-        );
-        lv_obj_set_style_text_color(
-            runtime->paper_value_label,
-            lv_color_hex(0x7F95A9),
-            0
-        );
-        lv_obj_set_style_text_color(
-            runtime->voltage_value_label,
-            lv_color_hex(0x7F95A9),
-            0
-        );
+        lv_obj_set_style_text_color(runtime->temp_value_label,
+                                    lv_color_hex(0x7F95A9),
+                                    0);
+        lv_obj_set_style_text_color(runtime->paper_value_label,
+                                    lv_color_hex(0x7F95A9),
+                                    0);
+        lv_obj_set_style_text_color(runtime->voltage_value_label,
+                                    lv_color_hex(0x7F95A9),
+                                    0);
     }
 
     for (i = 0U; i < PRINT_UI_CMD_COUNT; ++i) {
         if (_print_obj_valid(runtime->command_btn[i])
             && _print_obj_valid(runtime->command_symbol_label[i])
             && _print_obj_valid(runtime->command_name_label[i])) {
-            _print_apply_command_tile_style(
-                runtime->command_btn[i],
-                runtime->command_symbol_label[i],
-                runtime->command_name_label[i],
-                s_print_cmds[i].color_hex,
-                (i < cmd_count) && (i == selected)
-            );
+            _print_apply_command_tile_style(runtime->command_btn[i],
+                                            runtime->command_symbol_label[i],
+                                            runtime->command_name_label[i],
+                                            s_print_cmds[i].color_hex,
+                                            (i < cmd_count) && (i == selected));
         }
     }
 }
@@ -728,8 +690,7 @@ static void _print_sync_ui(void* param)
  * output: none.
  * type  : private
  */
-static void _print_ui_timer_cb(lv_timer_t* timer)
-{
+static void _print_ui_timer_cb(lv_timer_t* timer) {
     print_ui_runtime_s* runtime = NULL;
 
     if (timer == NULL) {
@@ -746,8 +707,7 @@ static void _print_ui_timer_cb(lv_timer_t* timer)
  * output: none.
  * type  : private
  */
-static void _print_ui_task(void* param)
-{
+static void _print_ui_task(void* param) {
     print_ui_runtime_s* runtime = (print_ui_runtime_s*)param;
     uint32_t poll_elapsed_ms = PRINT_UI_STATUS_PERIOD_MS;
     uint32_t retry_elapsed_ms = 0U;
@@ -831,14 +791,11 @@ static void _print_ui_task(void* param)
  * output: Created LVGL screen object.
  * type  : public
  */
-lv_obj_t* print_open_screen(
-    lv_obj_t* parent,
-    lv_coord_t area_w,
-    lv_coord_t area_h,
-    ui_menu_home_cb_t home_cb,
-    void* home_user_ctx
-)
-{
+lv_obj_t* print_open_screen(lv_obj_t* parent,
+                            lv_coord_t area_w,
+                            lv_coord_t area_h,
+                            ui_menu_home_cb_t home_cb,
+                            void* home_user_ctx) {
     lv_obj_t* screen = NULL;
     lv_obj_t* frame = NULL;
     lv_obj_t* metrics_panel = NULL;
@@ -956,49 +913,43 @@ lv_obj_t* print_open_screen(
     lv_obj_set_style_pad_bottom(metrics_panel, 4, 0);
     lv_obj_clear_flag(metrics_panel, LV_OBJ_FLAG_SCROLLABLE);
 
-    if (_print_open_metric_card(
-            metrics_panel,
-            LV_ALIGN_LEFT_MID,
-            0,
-            LV_SYMBOL_WARNING,
-            "TPH",
-            lv_color_hex(0xF0DDD2),
-            lv_color_hex(0xE06A1D),
-            true,
-            &s_print_runtime.temp_value_label
-        )
+    if (_print_open_metric_card(metrics_panel,
+                                LV_ALIGN_LEFT_MID,
+                                0,
+                                LV_SYMBOL_WARNING,
+                                "TPH",
+                                lv_color_hex(0xF0DDD2),
+                                lv_color_hex(0xE06A1D),
+                                true,
+                                &s_print_runtime.temp_value_label)
         == NULL) {
         lv_obj_del(screen);
         return NULL;
     }
 
-    if (_print_open_metric_card(
-            metrics_panel,
-            LV_ALIGN_CENTER,
-            0,
-            LV_SYMBOL_FILE,
-            "Paper",
-            lv_color_hex(0xD8EBD8),
-            lv_color_hex(0x1FA53A),
-            true,
-            &s_print_runtime.paper_value_label
-        )
+    if (_print_open_metric_card(metrics_panel,
+                                LV_ALIGN_CENTER,
+                                0,
+                                LV_SYMBOL_FILE,
+                                "Paper",
+                                lv_color_hex(0xD8EBD8),
+                                lv_color_hex(0x1FA53A),
+                                true,
+                                &s_print_runtime.paper_value_label)
         == NULL) {
         lv_obj_del(screen);
         return NULL;
     }
 
-    if (_print_open_metric_card(
-            metrics_panel,
-            LV_ALIGN_RIGHT_MID,
-            0,
-            LV_SYMBOL_POWER,
-            "Bat-vol",
-            lv_color_hex(0xD9E4F5),
-            lv_color_hex(0x2276DA),
-            false,
-            &s_print_runtime.voltage_value_label
-        )
+    if (_print_open_metric_card(metrics_panel,
+                                LV_ALIGN_RIGHT_MID,
+                                0,
+                                LV_SYMBOL_POWER,
+                                "Bat-vol",
+                                lv_color_hex(0xD9E4F5),
+                                lv_color_hex(0x2276DA),
+                                false,
+                                &s_print_runtime.voltage_value_label)
         == NULL) {
         lv_obj_del(screen);
         return NULL;
@@ -1031,15 +982,13 @@ lv_obj_t* print_open_screen(
         lv_coord_t col = (lv_coord_t)(i % PRINT_UI_CMD_GRID_COLS);
 
         btn = lv_btn_create(cmd_grid);
-        lv_obj_set_grid_cell(
-            btn,
-            LV_GRID_ALIGN_STRETCH,
-            col,
-            1,
-            LV_GRID_ALIGN_STRETCH,
-            row,
-            1
-        );
+        lv_obj_set_grid_cell(btn,
+                             LV_GRID_ALIGN_STRETCH,
+                             col,
+                             1,
+                             LV_GRID_ALIGN_STRETCH,
+                             row,
+                             1);
         lv_obj_set_style_radius(btn, 10, 0);
         lv_obj_set_style_border_width(btn, 1, 0);
         lv_obj_set_style_pad_top(btn, 8, 0);
@@ -1062,13 +1011,11 @@ lv_obj_t* print_open_screen(
             s_print_runtime.command_btn[i] = btn;
             s_print_runtime.command_symbol_label[i] = symbol_label;
             s_print_runtime.command_name_label[i] = name_label;
-            _print_apply_command_tile_style(
-                btn,
-                symbol_label,
-                name_label,
-                s_print_cmds[i].color_hex,
-                (i == s_print_runtime.selected_cmd)
-            );
+            _print_apply_command_tile_style(btn,
+                                            symbol_label,
+                                            name_label,
+                                            s_print_cmds[i].color_hex,
+                                            (i == s_print_runtime.selected_cmd));
         }
         else {
             lv_obj_set_style_bg_color(btn, lv_color_hex(0xDDEAF6), 0);
@@ -1080,12 +1027,10 @@ lv_obj_t* print_open_screen(
 
     status_panel = lv_obj_create(frame);
     lv_obj_set_size(status_panel, lv_pct(100), status_h);
-    lv_obj_align(
-        status_panel,
-        LV_ALIGN_TOP_MID,
-        0,
-        (lv_coord_t)(metrics_h + gap + cmd_h + gap)
-    );
+    lv_obj_align(status_panel,
+                 LV_ALIGN_TOP_MID,
+                 0,
+                 (lv_coord_t)(metrics_h + gap + cmd_h + gap));
     lv_obj_set_style_bg_color(status_panel, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_bg_opa(status_panel, LV_OPA_80, 0);
     lv_obj_set_style_border_color(status_panel, lv_color_hex(0x9CC4E3), 0);
@@ -1099,22 +1044,18 @@ lv_obj_t* print_open_screen(
 
     s_print_runtime.status_title_label = lv_label_create(status_panel);
     lv_label_set_text(s_print_runtime.status_title_label, "Offline");
-    lv_obj_set_style_text_font(
-        s_print_runtime.status_title_label,
-        &DESKTOP_TEXT_FONT,
-        0
-    );
+    lv_obj_set_style_text_font(s_print_runtime.status_title_label,
+                               &DESKTOP_TEXT_FONT,
+                               0);
     lv_obj_align(s_print_runtime.status_title_label, LV_ALIGN_TOP_LEFT, 0, 0);
 
     s_print_runtime.status_detail_label = lv_label_create(status_panel);
     lv_obj_set_width(s_print_runtime.status_detail_label, lv_pct(100));
     lv_label_set_long_mode(s_print_runtime.status_detail_label, LV_LABEL_LONG_WRAP);
     lv_label_set_text(s_print_runtime.status_detail_label, "Initializing printer...");
-    lv_obj_set_style_text_color(
-        s_print_runtime.status_detail_label,
-        lv_color_hex(0x123A5A),
-        0
-    );
+    lv_obj_set_style_text_color(s_print_runtime.status_detail_label,
+                                lv_color_hex(0x123A5A),
+                                0);
     lv_obj_set_style_text_font(s_print_runtime.status_detail_label, LV_FONT_DEFAULT, 0);
     lv_obj_align(s_print_runtime.status_detail_label, LV_ALIGN_TOP_LEFT, 0, 20);
 
@@ -1122,11 +1063,9 @@ lv_obj_t* print_open_screen(
     lv_obj_set_width(s_print_runtime.action_label, lv_pct(100));
     lv_label_set_long_mode(s_print_runtime.action_label, LV_LABEL_LONG_WRAP);
     lv_label_set_text(s_print_runtime.action_label, "Selected: --");
-    lv_obj_set_style_text_color(
-        s_print_runtime.action_label,
-        lv_color_hex(0x123A5A),
-        0
-    );
+    lv_obj_set_style_text_color(s_print_runtime.action_label,
+                                lv_color_hex(0x123A5A),
+                                0);
     lv_obj_set_style_text_font(s_print_runtime.action_label, LV_FONT_DEFAULT, 0);
     lv_obj_align(s_print_runtime.action_label, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 
@@ -1147,14 +1086,12 @@ lv_obj_t* print_open_screen(
     }
     _print_sync_ui(&s_print_runtime);
 
-    task_ok = xTaskCreate(
-        _print_ui_task,
-        "print_ui",
-        PRINT_UI_TASK_STACK_SIZE,
-        &s_print_runtime,
-        5,
-        &s_print_runtime.task_handle
-    );
+    task_ok = xTaskCreate(_print_ui_task,
+                          "print_ui",
+                          PRINT_UI_TASK_STACK_SIZE,
+                          &s_print_runtime,
+                          5,
+                          &s_print_runtime.task_handle);
     if (task_ok != pdPASS) {
         s_print_runtime.task_handle = NULL;
         if (s_print_runtime.ui_sync_timer != NULL) {
@@ -1176,8 +1113,7 @@ lv_obj_t* print_open_screen(
  * output: none.
  * type  : public
  */
-void print_close_screen(lv_obj_t* screen)
-{
+void print_close_screen(lv_obj_t* screen) {
     esp_err_t ret = ESP_OK;
 
     if (s_print_runtime.ui_sync_timer != NULL) {
