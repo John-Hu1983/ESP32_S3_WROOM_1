@@ -116,9 +116,12 @@
 #define PRINTER_UART_RX_GPIO                 (GPIO_NUM_16)
 #define PRINTER_UART_DTR_GPIO                (GPIO_NUM_15)
 
-/* Vr */
-#define VR_ADC_IO                            (GPIO_NUM_4)
-#define VR_ADC_CHANNEL                       (ADC_CHANNEL_3)
+/* Servo */
+#define SERVO_ADC_IO                         (GPIO_NUM_4)
+#define SERVO_ADC_UNIT                       (ADC_UNIT_1)
+#define SERVO_ADC_CHANNEL                    (ADC_CHANNEL_3)
+#define SERVO_ADC_ATTENUATION                (ADC_ATTEN_DB_12)
+#define SERVO_ADC_BITWIDTH                   (ADC_BITWIDTH_12)
 
 /*
     Camera

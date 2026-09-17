@@ -507,7 +507,12 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
     if (rx_len == 1) {
         out_status->tph_temperature_celsius = (raw[0] & (1 << 6)) ? 40u : 22u;
         out_status->paper_detect_raw = (raw[0] & (1 << 2)) ? 0u : 1u;
-        out_status->working_voltage_raw = bsp_read_battery_mv();
+        ret = batvol_read_mv(BATVOL_UP_RESISTER,
+                             BATVOL_LOW_RESISTER,
+                             &out_status->working_voltage_raw);
+        if (ret != ESP_OK) {
+            out_status->working_voltage_raw = 0U;
+        }
     }
     else if (rx_len == PRINTER_STATUS_DETECT_RESPONSE_LEN) {
         out_status->tph_temperature_celsius = raw[1];

@@ -86,7 +86,6 @@ static esp_err_t _print_cmd_image(void) {
  */
 static esp_err_t _print_cmd_text(void) {
     esp_err_t ret = ESP_OK;
-    uint16_t battery_mv = 0U;
     time_t now_sec = 0;
     struct tm tm_now = { 0 };
     bool tm_valid = false;
@@ -97,14 +96,10 @@ static esp_err_t _print_cmd_text(void) {
         return ret;
     }
 
-    battery_mv = bsp_read_battery_mv();
     now_sec = time(NULL);
     tm_valid = (localtime_r(&now_sec, &tm_now) != NULL);
 
-    (void)snprintf(line,
-                   sizeof(line),
-                   " Battery       : %4u mv\r\n",
-                   (unsigned)battery_mv);
+    (void)snprintf(line, sizeof(line), " Battery       : N/A\r\n");
     ret = printer_write_string(line);
     if (ret != ESP_OK) {
         return ret;

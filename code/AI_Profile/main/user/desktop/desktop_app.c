@@ -76,8 +76,7 @@ static uint64_t s_cpu_prev_idle_runtime;
  * output: return value from this function.
  * type  : private
  */
-static esp_err_t _desktop_init_temp_sensor(void)
-{
+static esp_err_t _desktop_init_temp_sensor(void) {
     esp_err_t ret = ESP_OK;
     temperature_sensor_config_t cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(10, 50);
 
@@ -108,8 +107,7 @@ static esp_err_t _desktop_init_temp_sensor(void)
  * output: return value from this function.
  * type  : private
  */
-static bool _desktop_read_temp(float* out_temp)
-{
+static bool _desktop_read_temp(float* out_temp) {
     esp_err_t ret = ESP_FAIL;
 
     if (out_temp == NULL) {
@@ -131,8 +129,7 @@ static bool _desktop_read_temp(float* out_temp)
  * output: return value from this function.
  * type  : private
  */
-static void* _desktop_alloc_buf(size_t size)
-{
+static void* _desktop_alloc_buf(size_t size) {
     void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (ptr == NULL) {
         ptr = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -146,8 +143,7 @@ static void* _desktop_alloc_buf(size_t size)
  * output: return value from this function.
  * type  : private
  */
-static bool _desktop_ensure_msg_buf(void)
-{
+static bool _desktop_ensure_msg_buf(void) {
     if (s_desktop_msg != NULL) {
         return true;
     }
@@ -167,8 +163,7 @@ static bool _desktop_ensure_msg_buf(void)
  * output: return value from this function.
  * type  : private
  */
-static bool _desktop_obj_valid(lv_obj_t* obj)
-{
+static bool _desktop_obj_valid(lv_obj_t* obj) {
     return (obj != NULL) && lv_obj_is_valid(obj);
 }
 
@@ -178,8 +173,7 @@ static bool _desktop_obj_valid(lv_obj_t* obj)
  * output: none.
  * type  : private
  */
-static void _desktop_del_obj(lv_obj_t** obj)
-{
+static void _desktop_del_obj(lv_obj_t** obj) {
     if ((obj != NULL) && _desktop_obj_valid(*obj)) {
         lv_obj_del(*obj);
     }
@@ -195,8 +189,7 @@ static void _desktop_del_obj(lv_obj_t** obj)
  * output: return value from this function.
  * type  : private
  */
-static bool _desktop_set_grid_hidden(bool hidden)
-{
+static bool _desktop_set_grid_hidden(bool hidden) {
     if (!_desktop_obj_valid(s_icon_op.desktop_grid)) {
         return false;
     }
@@ -217,8 +210,7 @@ static bool _desktop_set_grid_hidden(bool hidden)
  * output: none.
  * type  : public
  */
-void desktop_tick_event(void* arg)
-{
+void desktop_tick_event(void* arg) {
     (void)arg;
     lv_tick_inc(LVGL_TICK_PERIOD_MS);
 }
@@ -229,8 +221,7 @@ void desktop_tick_event(void* arg)
  * output: none.
  * type  : public
  */
-void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map)
-{
+void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     esp_err_t ret = st7365p_lvgl_flush(area->x1, area->y1, area->x2, area->y2, px_map);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "st7365p_lvgl_flush failed: %d", (int)ret);
@@ -245,15 +236,12 @@ void desktop_flush_event(lv_display_t* disp, const lv_area_t* area, uint8_t* px_
  * output: Inverted LVGL color.
  * type  : public
  */
-lv_color_t desktop_invert_color(lv_color_t color)
-{
+lv_color_t desktop_invert_color(lv_color_t color) {
     lv_color32_t color32 = lv_color_to_32(color, LV_OPA_COVER);
 
-    return lv_color_make(
-        (uint8_t)(0xFFU - color32.red),
-        (uint8_t)(0xFFU - color32.green),
-        (uint8_t)(0xFFU - color32.blue)
-    );
+    return lv_color_make((uint8_t)(0xFFU - color32.red),
+                         (uint8_t)(0xFFU - color32.green),
+                         (uint8_t)(0xFFU - color32.blue));
 }
 
 /*
@@ -262,8 +250,7 @@ lv_color_t desktop_invert_color(lv_color_t color)
  * output: none.
  * type  : private
  */
-static void _desktop_reset_icon_widgets(void)
-{
+static void _desktop_reset_icon_widgets(void) {
     memset(s_icon_op.icon_btn, 0, sizeof(s_icon_op.icon_btn));
     memset(s_icon_op.icon_symbol_label, 0, sizeof(s_icon_op.icon_symbol_label));
     memset(s_icon_op.icon_name_label, 0, sizeof(s_icon_op.icon_name_label));
@@ -276,8 +263,7 @@ static void _desktop_reset_icon_widgets(void)
  * output: none.
  * type  : private
  */
-static void _desktop_build_icon_grid(lv_obj_t* content)
-{
+static void _desktop_build_icon_grid(lv_obj_t* content) {
     if (!_desktop_obj_valid(content)) {
         return;
     }
@@ -307,15 +293,13 @@ static void _desktop_build_icon_grid(lv_obj_t* content)
         lv_coord_t col = (lv_coord_t)(i % DESKTOP_ICON_COLS);
 
         lv_obj_t* btn = lv_btn_create(grid);
-        lv_obj_set_grid_cell(
-            btn,
-            LV_GRID_ALIGN_STRETCH,
-            col,
-            1,
-            LV_GRID_ALIGN_STRETCH,
-            row,
-            1
-        );
+        lv_obj_set_grid_cell(btn,
+                             LV_GRID_ALIGN_STRETCH,
+                             col,
+                             1,
+                             LV_GRID_ALIGN_STRETCH,
+                             row,
+                             1);
         lv_obj_set_style_bg_color(btn, lv_color_hex(s_desktop_icons[i].color_hex), 0);
         lv_obj_set_style_radius(btn, 12, 0);
         lv_obj_set_style_border_width(btn, 0, 0);
@@ -346,8 +330,7 @@ static void _desktop_build_icon_grid(lv_obj_t* content)
  * output: none.
  * type  : private
  */
-static void _desktop_rebuild_home_content(void)
-{
+static void _desktop_rebuild_home_content(void) {
     if (!_desktop_obj_valid(s_icon_op.content_area)) {
         return;
     }
@@ -370,8 +353,7 @@ static void _desktop_rebuild_home_content(void)
  * output: none.
  * type  : private
  */
-static void _desktop_set_icon_state(uint32_t icon_index, bool selected)
-{
+static void _desktop_set_icon_state(uint32_t icon_index, bool selected) {
     if (icon_index >= DESKTOP_ICON_COUNT) {
         return;
     }
@@ -409,8 +391,7 @@ static void _desktop_set_icon_state(uint32_t icon_index, bool selected)
  * output: none.
  * type  : private
  */
-static void _desktop_clear_icon_switching(void)
-{
+static void _desktop_clear_icon_switching(void) {
     if ((s_icon_op.switching >= 0)
         && ((uint32_t)s_icon_op.switching < DESKTOP_ICON_COUNT)) {
         _desktop_set_icon_state((uint32_t)s_icon_op.switching, false);
@@ -426,8 +407,7 @@ static void _desktop_clear_icon_switching(void)
  * output: none.
  * type  : private
  */
-static void _desktop_select_icon(uint32_t next_index)
-{
+static void _desktop_select_icon(uint32_t next_index) {
     if (next_index >= DESKTOP_ICON_COUNT) {
         return;
     }
@@ -453,8 +433,7 @@ static void _desktop_select_icon(uint32_t next_index)
  * output: none.
  * type  : private
  */
-static void _desktop_close_active_ui(void)
-{
+static void _desktop_close_active_ui(void) {
     if (!s_icon_op.ui_active) {
         return;
     }
@@ -485,8 +464,7 @@ static void _desktop_close_active_ui(void)
  * output: none.
  * type  : private
  */
-static void _desktop_request_home_callback(void* user_ctx)
-{
+static void _desktop_request_home_callback(void* user_ctx) {
     (void)user_ctx;
     s_home_request_pending = true;
 }
@@ -497,8 +475,7 @@ static void _desktop_request_home_callback(void* user_ctx)
  * output: none.
  * type  : private
  */
-static void _desktop_leave_subui(void)
-{
+static void _desktop_leave_subui(void) {
     if (!s_icon_op.ui_active) {
         return;
     }
@@ -518,8 +495,7 @@ static void _desktop_leave_subui(void)
  * output: none.
  * type  : private
  */
-static void _desktop_enter_selected_ui(void)
-{
+static void _desktop_enter_selected_ui(void) {
     if (s_icon_op.ui_active) {
         return;
     }
@@ -545,13 +521,11 @@ static void _desktop_enter_selected_ui(void)
 
     _desktop_set_grid_hidden(true);
 
-    lv_obj_t* ui_root = icon->create_screen(
-        s_icon_op.content_area,
-        area_w,
-        area_h,
-        _desktop_request_home_callback,
-        NULL
-    );
+    lv_obj_t* ui_root = icon->create_screen(s_icon_op.content_area,
+                                            area_w,
+                                            area_h,
+                                            _desktop_request_home_callback,
+                                            NULL);
     if (!_desktop_obj_valid(ui_root)) {
         _desktop_set_grid_hidden(false);
         ESP_LOGE(TAG, "sub-ui create failed, index=%u", (unsigned)ui_index);
@@ -571,8 +545,7 @@ static void _desktop_enter_selected_ui(void)
  * output: none.
  * type  : private
  */
-static void _desktop_active_icons(btn_status_e btn_val)
-{
+static void _desktop_active_icons(btn_status_e btn_val) {
     bool is_up = (btn_val == Btn_Up_Click);
     bool is_down = (btn_val == Btn_Down_Click);
     bool is_enter_hold = (btn_val == Btn_Up_Hold_Enter)
@@ -625,8 +598,7 @@ static void _desktop_active_icons(btn_status_e btn_val)
  * output: return value from this function.
  * type  : private
  */
-static bool _is_leave_desktop(void)
-{
+static bool _is_leave_desktop(void) {
     if (!s_icon_op.ui_active) {
         return false;
     }
@@ -644,8 +616,7 @@ static bool _is_leave_desktop(void)
  * output: none.
  * type  : private
  */
-static void _probe_net_state(void)
-{
+static void _probe_net_state(void) {
     static uint32_t net_poll_elapsed_ms = 0U;
     static const char* net_symbol = MATERIAL_SYMBOLS_WIFI_OFF;
     const char* net_symbol_next = MATERIAL_SYMBOLS_WIFI_OFF;
@@ -700,8 +671,7 @@ static void _probe_net_state(void)
  * output: none.
  * type  : private
  */
-static void _desktop_format_mem_text(char* out, size_t out_len, uint32_t caps)
-{
+static void _desktop_format_mem_text(char* out, size_t out_len, uint32_t caps) {
     size_t total;
     size_t free;
     size_t used;
@@ -714,13 +684,11 @@ static void _desktop_format_mem_text(char* out, size_t out_len, uint32_t caps)
 
     free = heap_caps_get_free_size(caps);
     used = (free < total) ? (total - free) : 0U;
-    snprintf(
-        out,
-        out_len,
-        "%u/%uK",
-        (unsigned)(used / 1024U),
-        (unsigned)(total / 1024U)
-    );
+    snprintf(out,
+             out_len,
+             "%u/%uK",
+             (unsigned)(used / 1024U),
+             (unsigned)(total / 1024U));
 }
 
 #if (configUSE_TRACE_FACILITY == 1)
@@ -730,8 +698,7 @@ static void _desktop_format_mem_text(char* out, size_t out_len, uint32_t caps)
  * output: return value from this function.
  * type  : private
  */
-static uint8_t _desktop_read_cpu_usage(void)
-{
+static uint8_t _desktop_read_cpu_usage(void) {
     UBaseType_t alloc_task_count;
     TaskStatus_t* task_states;
     configRUN_TIME_COUNTER_TYPE run_time_counter = 0;
@@ -747,15 +714,13 @@ static uint8_t _desktop_read_cpu_usage(void)
     const char* task_name;
 
     alloc_task_count = uxTaskGetNumberOfTasks() + 5U;
-    task_states = (TaskStatus_t*)heap_caps_malloc(
-        sizeof(TaskStatus_t) * alloc_task_count,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
-    );
+    task_states =
+        (TaskStatus_t*)heap_caps_malloc(sizeof(TaskStatus_t) * alloc_task_count,
+                                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (task_states == NULL) {
-        task_states = (TaskStatus_t*)heap_caps_malloc(
-            sizeof(TaskStatus_t) * alloc_task_count,
-            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
-        );
+        task_states =
+            (TaskStatus_t*)heap_caps_malloc(sizeof(TaskStatus_t) * alloc_task_count,
+                                            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
     if (task_states == NULL) {
         return 0U;
@@ -813,8 +778,7 @@ static uint8_t _desktop_read_cpu_usage(void)
  * output: return value from this function.
  * type  : private
  */
-static uint8_t _desktop_read_cpu_usage(void)
-{
+static uint8_t _desktop_read_cpu_usage(void) {
     return 0U;
 }
 #endif
@@ -825,8 +789,7 @@ static uint8_t _desktop_read_cpu_usage(void)
  * output: none.
  * type  : private
  */
-static void _desktop_build_sys_info_text(char* out, size_t out_len)
-{
+static void _desktop_build_sys_info_text(char* out, size_t out_len) {
     char ram_text[32];
     char psram_text[32];
     uint8_t cpu_usage;
@@ -835,14 +798,12 @@ static void _desktop_build_sys_info_text(char* out, size_t out_len)
     _desktop_format_mem_text(ram_text, sizeof(ram_text), MALLOC_CAP_INTERNAL);
     _desktop_format_mem_text(psram_text, sizeof(psram_text), MALLOC_CAP_SPIRAM);
 
-    snprintf(
-        out,
-        out_len,
-        "CPU:%u%% RAM:%s PSRAM:%s",
-        (unsigned)cpu_usage,
-        ram_text,
-        psram_text
-    );
+    snprintf(out,
+             out_len,
+             "CPU:%u%% RAM:%s PSRAM:%s",
+             (unsigned)cpu_usage,
+             ram_text,
+             psram_text);
 }
 
 /*
@@ -851,8 +812,7 @@ static void _desktop_build_sys_info_text(char* out, size_t out_len)
  * output: none.
  * type  : public
  */
-void desktop_post_message(const char* msg)
-{
+void desktop_post_message(const char* msg) {
     if (!_desktop_ensure_msg_buf()) {
         return;
     }
@@ -882,8 +842,7 @@ void desktop_post_message(const char* msg)
  * output: none.
  * type  : private
  */
-static void _show_message_detail(void)
-{
+static void _show_message_detail(void) {
     char msg_text[DESKTOP_APP_MSG_TEXT_LEN];
     char sys_text[DESKTOP_APP_MSG_TEXT_LEN];
     bool has_msg = false;
@@ -946,8 +905,7 @@ static void _show_message_detail(void)
  * output: none.
  * type  : private
  */
-static void _gain_real_time(void)
-{
+static void _gain_real_time(void) {
     time_t now_sec;
     time_t cur_time;
     uint64_t now_us;
@@ -1013,8 +971,7 @@ static void _gain_real_time(void)
  * output: none.
  * type  : private
  */
-static void _show_weather_detail(void)
-{
+static void _show_weather_detail(void) {
     const char* weather_symbol;
     char temp_text[12];
     float temp_val = 0.0f;
@@ -1054,19 +1011,20 @@ static void _show_weather_detail(void)
  * output: none.
  * type  : private
  */
-static void _desktop_lvgl_task(void* param)
-{
+static void _desktop_lvgl_task(void* param) {
     (void)param;
     btn_scan_s btn = { 0 };
     btn_status_e btn_val;
 
     while (1) {
         delay_ms(LVGL_TASK_PERIOD_MS);
+
         lv_timer_handler();
         _probe_net_state();
         _gain_real_time();
         _show_weather_detail();
         _show_message_detail();
+
         if (_is_leave_desktop()) {
             continue;
         }
@@ -1082,8 +1040,7 @@ static void _desktop_lvgl_task(void* param)
  * output: ESP_OK on success; otherwise propagated startup error.
  * type  : public
  */
-esp_err_t desktop_start_task(void)
-{
+esp_err_t desktop_start_task(void) {
     esp_err_t ret;
     st7365p_cfg_t panel_cfg;
     size_t draw_buf_pixels;
@@ -1127,19 +1084,15 @@ esp_err_t desktop_start_task(void)
     lv_init();
 
     draw_buf_pixels = (size_t)s_lcd_width * LVGL_DRAW_BUF_LINES;
-    s_lv_buf_1 = (lv_color_t*)heap_caps_malloc(
-        draw_buf_pixels * sizeof(lv_color_t),
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
-    );
+    s_lv_buf_1 = (lv_color_t*)heap_caps_malloc(draw_buf_pixels * sizeof(lv_color_t),
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_lv_buf_1 == NULL) {
         ESP_LOGE(TAG, "LVGL buf1 PSRAM allocation failed");
         return ESP_ERR_NO_MEM;
     }
 
-    s_lv_buf_2 = (lv_color_t*)heap_caps_malloc(
-        draw_buf_pixels * sizeof(lv_color_t),
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
-    );
+    s_lv_buf_2 = (lv_color_t*)heap_caps_malloc(draw_buf_pixels * sizeof(lv_color_t),
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (s_lv_buf_2 == NULL) {
         ESP_LOGE(TAG, "LVGL buf2 PSRAM allocation failed");
         heap_caps_free(s_lv_buf_1);
@@ -1158,13 +1111,11 @@ esp_err_t desktop_start_task(void)
 
     lv_display_set_color_format(s_lv_display, LV_COLOR_FORMAT_RGB565_SWAPPED);
     lv_display_set_flush_cb(s_lv_display, desktop_flush_event);
-    lv_display_set_buffers(
-        s_lv_display,
-        s_lv_buf_1,
-        s_lv_buf_2,
-        draw_buf_pixels * sizeof(lv_color_t),
-        LV_DISPLAY_RENDER_MODE_PARTIAL
-    );
+    lv_display_set_buffers(s_lv_display,
+                           s_lv_buf_1,
+                           s_lv_buf_2,
+                           draw_buf_pixels * sizeof(lv_color_t),
+                           LV_DISPLAY_RENDER_MODE_PARTIAL);
 
     ret = esp_timer_create(&tick_timer_args, &s_lv_tick_timer);
     if (ret != ESP_OK) {
@@ -1240,11 +1191,9 @@ esp_err_t desktop_start_task(void)
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     top_bar = lv_obj_create(scr);
-    lv_obj_set_size(
-        top_bar,
-        (lv_coord_t)s_lcd_width,
-        (lv_coord_t)DESKTOP_TOP_BAR_HEIGHT
-    );
+    lv_obj_set_size(top_bar,
+                    (lv_coord_t)s_lcd_width,
+                    (lv_coord_t)DESKTOP_TOP_BAR_HEIGHT);
     lv_obj_set_pos(top_bar, 0, 0);
     lv_obj_set_style_bg_color(top_bar, lv_color_hex(DESKTOP_TOOLBAR_COLOR_HEX), 0);
     lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
@@ -1277,16 +1226,12 @@ esp_err_t desktop_start_task(void)
     lv_obj_align_to(s_temp_label, s_weather_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     bottom_bar = lv_obj_create(scr);
-    lv_obj_set_size(
-        bottom_bar,
-        (lv_coord_t)s_lcd_width,
-        (lv_coord_t)DESKTOP_BOTTOM_BAR_HEIGHT
-    );
-    lv_obj_set_pos(
-        bottom_bar,
-        0,
-        (lv_coord_t)((int32_t)s_lcd_height - DESKTOP_BOTTOM_BAR_HEIGHT)
-    );
+    lv_obj_set_size(bottom_bar,
+                    (lv_coord_t)s_lcd_width,
+                    (lv_coord_t)DESKTOP_BOTTOM_BAR_HEIGHT);
+    lv_obj_set_pos(bottom_bar,
+                   0,
+                   (lv_coord_t)((int32_t)s_lcd_height - DESKTOP_BOTTOM_BAR_HEIGHT));
     lv_obj_set_style_bg_color(bottom_bar, lv_color_hex(DESKTOP_TOOLBAR_COLOR_HEX), 0);
     lv_obj_set_style_bg_opa(bottom_bar, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(bottom_bar, 0, 0);
@@ -1319,24 +1264,20 @@ esp_err_t desktop_start_task(void)
     s_desktop_screen = scr;
     lv_scr_load(scr);
 
-    task_ok = xTaskCreate(
-        _desktop_lvgl_task,
-        "desktop_lvgl",
-        10240,
-        NULL,
-        5,
-        &s_lv_task_handle
-    );
+    task_ok = xTaskCreate(_desktop_lvgl_task,
+                          "desktop_lvgl",
+                          10240,
+                          NULL,
+                          5,
+                          &s_lv_task_handle);
     if (task_ok != pdPASS) {
         ESP_LOGE(TAG, "xTaskCreate desktop_lvgl failed");
         return ESP_FAIL;
     }
 
-    ESP_LOGI(
-        TAG,
-        "desktop init on %ux%u",
-        (unsigned)s_lcd_width,
-        (unsigned)s_lcd_height
-    );
+    ESP_LOGI(TAG,
+             "desktop init on %ux%u",
+             (unsigned)s_lcd_width,
+             (unsigned)s_lcd_height);
     return ESP_OK;
 }

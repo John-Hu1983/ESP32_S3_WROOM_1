@@ -22,6 +22,8 @@
 #include "user/device/dev_button.h"
 #include "user/device/dev_st7365p.h"
 #include "user/inc/bsp_config.h"
+#include "user/device/dev_bat_vol.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

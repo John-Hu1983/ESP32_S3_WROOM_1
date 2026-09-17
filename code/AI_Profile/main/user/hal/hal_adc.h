@@ -16,7 +16,7 @@ extern "C" {
 enum {
     HAL_ADC_UNIT_MAX = 2,
 };
-
+    
 typedef struct {
     adc_unit_t unit;
     adc_channel_t channel;

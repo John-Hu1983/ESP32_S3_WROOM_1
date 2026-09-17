@@ -13,6 +13,7 @@
 
 #include "user/bsp/bsp_global.h"
 #include "user/bsp/bsp_common.h"
+#include "user/device/dev_bat_vol.h"
 #include "user/inc/bsp_config.h"
 #include "user/assets/access_assets.h"
 
