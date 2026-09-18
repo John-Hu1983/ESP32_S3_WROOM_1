@@ -24,7 +24,7 @@ extern "C" {
 #define BATVOL_DIAG_ENABLE                   (1U)
 #define BATVOL_DIAG_EVERY_N_READS            (1U)
 #define BATVOL_DIAG_DIRECT_ADC_MV_OUTPUT     (0U)
-#define BATVOL_DIAG_PRE_DISCHARGE_ENABLE     (1U)
+#define BATVOL_DIAG_PRE_DISCHARGE_ENABLE     (0U)
 #define BATVOL_DIAG_PRE_DISCHARGE_US         (2000U)
 #define BATVOL_DIAG_POST_DISCHARGE_US        (200U)
 #define BATVOL_UP_RESISTER                   (91U)

@@ -89,6 +89,9 @@ static esp_err_t _print_cmd_text(void) {
     time_t now_sec = 0;
     struct tm tm_now = { 0 };
     bool tm_valid = false;
+    printer_detect_status_t status = { 0 };
+    uint16_t battery_mv = 0U;
+    bool battery_valid = false;
     char line[48] = { 0 };
 
     ret = printer_set_justification(PRINTER_JUSTIFY_LEFT);
@@ -99,7 +102,30 @@ static esp_err_t _print_cmd_text(void) {
     now_sec = time(NULL);
     tm_valid = (localtime_r(&now_sec, &tm_now) != NULL);
 
-    (void)snprintf(line, sizeof(line), " Battery       : N/A\r\n");
+    ret = printer_detect_status(&status);
+    if ((ret == ESP_OK) && (status.working_voltage_raw > 0U)) {
+        battery_mv = status.working_voltage_raw;
+        battery_valid = true;
+    }
+    else {
+        taskENTER_CRITICAL(&s_print_lock);
+        if (s_print_runtime.status_valid
+            && (s_print_runtime.working_voltage_raw > 0U)) {
+            battery_mv = s_print_runtime.working_voltage_raw;
+            battery_valid = true;
+        }
+        taskEXIT_CRITICAL(&s_print_lock);
+    }
+
+    if (battery_valid) {
+        (void)snprintf(line,
+                       sizeof(line),
+                       " Battery       : %u mV\r\n",
+                       (unsigned)battery_mv);
+    }
+    else {
+        (void)snprintf(line, sizeof(line), " Battery       : N/A\r\n");
+    }
     ret = printer_write_string(line);
     if (ret != ESP_OK) {
         return ret;
@@ -697,6 +723,42 @@ static void _print_ui_timer_cb(lv_timer_t* timer) {
 }
 
 /*
+ * brief : _print_event_automatic_mode.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ */
+static void _print_event_automatic_mode(print_ui_runtime_s* runtime) {
+    const char* files[] = {
+        "01_step_wedge.bin",
+        "02_dot_comb.bin",
+        "03_diagonal.bin",
+        "04_diagonal_inverted.bin",
+        "05_product_tiger_lineart.bin",
+        "06_long_run.bin",
+    };
+    const uint8_t file_count = sizeof(files) / sizeof(files[0]);
+    static uint8_t file_index = 0U;
+
+    if (automatic_mode.action == Act_Start) {
+        automatic_mode.interval_ms += PRINT_UI_TASK_PERIOD_MS;
+        if (automatic_mode.interval_ms >= AUTO_PRINT_INTERVAL_MS) {
+            if (runtime->status_valid && runtime->paper_detect_raw) {
+                printer_image_via_bin(files[file_index]);
+                s_print_image_count++;
+                _print_cmd_text();
+                file_index = (file_index + 1) % file_count;
+            }
+            automatic_mode.interval_ms = 0;
+        }
+    }
+    else {
+        automatic_mode.interval_ms = 0;
+        file_index = 0U;
+    }
+}
+
+/*
  * brief : _print_ui_task.
  * input : see parameters.
  * output: none.
@@ -751,17 +813,7 @@ static void _print_ui_task(void* param) {
         }
 
         /* automatic mode handling */
-        if (automatic_mode.action == Act_Start) {
-            automatic_mode.interval_ms += PRINT_UI_TASK_PERIOD_MS;
-            if (automatic_mode.interval_ms >= AUTO_PRINT_INTERVAL_MS) {
-                if (runtime->status_valid && runtime->paper_detect_raw) {
-                    printer_image_via_bin("dragon.bin");
-                    s_print_image_count++;
-                    _print_cmd_text();
-                }
-                automatic_mode.interval_ms = 0;
-            }
-        }
+        _print_event_automatic_mode(runtime);
 
         /* retry printer initialization */
         taskENTER_CRITICAL(&s_print_lock);

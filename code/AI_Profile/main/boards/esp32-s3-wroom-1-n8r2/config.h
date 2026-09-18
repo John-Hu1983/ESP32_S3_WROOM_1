@@ -35,8 +35,8 @@
 #define LCD_IO_RESET_PIN                     (5)
 
 /* Desktop UI font */
-#define DESKTOP_TEXT_FONT                    (font_noto_sans_basic_20_4)
-#define DESKTOP_SYMBOL_FONT                  (font_material_symbols_20_4)
+#define DESKTOP_TEXT_FONT                    font_noto_sans_basic_20_4
+#define DESKTOP_SYMBOL_FONT                  font_material_symbols_20_4
 
 /* PDM */
 #define PDM_CLK_IO                           (GPIO_NUM_41)

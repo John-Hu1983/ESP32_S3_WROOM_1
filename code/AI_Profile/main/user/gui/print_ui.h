@@ -63,7 +63,7 @@ typedef struct {
     char action_text[PRINT_UI_TEXT_LEN];
 } print_ui_runtime_s;
 
-#define AUTO_PRINT_INTERVAL_MS (5000U)
+#define AUTO_PRINT_INTERVAL_MS (30000U)
 typedef struct {
     Action_e action;
     uint16_t interval_ms;

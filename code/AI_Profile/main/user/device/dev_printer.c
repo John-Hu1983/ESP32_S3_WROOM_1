@@ -469,10 +469,13 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
 {
     const int calibration = 210;
     esp_err_t ret = ESP_OK;
+    esp_err_t bat_ret = ESP_OK;
     uint8_t raw[PRINTER_STATUS_DETECT_RESPONSE_LEN] = { 0 };
     int rx_len = 0;
     TickType_t wait_ticks = pdMS_TO_TICKS((TickType_t)s_printer.write_timeout_ms);
     uint8_t cmd[2] = { 0x1BU, 0x76U };
+    uint16_t printer_mv = 0U;
+    bool printer_mv_valid = false;
 
     if (!s_printer.initialized) {
         return ESP_ERR_INVALID_STATE;
@@ -490,6 +493,7 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
 
     ret = _printer_write_block(cmd, sizeof(cmd));
     if (ret != ESP_OK) {
+        _printer_give_lock();
         return ret;
     }
 
@@ -507,21 +511,39 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
     if (rx_len == 1) {
         out_status->tph_temperature_celsius = (raw[0] & (1 << 6)) ? 40u : 22u;
         out_status->paper_detect_raw = (raw[0] & (1 << 2)) ? 0u : 1u;
-        ret = batvol_read_mv(BATVOL_UP_RESISTER,
-                             BATVOL_LOW_RESISTER,
-                             &out_status->working_voltage_raw);
-        if (ret != ESP_OK) {
-            out_status->working_voltage_raw = 0U;
-        }
     }
     else if (rx_len == PRINTER_STATUS_DETECT_RESPONSE_LEN) {
         out_status->tph_temperature_celsius = raw[1];
         out_status->paper_detect_raw = bsp_common_read_u16_be(&raw[2]) >> 2;
-        out_status->working_voltage_raw =
-            (uint16_t)(bsp_common_read_u16_be(&raw[4]) * 5 / 8);
-        if (out_status->working_voltage_raw > calibration) {
-            out_status->working_voltage_raw -= calibration;
+        printer_mv = (uint16_t)(bsp_common_read_u16_be(&raw[4]) * 5 / 8);
+        if (printer_mv > calibration) {
+            printer_mv -= calibration;
         }
+        else {
+            printer_mv = 0U;
+        }
+        printer_mv_valid = true;
+    }
+    else {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    bat_ret = batvol_read_mv(BATVOL_UP_RESISTER,
+                             BATVOL_LOW_RESISTER,
+                             &out_status->working_voltage_raw);
+    if (bat_ret != ESP_OK) {
+        if (printer_mv_valid) {
+            out_status->working_voltage_raw = printer_mv;
+        }
+        else {
+            out_status->working_voltage_raw = 0U;
+        }
+#if BATVOL_DIAG_ENABLE
+        ESP_LOGW(TAG,
+                 "batvol read failed: %s, fallback=%u mV",
+                 esp_err_to_name(bat_ret),
+                 (unsigned)out_status->working_voltage_raw);
+#endif
     }
 
     return ESP_OK;
