@@ -424,8 +424,8 @@ class BleTabController:
         self.clear_button.clicked.connect(self._on_clear_clicked)
 
         self.ping_button.clicked.connect(lambda: self._send_quick("PING"))
-        self.get_status_button.clicked.connect(lambda: self._send_quick("GET_STATUS"))
-        self.reboot_button.clicked.connect(lambda: self._send_quick("REBOOT"))
+        self.get_status_button.clicked.connect(lambda: self._send_quick("AT+PID?"))
+        self.reboot_button.clicked.connect(lambda: self._send_quick("AT+REBOOT"))
 
         self._ble.scan_started_signal.connect(self._on_scan_started)
         self._ble.scan_item_signal.connect(self._on_scan_item)

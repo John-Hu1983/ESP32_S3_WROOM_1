@@ -35,6 +35,10 @@ esp_err_t batvol_init_cfg(void);
 esp_err_t batvol_deinit_cfg(void);
 esp_err_t batvol_read_iovol(uint16_t* io_vol);
 esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv);
+esp_err_t batvol_init_cfg(void);
+esp_err_t batvol_deinit_cfg(void);
+esp_err_t batvol_read_iovol(uint16_t* io_vol);
+esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv);
 
 #ifdef __cplusplus
 }

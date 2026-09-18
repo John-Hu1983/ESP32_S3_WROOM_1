@@ -19,6 +19,7 @@ static printer_ctx_t s_printer = {
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: translate optional GPIO to UART pin number, or return no-change sentinel.
  */
 static int _printer_uart_pin_num(gpio_num_t io_num)
 {
@@ -33,6 +34,7 @@ static int _printer_uart_pin_num(gpio_num_t io_num)
  * input : none.
  * output: none.
  * type  : private
+ * theory: release all currently bound UART-related pins back to default GPIO state.
  */
 static void _printer_release_io(void)
 {
@@ -55,6 +57,7 @@ static void _printer_release_io(void)
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: rollback configured pins on partial init failure to avoid stale pin mux setup.
  */
 static void _printer_release_io_from_config(const printer_cfg_t* cfg)
 {
@@ -81,6 +84,7 @@ static void _printer_release_io_from_config(const printer_cfg_t* cfg)
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: serialize all printer I/O operations with timeout to prevent concurrent UART use.
  */
 static esp_err_t _printer_take_lock(void)
 {
@@ -102,6 +106,7 @@ static esp_err_t _printer_take_lock(void)
  * input : none.
  * output: none.
  * type  : private
+ * theory: release mutual exclusion after one printer transaction sequence completes.
  */
 static void _printer_give_lock(void)
 {
@@ -115,6 +120,7 @@ static void _printer_give_lock(void)
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: use one blocking UART write primitive that verifies byte count and TX completion.
  */
 static esp_err_t _printer_write_block(const uint8_t* data, size_t data_len)
 {
@@ -144,6 +150,7 @@ static esp_err_t _printer_write_block(const uint8_t* data, size_t data_len)
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: enforce printable ASCII payload to match printer command parser expectations.
  */
 static bool _printer_text_is_ascii(const char* text)
 {
@@ -172,6 +179,7 @@ static bool _printer_text_is_ascii(const char* text)
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: optionally honor DTR hardware flow-control before sending the next UART chunk.
  */
 static esp_err_t _printer_wait_flow_ready(void)
 {
@@ -190,6 +198,7 @@ static esp_err_t _printer_wait_flow_ready(void)
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: split large payloads into bounded chunks to reduce UART burst pressure.
  */
 static esp_err_t
 _printer_write_chunk(const uint8_t* data, size_t data_len, size_t chunk_bytes)
@@ -227,6 +236,7 @@ _printer_write_chunk(const uint8_t* data, size_t data_len, size_t chunk_bytes)
  * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: validate config then initialize UART driver and runtime context exactly once.
  */
 esp_err_t printer_init(const printer_cfg_t* config)
 {
@@ -325,6 +335,7 @@ esp_err_t printer_init(const printer_cfg_t* config)
  * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: stop data path, delete driver, and reset runtime fields to known defaults.
  */
 esp_err_t printer_deinit(void)
 {
@@ -367,6 +378,7 @@ esp_err_t printer_deinit(void)
  * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: expose lightweight readiness state without touching UART or locks.
  */
 bool printer_is_ready(void)
 {
@@ -378,6 +390,7 @@ bool printer_is_ready(void)
  * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: set deterministic text mode first, then stream validated ASCII payload.
  */
 esp_err_t printer_write_string(const char* text)
 {
@@ -433,6 +446,7 @@ esp_err_t printer_write_string(const char* text)
  * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: load image bytes from assets and transfer with chunked, lock-protected UART writes.
  */
 esp_err_t printer_image_via_bin(const char* bin_name)
 {
@@ -464,6 +478,7 @@ esp_err_t printer_image_via_bin(const char* bin_name)
  * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: query printer status frame and merge telemetry with local battery sampling fallback.
  */
 esp_err_t printer_detect_status(printer_detect_status_t* out_status)
 {
@@ -549,28 +564,52 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
     return ESP_OK;
 }
 
-/* Command 1 */
+/*
+ * brief : printer_clear_cache.
+ * input : none.
+ * output: return value from this function.
+ * type  : public
+ * theory: send ESC @ to clear printer mode state and internal command context.
+ */
 esp_err_t printer_clear_cache(void)
 {
     const uint8_t cmd[] = { 0x1B, 0x40 };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 2 */
+/*
+ * brief : printer_feed_lines.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: advance paper by a fixed line count via ESC/POS feed command.
+ */
 esp_err_t printer_feed_lines(uint8_t lines)
 {
     const uint8_t cmd[] = { 0x1B, 0x64, lines };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 3 */
+/*
+ * brief : printer_print_and_feed_dots.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: print current buffer and move paper by raw dot distance for fine control.
+ */
 esp_err_t printer_print_and_feed_dots(uint8_t dots)
 {
     const uint8_t cmd[] = { 0x1B, 0x4A, dots };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 4 */
+/*
+ * brief : printer_set_justification.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: update alignment mode so following text or barcode uses selected anchor.
+ */
 esp_err_t printer_set_justification(printer_justification_t mode)
 {
     if ((mode != PRINTER_JUSTIFY_LEFT) && (mode != PRINTER_JUSTIFY_CENTER)
@@ -581,14 +620,26 @@ esp_err_t printer_set_justification(printer_justification_t mode)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 5 */
+/*
+ * brief : printer_select_print_mode.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: set packed style bitmask (font/emphasis/double-size/underline) in one command.
+ */
 esp_err_t printer_select_print_mode(uint8_t mode_mask)
 {
     const uint8_t cmd[] = { 0x1B, 0x21, mode_mask };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 6 */
+/*
+ * brief : printer_set_character_size.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: encode width and height multipliers into ESC/POS nibble format.
+ */
 esp_err_t printer_set_character_size(uint8_t width, uint8_t height)
 {
     uint8_t packed_size = 0;
@@ -602,14 +653,26 @@ esp_err_t printer_set_character_size(uint8_t width, uint8_t height)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 7 */
+/*
+ * brief : printer_set_bold.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: toggle emphasized text rendering with one binary mode flag.
+ */
 esp_err_t printer_set_bold(bool enable)
 {
     const uint8_t cmd[] = { 0x1B, 0x45, (uint8_t)(enable ? 1U : 0U) };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 8 */
+/*
+ * brief : printer_set_underline.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: select underline mode and map semantic enum to ESC/POS value.
+ */
 esp_err_t printer_set_underline(printer_underline_t mode)
 {
     if ((mode != PRINTER_UNDERLINE_OFF) && (mode != PRINTER_UNDERLINE_THIN)
@@ -620,35 +683,65 @@ esp_err_t printer_set_underline(printer_underline_t mode)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 9 */
+/*
+ * brief : printer_set_inverse.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: switch inverse print mode for subsequent glyph rasterization.
+ */
 esp_err_t printer_set_inverse(bool enable)
 {
     const uint8_t cmd[] = { 0x1D, 0x42, (uint8_t)(enable ? 1U : 0U) };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 10 */
+/*
+ * brief : printer_set_upside_down.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: toggle upside-down print direction using dedicated mode command.
+ */
 esp_err_t printer_set_upside_down(bool enable)
 {
     const uint8_t cmd[] = { 0x1B, 0x7B, (uint8_t)(enable ? 1U : 0U) };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 11 */
+/*
+ * brief : printer_set_line_spacing.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: set inter-line dot spacing to tune vertical density and readability.
+ */
 esp_err_t printer_set_line_spacing(uint8_t spacing_dots)
 {
     const uint8_t cmd[] = { 0x1B, 0x33, spacing_dots };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 12 */
+/*
+ * brief : printer_reset_line_spacing.
+ * input : none.
+ * output: return value from this function.
+ * type  : public
+ * theory: restore line spacing to printer default after custom spacing usage.
+ */
 esp_err_t printer_reset_line_spacing(void)
 {
     const uint8_t cmd[] = { 0x1B, 0x32 };
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 13 */
+/*
+ * brief : printer_cut_paper.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: map logical full/partial cut mode to ESC/POS cutter opcode.
+ */
 esp_err_t printer_cut_paper(printer_cut_mode_t mode)
 {
     uint8_t cut_mode = 0;
@@ -662,7 +755,13 @@ esp_err_t printer_cut_paper(printer_cut_mode_t mode)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 14 */
+/*
+ * brief : printer_set_hri_position.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: configure where human-readable barcode text is placed relative to bars.
+ */
 esp_err_t printer_set_hri_position(printer_hri_position_t position)
 {
     if ((position != PRINTER_HRI_NOT_PRINTED) && (position != PRINTER_HRI_ABOVE)
@@ -675,7 +774,13 @@ esp_err_t printer_set_hri_position(printer_hri_position_t position)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 15 */
+/*
+ * brief : printer_set_hri_font.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: select HRI text font variant used for barcode labels.
+ */
 esp_err_t printer_set_hri_font(printer_hri_font_t font)
 {
     if ((font != PRINTER_HRI_FONT_A) && (font != PRINTER_HRI_FONT_B)) {
@@ -686,7 +791,13 @@ esp_err_t printer_set_hri_font(printer_hri_font_t font)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 16 */
+/*
+ * brief : printer_set_barcode_height.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: define barcode bar height in dots for scanner readability tuning.
+ */
 esp_err_t printer_set_barcode_height(uint8_t height_dots)
 {
     if (height_dots == 0U) {
@@ -696,7 +807,13 @@ esp_err_t printer_set_barcode_height(uint8_t height_dots)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 17 */
+/*
+ * brief : printer_set_barcode_width.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: constrain barcode module width to supported printer/scanner range.
+ */
 esp_err_t printer_set_barcode_width(uint8_t width_dots)
 {
     if ((width_dots < 2U) || (width_dots > 6U)) {
@@ -706,7 +823,13 @@ esp_err_t printer_set_barcode_width(uint8_t width_dots)
     return _printer_write_block(cmd, sizeof(cmd));
 }
 
-/* Command 18 */
+/*
+ * brief : printer_barcode_code128.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: pack CODE128 payload into ESC/POS frame with explicit length prefix.
+ */
 esp_err_t printer_barcode_code128(const uint8_t* data, size_t data_len)
 {
     uint8_t cmd[4U + PRINTER_MAX_BARCODE_BYTES] = { 0 };

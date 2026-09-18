@@ -2,12 +2,12 @@
  * BLE workflow map (NimBLE enabled)
  *
  * 1) Startup intent:
- *    - ble_start_nimble() sets s_start_req=true.
+ *    - ble_start_nimble() sets start_req=true.
  *    - If needed, it calls ble_init_nimble() to boot NimBLE and register GATT.
  *
  * 2) Stack sync gate:
  *    - _ble_on_sync() runs after host/controller sync.
- *    - Only after s_sync_ready=true can advertising actually start.
+ *    - Only after sync_ready=true can advertising actually start.
  *
  * 3) Advertising:
  *    - _ble_start_adv() publishes device name + service UUID.
@@ -15,9 +15,9 @@
  *      advertising is already running.
  *
  * 4) Connection lifecycle (GAP events):
- *    - CONNECT success: set s_connected=true and save s_conn_handle.
+ *    - CONNECT success: set connected=true and save conn_handle.
  *    - DISCONNECT: clear runtime link flags and auto restart advertising.
- *    - SUBSCRIBE on TX char: update s_notify_enabled.
+ *    - SUBSCRIBE on TX char: update notify_enabled.
  *
  * 5) Data path (GATT access callback):
  *    - RX characteristic write -> _ble_gatt_access() receives text,
@@ -44,6 +44,8 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 
+#include "user/communication/protocol/at_cmd.h"
+
 #include "esp_bt.h"
 
 #include "host/ble_hs.h"
@@ -64,7 +66,7 @@ static portMUX_TYPE s_message_lock = portMUX_INITIALIZER_UNLOCKED;
  * input  : none.
  * output : ESP_OK when runtime context is ready.
  * type   : private
- * theme  : move BLE state from static DRAM to dynamic PSRAM-backed storage.
+ * theory : move BLE state from static DRAM to dynamic PSRAM-backed storage.
  */
 static esp_err_t _ble_ctx_ensure(void) {
     size_t ctx_bytes = sizeof(ble_runtime_s);
@@ -96,38 +98,6 @@ static esp_err_t _ble_ctx_ensure(void) {
     ESP_LOGE(TAG, "BLE runtime context alloc failed, bytes=%u", (unsigned)ctx_bytes);
     return ESP_ERR_NO_MEM;
 }
-
-#define s_init_done (s_ble_ctx->init_done)
-#define s_start_req (s_ble_ctx->start_req)
-#define s_sync_ready (s_ble_ctx->sync_ready)
-#define s_adv_running (s_ble_ctx->adv_running)
-#define s_connected (s_ble_ctx->connected)
-#define s_notify_enabled (s_ble_ctx->notify_enabled)
-
-#define s_addr_type (s_ble_ctx->addr_type)
-#define s_conn_handle (s_ble_ctx->conn_handle)
-#define s_tx_val_handle (s_ble_ctx->tx_val_handle)
-
-#define s_rx_text (s_ble_ctx->rx_text)
-#define s_last_tx_text (s_ble_ctx->last_tx_text)
-#define s_last_tx_len (s_ble_ctx->last_tx_len)
-
-#define s_rx_cb (s_ble_ctx->rx_cb)
-#define s_rx_cb_ctx (s_ble_ctx->rx_cb_ctx)
-
-#define s_message_fifo (s_ble_ctx->message_fifo)
-#define s_message_head (s_ble_ctx->head)
-#define s_message_tail (s_ble_ctx->tail)
-#define s_message_used (s_ble_ctx->used)
-#define s_message_seq (s_ble_ctx->seq)
-#define s_message_rx_total (s_ble_ctx->rx_total)
-#define s_message_tx_total (s_ble_ctx->tx_total)
-#define s_message_dropped_total (s_ble_ctx->dropped_total)
-#define s_message_fifo_ready (s_ble_ctx->fifo_ready)
-#define s_message_has_last_rx (s_ble_ctx->has_last_rx)
-#define s_message_has_last_tx (s_ble_ctx->has_last_tx)
-#define s_message_last_rx (s_ble_ctx->last_rx)
-#define s_message_last_tx (s_ble_ctx->last_tx)
 
 static int _ble_gatt_access(uint16_t conn_handle,
                             uint16_t attr_handle,
@@ -163,21 +133,21 @@ static const struct ble_gatt_svc_def s_ble_svcs[] = {
  * input  : none.
  * output : none.
  * type   : private
- * theme  : allocate a large FIFO in PSRAM for BLE RX/TX message traces and
+ * theory : allocate a large FIFO in PSRAM for BLE RX/TX message traces and
  *          fall back to internal RAM only if PSRAM allocation is unavailable.
  */
 static void _ble_message_fifo_init(void) {
     size_t fifo_bytes = sizeof(ble_message_item_s) * BLE_MESSAGE_FIFO_CAPACITY;
 
-    if (s_message_fifo != NULL) {
+    if (s_ble_ctx->message_fifo != NULL) {
         return;
     }
 
-    s_message_fifo =
+    s_ble_ctx->message_fifo =
         (ble_message_item_s*)heap_caps_malloc(fifo_bytes,
                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (s_message_fifo != NULL) {
-        s_message_fifo_ready = true;
+    if (s_ble_ctx->message_fifo != NULL) {
+        s_ble_ctx->fifo_ready = true;
         ESP_LOGI(TAG,
                  "BLE message FIFO ready in PSRAM, items=%u bytes=%u",
                  (unsigned)BLE_MESSAGE_FIFO_CAPACITY,
@@ -185,11 +155,11 @@ static void _ble_message_fifo_init(void) {
         return;
     }
 
-    s_message_fifo =
+    s_ble_ctx->message_fifo =
         (ble_message_item_s*)heap_caps_malloc(fifo_bytes,
                                               MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (s_message_fifo != NULL) {
-        s_message_fifo_ready = true;
+    if (s_ble_ctx->message_fifo != NULL) {
+        s_ble_ctx->fifo_ready = true;
         ESP_LOGW(TAG,
                  "BLE message FIFO fallback to internal RAM, items=%u bytes=%u",
                  (unsigned)BLE_MESSAGE_FIFO_CAPACITY,
@@ -197,7 +167,7 @@ static void _ble_message_fifo_init(void) {
         return;
     }
 
-    s_message_fifo_ready = false;
+    s_ble_ctx->fifo_ready = false;
     ESP_LOGE(TAG, "BLE message FIFO alloc failed, bytes=%u", (unsigned)fifo_bytes);
 }
 
@@ -206,7 +176,7 @@ static void _ble_message_fifo_init(void) {
  * input  : dir indicates RX/TX; text points to payload bytes; len is text size.
  * output : none.
  * type   : private
- * theme  : capture BLE traffic into a FIFO and track latest RX/TX snapshots for
+ * theory : capture BLE traffic into a FIFO and track latest RX/TX snapshots for
  *          message UI without affecting transport behavior.
  */
 static void _ble_message_capture(ble_message_dir_e dir,
@@ -233,33 +203,34 @@ static void _ble_message_capture(ble_message_dir_e dir,
     taskENTER_CRITICAL(&s_message_lock);
 
     if (dir == Ble_Message_Dir_Rx) {
-        s_message_rx_total++;
-        s_message_last_rx = item;
-        s_message_has_last_rx = true;
+        s_ble_ctx->rx_total++;
+        s_ble_ctx->last_rx = item;
+        s_ble_ctx->has_last_rx = true;
     }
     else {
-        s_message_tx_total++;
-        s_message_last_tx = item;
-        s_message_has_last_tx = true;
+        s_ble_ctx->tx_total++;
+        s_ble_ctx->last_tx = item;
+        s_ble_ctx->has_last_tx = true;
     }
 
-    s_message_seq++;
-    item.seq = s_message_seq;
+    s_ble_ctx->seq++;
+    item.seq = s_ble_ctx->seq;
 
-    if (s_message_fifo_ready && (s_message_fifo != NULL)) {
-        if (s_message_used >= BLE_MESSAGE_FIFO_CAPACITY) {
-            s_message_tail =
-                (uint16_t)((s_message_tail + 1U) % BLE_MESSAGE_FIFO_CAPACITY);
-            s_message_used--;
-            s_message_dropped_total++;
+    if (s_ble_ctx->fifo_ready && (s_ble_ctx->message_fifo != NULL)) {
+        if (s_ble_ctx->used >= BLE_MESSAGE_FIFO_CAPACITY) {
+            s_ble_ctx->tail =
+                (uint16_t)((s_ble_ctx->tail + 1U) % BLE_MESSAGE_FIFO_CAPACITY);
+            s_ble_ctx->used--;
+            s_ble_ctx->dropped_total++;
         }
 
-        s_message_fifo[s_message_head] = item;
-        s_message_head = (uint16_t)((s_message_head + 1U) % BLE_MESSAGE_FIFO_CAPACITY);
-        s_message_used++;
+        s_ble_ctx->message_fifo[s_ble_ctx->head] = item;
+        s_ble_ctx->head =
+            (uint16_t)((s_ble_ctx->head + 1U) % BLE_MESSAGE_FIFO_CAPACITY);
+        s_ble_ctx->used++;
     }
     else {
-        s_message_dropped_total++;
+        s_ble_ctx->dropped_total++;
     }
 
     taskEXIT_CRITICAL(&s_message_lock);
@@ -270,7 +241,7 @@ static void _ble_message_capture(ble_message_dir_e dir,
  * input  : text is a writable string buffer; len is the current payload length.
  * output : trimmed length after removing trailing CR/LF bytes.
  * type   : private
- * theme  : normalize incoming BLE text so command parsing stays stable across
+ * theory : normalize incoming BLE text so command parsing stays stable across
  *          clients that append different line endings.
  */
 static uint16_t _ble_trim_eol(char* text, uint16_t len) {
@@ -291,7 +262,7 @@ static uint16_t _ble_trim_eol(char* text, uint16_t len) {
  * input  : gap_cb is GAP event callback; other inputs come from module state.
  * output : ESP_OK when advertising is started or intentionally skipped.
  * type   : private
- * theme  : keep all advertising preconditions and payload configuration in one
+ * theory : keep all advertising preconditions and payload configuration in one
  *          place to avoid inconsistent GAP state transitions.
  */
 static esp_err_t _ble_start_adv_with_gap_cb(int (*gap_cb)(struct ble_gap_event* event,
@@ -307,14 +278,15 @@ static esp_err_t _ble_start_adv_with_gap_cb(int (*gap_cb)(struct ble_gap_event* 
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!s_start_req || !s_sync_ready || s_connected || s_adv_running) {
+    if (!s_ble_ctx->start_req || !s_ble_ctx->sync_ready || s_ble_ctx->connected
+        || s_ble_ctx->adv_running) {
         ESP_LOGI(
             TAG,
             "Skip adv start: start_req=%d sync_ready=%d connected=%d adv_running=%d",
-            s_start_req ? 1 : 0,
-            s_sync_ready ? 1 : 0,
-            s_connected ? 1 : 0,
-            s_adv_running ? 1 : 0);
+            s_ble_ctx->start_req ? 1 : 0,
+            s_ble_ctx->sync_ready ? 1 : 0,
+            s_ble_ctx->connected ? 1 : 0,
+            s_ble_ctx->adv_running ? 1 : 0);
         return ESP_OK;
     }
 
@@ -347,12 +319,16 @@ static esp_err_t _ble_start_adv_with_gap_cb(int (*gap_cb)(struct ble_gap_event* 
     adv_params.itvl_min = BLE_ADV_ITVL_MIN;
     adv_params.itvl_max = BLE_ADV_ITVL_MAX;
 
-    rc =
-        ble_gap_adv_start(s_addr_type, NULL, BLE_HS_FOREVER, &adv_params, gap_cb, NULL);
+    rc = ble_gap_adv_start(s_ble_ctx->addr_type,
+                           NULL,
+                           BLE_HS_FOREVER,
+                           &adv_params,
+                           gap_cb,
+                           NULL);
     if (rc == BLE_HS_EBUSY) {
         ESP_LOGW(TAG, "adv start busy, stop and retry");
         (void)ble_gap_adv_stop();
-        rc = ble_gap_adv_start(s_addr_type,
+        rc = ble_gap_adv_start(s_ble_ctx->addr_type,
                                NULL,
                                BLE_HS_FOREVER,
                                &adv_params,
@@ -360,7 +336,7 @@ static esp_err_t _ble_start_adv_with_gap_cb(int (*gap_cb)(struct ble_gap_event* 
                                NULL);
     }
     if (rc == BLE_HS_EALREADY) {
-        s_adv_running = true;
+        s_ble_ctx->adv_running = true;
         ESP_LOGI(TAG, "Advertising already running");
         return ESP_OK;
     }
@@ -369,7 +345,7 @@ static esp_err_t _ble_start_adv_with_gap_cb(int (*gap_cb)(struct ble_gap_event* 
         return ESP_FAIL;
     }
 
-    s_adv_running = true;
+    s_ble_ctx->adv_running = true;
     ESP_LOGI(TAG,
              "Advertising started, name=%s interval=[%u,%u]",
              BLE_DEVICE_NAME,
@@ -383,7 +359,7 @@ static esp_err_t _ble_start_adv_with_gap_cb(int (*gap_cb)(struct ble_gap_event* 
  * input  : data points to bytes to send; len is the payload length.
  * output : ESP_OK on success/ignored state, otherwise an ESP error code.
  * type   : private
- * theme  : hide ATT fragmentation details and send notifications in safe-sized
+ * theory : hide ATT fragmentation details and send notifications in safe-sized
  *          chunks so upper layers can send text with a simple API.
  */
 static esp_err_t _ble_push_notify(const uint8_t* data, uint16_t len) {
@@ -396,8 +372,8 @@ static esp_err_t _ble_push_notify(const uint8_t* data, uint16_t len) {
         return ESP_OK;
     }
 
-    if (!s_connected || !s_notify_enabled
-        || (s_conn_handle == BLE_HS_CONN_HANDLE_NONE)) {
+    if (!s_ble_ctx->connected || !s_ble_ctx->notify_enabled
+        || (s_ble_ctx->conn_handle == BLE_HS_CONN_HANDLE_NONE)) {
         return ESP_OK;
     }
 
@@ -412,7 +388,9 @@ static esp_err_t _ble_push_notify(const uint8_t* data, uint16_t len) {
             return ESP_ERR_NO_MEM;
         }
 
-        rc = ble_gatts_notify_custom(s_conn_handle, s_tx_val_handle, om);
+        rc = ble_gatts_notify_custom(s_ble_ctx->conn_handle,
+                                     s_ble_ctx->tx_val_handle,
+                                     om);
         if (rc != 0) {
             ESP_LOGE(TAG, "ble_gatts_notify_custom failed: %d", rc);
             return ESP_FAIL;
@@ -429,7 +407,7 @@ static esp_err_t _ble_push_notify(const uint8_t* data, uint16_t len) {
  * input  : event is the NimBLE GAP event; arg is unused callback context.
  * output : NimBLE callback status code, always 0 for handled events.
  * type   : private
- * theme  : translate connect/disconnect/subscribe events into module runtime
+ * theory : translate connect/disconnect/subscribe events into module runtime
  *          flags and automatic re-advertise behavior.
  */
 static int _ble_gap_event(struct ble_gap_event* event, void* arg) {
@@ -441,40 +419,42 @@ static int _ble_gap_event(struct ble_gap_event* event, void* arg) {
 
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
-        s_adv_running = false;
+        s_ble_ctx->adv_running = false;
         if (event->connect.status == 0) {
-            s_connected = true;
-            s_conn_handle = event->connect.conn_handle;
-            ESP_LOGI(TAG, "BLE connected, conn_handle=%u", (unsigned)s_conn_handle);
+            s_ble_ctx->connected = true;
+            s_ble_ctx->conn_handle = event->connect.conn_handle;
+            ESP_LOGI(TAG,
+                     "BLE connected, conn_handle=%u",
+                     (unsigned)s_ble_ctx->conn_handle);
         }
         else {
-            s_connected = false;
-            s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+            s_ble_ctx->connected = false;
+            s_ble_ctx->conn_handle = BLE_HS_CONN_HANDLE_NONE;
             ESP_LOGW(TAG, "BLE connect failed, status=%d", event->connect.status);
             _ble_start_adv_with_gap_cb(_ble_gap_event);
         }
         return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
-        s_connected = false;
-        s_notify_enabled = false;
-        s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
-        s_adv_running = false;
+        s_ble_ctx->connected = false;
+        s_ble_ctx->notify_enabled = false;
+        s_ble_ctx->conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        s_ble_ctx->adv_running = false;
         ESP_LOGI(TAG, "BLE disconnected, reason=%d", event->disconnect.reason);
         _ble_start_adv_with_gap_cb(_ble_gap_event);
         return 0;
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
-        s_adv_running = false;
+        s_ble_ctx->adv_running = false;
         _ble_start_adv_with_gap_cb(_ble_gap_event);
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
-        if (event->subscribe.attr_handle == s_tx_val_handle) {
-            s_notify_enabled = (event->subscribe.cur_notify != 0);
+        if (event->subscribe.attr_handle == s_ble_ctx->tx_val_handle) {
+            s_ble_ctx->notify_enabled = (event->subscribe.cur_notify != 0);
             ESP_LOGI(TAG,
                      "Notify %s, conn_handle=%u",
-                     s_notify_enabled ? "enabled" : "disabled",
+                     s_ble_ctx->notify_enabled ? "enabled" : "disabled",
                      (unsigned)event->subscribe.conn_handle);
         }
         return 0;
@@ -489,7 +469,7 @@ static int _ble_gap_event(struct ble_gap_event* event, void* arg) {
  * input  : NimBLE GATT access context for read/write operations.
  * output : BLE ATT status code for the current characteristic operation.
  * type   : private
- * theme  : provide one data path for BLE RX writes and TX reads, including
+ * theory : provide one data path for BLE RX writes and TX reads, including
  *          command parsing and default response policy.
  */
 static int _ble_gatt_access(uint16_t conn_handle,
@@ -497,7 +477,9 @@ static int _ble_gatt_access(uint16_t conn_handle,
                             struct ble_gatt_access_ctxt* ctxt,
                             void* arg) {
     int rc = 0;
+    esp_err_t at_ret = ESP_OK;
     uint16_t rx_len = 0U;
+    bool at_handled = false;
     (void)arg;
 
     (void)conn_handle;
@@ -513,25 +495,35 @@ static int _ble_gatt_access(uint16_t conn_handle,
             rx_len = BLE_MAX_TEXT_LEN;
         }
 
-        rc = os_mbuf_copydata(ctxt->om, 0, rx_len, s_rx_text);
+        rc = os_mbuf_copydata(ctxt->om, 0, rx_len, s_ble_ctx->rx_text);
         if (rc != 0) {
             return BLE_ATT_ERR_UNLIKELY;
         }
 
-        s_rx_text[rx_len] = '\0';
-        rx_len = _ble_trim_eol(s_rx_text, rx_len);
-        ESP_LOGI(TAG, "RX: %s", s_rx_text);
-        _ble_message_capture(Ble_Message_Dir_Rx, s_rx_text, rx_len);
+        s_ble_ctx->rx_text[rx_len] = '\0';
+        rx_len = _ble_trim_eol(s_ble_ctx->rx_text, rx_len);
+        ESP_LOGI(TAG, "RX: %s", s_ble_ctx->rx_text);
+        _ble_message_capture(Ble_Message_Dir_Rx, s_ble_ctx->rx_text, rx_len);
 
-        if (s_rx_cb != NULL) {
-            s_rx_cb((const uint8_t*)s_rx_text, rx_len, s_rx_cb_ctx);
+        if (s_ble_ctx->rx_cb != NULL) {
+            s_ble_ctx->rx_cb((const uint8_t*)s_ble_ctx->rx_text,
+                             rx_len,
+                             s_ble_ctx->rx_cb_ctx);
         }
 
-        if ((rx_len == 4U) && (memcmp(s_rx_text, "PING", 4U) == 0)) {
+        at_ret = at_cmd_parse_and_dispatch(s_ble_ctx->rx_text, &at_handled);
+        if (at_handled) {
+            if (at_ret != ESP_OK) {
+                ESP_LOGW(TAG, "AT cmd handled with status=%s", esp_err_to_name(at_ret));
+            }
+            return 0;
+        }
+
+        if ((rx_len == 4U) && (memcmp(s_ble_ctx->rx_text, "PING", 4U) == 0)) {
             ble_send_text("PONG");
         }
-        else if ((rx_len > 5U) && (memcmp(s_rx_text, "ECHO ", 5U) == 0)) {
-            ble_send_text(&s_rx_text[5]);
+        else if ((rx_len > 5U) && (memcmp(s_ble_ctx->rx_text, "ECHO ", 5U) == 0)) {
+            ble_send_text(&s_ble_ctx->rx_text[5]);
         }
         else {
             ble_send_text("ACK");
@@ -541,13 +533,21 @@ static int _ble_gatt_access(uint16_t conn_handle,
     }
 
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-        rc = os_mbuf_append(ctxt->om, s_last_tx_text, s_last_tx_len);
+        rc = os_mbuf_append(ctxt->om, s_ble_ctx->last_tx_text, s_ble_ctx->last_tx_len);
         return (rc == 0) ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
     }
 
     return BLE_ATT_ERR_UNLIKELY;
 }
 
+/*
+ * brief  : _ble_start_adv.
+ * input  : none.
+ * output : ESP_OK when advertising is started or intentionally skipped.
+ * type   : private
+ * theory : keep a fixed entry point for normal advertising startup while
+ *          delegating real policy and GAP callback wiring to one helper.
+ */
 static esp_err_t _ble_start_adv(void) {
     return _ble_start_adv_with_gap_cb(_ble_gap_event);
 }
@@ -557,12 +557,12 @@ static esp_err_t _ble_start_adv(void) {
  * input  : reason is the NimBLE reset reason code.
  * output : none.
  * type   : private
- * theme  : clear sync/advertise state after host reset so recovery starts from
+ * theory : clear sync/advertise state after host reset so recovery starts from
  *          a known baseline.
  */
 static void _ble_on_reset(int reason) {
-    s_sync_ready = false;
-    s_adv_running = false;
+    s_ble_ctx->sync_ready = false;
+    s_ble_ctx->adv_running = false;
     ESP_LOGW(TAG, "NimBLE reset, reason=%d", reason);
 }
 
@@ -571,11 +571,11 @@ static void _ble_on_reset(int reason) {
  * input  : none, called by NimBLE when host and controller are synchronized.
  * output : none.
  * type   : private
- * theme  : acquire address identity and gate first advertising until BLE stack
+ * theory : acquire address identity and gate first advertising until BLE stack
  *          synchronization is fully complete.
  */
 static void _ble_on_sync(void) {
-    int rc = ble_hs_id_infer_auto(0, &s_addr_type);
+    int rc = ble_hs_id_infer_auto(0, &s_ble_ctx->addr_type);
     uint8_t addr_val[6] = { 0 };
     esp_err_t adv_err = ESP_OK;
 
@@ -585,17 +585,17 @@ static void _ble_on_sync(void) {
         return;
     }
 
-    rc = ble_hs_id_infer_auto(0, &s_addr_type);
+    rc = ble_hs_id_infer_auto(0, &s_ble_ctx->addr_type);
     if (rc != 0) {
         ESP_LOGE(TAG, "ble_hs_id_infer_auto failed: %d", rc);
         return;
     }
 
-    rc = ble_hs_id_copy_addr(s_addr_type, addr_val, NULL);
+    rc = ble_hs_id_copy_addr(s_ble_ctx->addr_type, addr_val, NULL);
     if (rc == 0) {
         ESP_LOGI(TAG,
                  "BLE addr type=%d addr=%02X:%02X:%02X:%02X:%02X:%02X",
-                 (int)s_addr_type,
+                 (int)s_ble_ctx->addr_type,
                  addr_val[5],
                  addr_val[4],
                  addr_val[3],
@@ -604,9 +604,9 @@ static void _ble_on_sync(void) {
                  addr_val[0]);
     }
 
-    s_sync_ready = true;
-    ESP_LOGI(TAG, "BLE sync done, start_req=%d", s_start_req ? 1 : 0);
-    if (s_start_req) {
+    s_ble_ctx->sync_ready = true;
+    ESP_LOGI(TAG, "BLE sync done, start_req=%d", s_ble_ctx->start_req ? 1 : 0);
+    if (s_ble_ctx->start_req) {
         adv_err = _ble_start_adv();
         if (adv_err != ESP_OK) {
             ESP_LOGE(TAG, "start adv after sync failed: %s", esp_err_to_name(adv_err));
@@ -619,7 +619,7 @@ static void _ble_on_sync(void) {
  * input  : param is unused task context.
  * output : none.
  * type   : private
- * theme  : run NimBLE host loop in its own FreeRTOS task to keep BLE protocol
+ * theory : run NimBLE host loop in its own FreeRTOS task to keep BLE protocol
  *          processing isolated from application control flow.
  */
 static void _ble_host_task(void* param) {
@@ -633,7 +633,7 @@ static void _ble_host_task(void* param) {
  * input  : none.
  * output : ESP_OK on success, otherwise an ESP error code.
  * type   : public
- * theme  : perform one-time NimBLE initialization and GATT database setup so
+ * theory : perform one-time NimBLE initialization and GATT database setup so
  *          all later BLE operations run on deterministic service definitions.
  */
 esp_err_t ble_init_nimble(void) {
@@ -648,7 +648,7 @@ esp_err_t ble_init_nimble(void) {
 
     _ble_message_fifo_init();
 
-    if (s_init_done) {
+    if (s_ble_ctx->init_done) {
         return ESP_OK;
     }
 
@@ -656,14 +656,14 @@ esp_err_t ble_init_nimble(void) {
     ESP_LOGI(TAG, "BT controller status before init: %d", (int)bt_status);
 
     /* Reset runtime state before starting NimBLE host task to avoid on_sync race. */
-    s_sync_ready = false;
-    s_adv_running = false;
-    s_connected = false;
-    s_notify_enabled = false;
-    s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
-    s_last_tx_len = 0U;
-    s_last_tx_text[0] = '\0';
-    s_rx_text[0] = '\0';
+    s_ble_ctx->sync_ready = false;
+    s_ble_ctx->adv_running = false;
+    s_ble_ctx->connected = false;
+    s_ble_ctx->notify_enabled = false;
+    s_ble_ctx->conn_handle = BLE_HS_CONN_HANDLE_NONE;
+    s_ble_ctx->last_tx_len = 0U;
+    s_ble_ctx->last_tx_text[0] = '\0';
+    s_ble_ctx->rx_text[0] = '\0';
 
     err = nimble_port_init();
     if (err != ESP_OK) {
@@ -688,7 +688,7 @@ esp_err_t ble_init_nimble(void) {
         return ESP_FAIL;
     }
 
-    s_ble_chrs[1].val_handle = &s_tx_val_handle;
+    s_ble_chrs[1].val_handle = &s_ble_ctx->tx_val_handle;
 
     rc = ble_gatts_count_cfg(s_ble_svcs);
     if (rc != 0) {
@@ -704,7 +704,7 @@ esp_err_t ble_init_nimble(void) {
         return ESP_FAIL;
     }
 
-    s_init_done = true;
+    s_ble_ctx->init_done = true;
 
     nimble_port_freertos_init(_ble_host_task);
 
@@ -717,7 +717,7 @@ esp_err_t ble_init_nimble(void) {
  * input  : none.
  * output : ESP_OK when start request is accepted; otherwise an ESP error code.
  * type   : public
- * theme  : provide an idempotent API that records start intent and starts
+ * theory : provide an idempotent API that records start intent and starts
  *          advertising immediately or right after BLE sync.
  */
 esp_err_t ble_start_nimble(void) {
@@ -729,9 +729,9 @@ esp_err_t ble_start_nimble(void) {
         return ctx_err;
     }
 
-    s_start_req = true;
+    s_ble_ctx->start_req = true;
 
-    if (!s_init_done) {
+    if (!s_ble_ctx->init_done) {
         esp_err_t err = ble_init_nimble();
         if (err != ESP_OK) {
             return err;
@@ -739,7 +739,7 @@ esp_err_t ble_start_nimble(void) {
     }
 
     adv_err = _ble_start_adv();
-    if ((adv_err == ESP_OK) && !s_sync_ready) {
+    if ((adv_err == ESP_OK) && !s_ble_ctx->sync_ready) {
         ESP_LOGI(TAG, "Start requested, waiting for BLE sync");
     }
 
@@ -751,25 +751,25 @@ esp_err_t ble_start_nimble(void) {
  * input  : none.
  * output : none.
  * type   : public
- * theme  : shut down BLE in a controlled order (terminate link, stop adv,
+ * theory : shut down BLE in a controlled order (terminate link, stop adv,
  *          stop/deinit host) to avoid stale runtime state.
  */
 void ble_stop_nimble(void) {
     int stop_rc = 0;
 
-    if ((s_ble_ctx == NULL) || !s_init_done) {
+    if ((s_ble_ctx == NULL) || !s_ble_ctx->init_done) {
         return;
     }
 
-    s_start_req = false;
+    s_ble_ctx->start_req = false;
 
-    if (s_connected && (s_conn_handle != BLE_HS_CONN_HANDLE_NONE)) {
-        ble_gap_terminate(s_conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    if (s_ble_ctx->connected && (s_ble_ctx->conn_handle != BLE_HS_CONN_HANDLE_NONE)) {
+        ble_gap_terminate(s_ble_ctx->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
     }
 
-    if (s_adv_running) {
+    if (s_ble_ctx->adv_running) {
         ble_gap_adv_stop();
-        s_adv_running = false;
+        s_ble_ctx->adv_running = false;
     }
 
     stop_rc = nimble_port_stop();
@@ -778,11 +778,11 @@ void ble_stop_nimble(void) {
     }
     nimble_port_deinit();
 
-    s_init_done = false;
-    s_sync_ready = false;
-    s_connected = false;
-    s_notify_enabled = false;
-    s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+    s_ble_ctx->init_done = false;
+    s_ble_ctx->sync_ready = false;
+    s_ble_ctx->connected = false;
+    s_ble_ctx->notify_enabled = false;
+    s_ble_ctx->conn_handle = BLE_HS_CONN_HANDLE_NONE;
 
     ESP_LOGI(TAG, "BLE stopped");
 }
@@ -792,7 +792,7 @@ void ble_stop_nimble(void) {
  * input  : none.
  * output : true when BLE init and stack sync are both complete.
  * type   : public
- * theme  : expose a simple readiness gate for callers before sending data or
+ * theory : expose a simple readiness gate for callers before sending data or
  *          depending on advertising behavior.
  */
 bool ble_is_ready(void) {
@@ -800,7 +800,7 @@ bool ble_is_ready(void) {
         return false;
     }
 
-    return s_init_done && s_sync_ready;
+    return s_ble_ctx->init_done && s_ble_ctx->sync_ready;
 }
 
 /*
@@ -808,7 +808,7 @@ bool ble_is_ready(void) {
  * input  : none.
  * output : true when a BLE central is currently connected.
  * type   : public
- * theme  : let upper modules query link status without direct dependency on
+ * theory : let upper modules query link status without direct dependency on
  *          NimBLE connection handles.
  */
 bool ble_is_connected(void) {
@@ -816,7 +816,7 @@ bool ble_is_connected(void) {
         return false;
     }
 
-    return s_connected;
+    return s_ble_ctx->connected;
 }
 
 /*
@@ -824,7 +824,7 @@ bool ble_is_connected(void) {
  * input  : cb is the receive callback; user_ctx is forwarded user context.
  * output : none.
  * type   : public
- * theme  : decouple transport and application logic by registering a callback
+ * theory : decouple transport and application logic by registering a callback
  *          that consumes BLE RX text payloads.
  */
 void ble_set_rx_callback(ble_rx_cb_t cb, void* user_ctx) {
@@ -835,8 +835,8 @@ void ble_set_rx_callback(ble_rx_cb_t cb, void* user_ctx) {
         return;
     }
 
-    s_rx_cb = cb;
-    s_rx_cb_ctx = user_ctx;
+    s_ble_ctx->rx_cb = cb;
+    s_ble_ctx->rx_cb_ctx = user_ctx;
 }
 
 /*
@@ -844,7 +844,7 @@ void ble_set_rx_callback(ble_rx_cb_t cb, void* user_ctx) {
  * input  : text points to a null-terminated string to transmit.
  * output : ESP_OK on success/ignored notify state, otherwise an ESP error code.
  * type   : public
- * theme  : unify outbound text handling by caching the latest value for GATT
+ * theory : unify outbound text handling by caching the latest value for GATT
  *          reads and pushing notifications when the link allows it.
  */
 esp_err_t ble_send_text(const char* text) {
@@ -861,14 +861,25 @@ esp_err_t ble_send_text(const char* text) {
     }
 
     text_len = strnlen(text, BLE_MAX_TEXT_LEN);
-    memcpy(s_last_tx_text, text, text_len);
-    s_last_tx_text[text_len] = '\0';
-    s_last_tx_len = (uint16_t)text_len;
-    _ble_message_capture(Ble_Message_Dir_Tx, s_last_tx_text, s_last_tx_len);
+    memcpy(s_ble_ctx->last_tx_text, text, text_len);
+    s_ble_ctx->last_tx_text[text_len] = '\0';
+    s_ble_ctx->last_tx_len = (uint16_t)text_len;
+    _ble_message_capture(Ble_Message_Dir_Tx,
+                         s_ble_ctx->last_tx_text,
+                         s_ble_ctx->last_tx_len);
 
-    return _ble_push_notify((const uint8_t*)s_last_tx_text, s_last_tx_len);
+    return _ble_push_notify((const uint8_t*)s_ble_ctx->last_tx_text,
+                            s_ble_ctx->last_tx_len);
 }
 
+/*
+ * brief  : ble_message_fifo_pop.
+ * input  : item receives one popped message record.
+ * output : true when one record is popped; false when queue is empty/invalid.
+ * type   : public
+ * theory : expose a lock-protected single-consumer pop interface so UI/tasks
+ *          can drain the trace FIFO without touching internal head/tail rules.
+ */
 bool ble_message_fifo_pop(ble_message_item_s* item) {
     bool has_item = false;
 
@@ -877,10 +888,12 @@ bool ble_message_fifo_pop(ble_message_item_s* item) {
     }
 
     taskENTER_CRITICAL(&s_message_lock);
-    if (s_message_fifo_ready && (s_message_fifo != NULL) && (s_message_used > 0U)) {
-        *item = s_message_fifo[s_message_tail];
-        s_message_tail = (uint16_t)((s_message_tail + 1U) % BLE_MESSAGE_FIFO_CAPACITY);
-        s_message_used--;
+    if (s_ble_ctx->fifo_ready && (s_ble_ctx->message_fifo != NULL)
+        && (s_ble_ctx->used > 0U)) {
+        *item = s_ble_ctx->message_fifo[s_ble_ctx->tail];
+        s_ble_ctx->tail =
+            (uint16_t)((s_ble_ctx->tail + 1U) % BLE_MESSAGE_FIFO_CAPACITY);
+        s_ble_ctx->used--;
         has_item = true;
     }
     taskEXIT_CRITICAL(&s_message_lock);
@@ -888,6 +901,14 @@ bool ble_message_fifo_pop(ble_message_item_s* item) {
     return has_item;
 }
 
+/*
+ * brief  : ble_message_get_last_rx.
+ * input  : item receives the latest RX snapshot.
+ * output : true when RX snapshot exists; false otherwise.
+ * type   : public
+ * theory : provide O(1) access to the most recent RX message so callers do not
+ *          need to scan or depend on FIFO retention to show latest state.
+ */
 bool ble_message_get_last_rx(ble_message_item_s* item) {
     bool has_item = false;
 
@@ -896,8 +917,8 @@ bool ble_message_get_last_rx(ble_message_item_s* item) {
     }
 
     taskENTER_CRITICAL(&s_message_lock);
-    if (s_message_has_last_rx) {
-        *item = s_message_last_rx;
+    if (s_ble_ctx->has_last_rx) {
+        *item = s_ble_ctx->last_rx;
         has_item = true;
     }
     taskEXIT_CRITICAL(&s_message_lock);
@@ -905,6 +926,14 @@ bool ble_message_get_last_rx(ble_message_item_s* item) {
     return has_item;
 }
 
+/*
+ * brief  : ble_message_get_last_tx.
+ * input  : item receives the latest TX snapshot.
+ * output : true when TX snapshot exists; false otherwise.
+ * type   : public
+ * theory : provide O(1) access to the most recent TX message for quick status
+ *          display and diagnostics independent of FIFO consumption order.
+ */
 bool ble_message_get_last_tx(ble_message_item_s* item) {
     bool has_item = false;
 
@@ -913,8 +942,8 @@ bool ble_message_get_last_tx(ble_message_item_s* item) {
     }
 
     taskENTER_CRITICAL(&s_message_lock);
-    if (s_message_has_last_tx) {
-        *item = s_message_last_tx;
+    if (s_ble_ctx->has_last_tx) {
+        *item = s_ble_ctx->last_tx;
         has_item = true;
     }
     taskEXIT_CRITICAL(&s_message_lock);
@@ -922,6 +951,14 @@ bool ble_message_get_last_tx(ble_message_item_s* item) {
     return has_item;
 }
 
+/*
+ * brief  : ble_message_get_stats.
+ * input  : stats receives aggregated FIFO and traffic counters.
+ * output : none.
+ * type   : public
+ * theory : snapshot counters under one critical section so callers read a
+ *          coherent view of queue usage and dropped/traffic totals.
+ */
 void ble_message_get_stats(ble_message_stats_s* stats) {
     if (stats == NULL) {
         return;
@@ -934,11 +971,11 @@ void ble_message_get_stats(ble_message_stats_s* stats) {
     }
 
     taskENTER_CRITICAL(&s_message_lock);
-    stats->fifo_ready = s_message_fifo_ready;
-    stats->fifo_used = s_message_used;
+    stats->fifo_ready = s_ble_ctx->fifo_ready;
+    stats->fifo_used = s_ble_ctx->used;
     stats->fifo_capacity = BLE_MESSAGE_FIFO_CAPACITY;
-    stats->rx_total = s_message_rx_total;
-    stats->tx_total = s_message_tx_total;
-    stats->dropped_total = s_message_dropped_total;
+    stats->rx_total = s_ble_ctx->rx_total;
+    stats->tx_total = s_ble_ctx->tx_total;
+    stats->dropped_total = s_ble_ctx->dropped_total;
     taskEXIT_CRITICAL(&s_message_lock);
 }

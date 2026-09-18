@@ -37,6 +37,7 @@ static const print_ui_cmd_s s_print_cmds[PRINT_UI_CMD_COUNT] = {
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: delegate clear-cache behavior to printer driver and keep UI action thin.
  */
 static esp_err_t _print_cmd_clear(void) {
     return printer_clear_cache();
@@ -47,6 +48,7 @@ static esp_err_t _print_cmd_clear(void) {
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: provide a fixed paper-feed action so manual operation is deterministic.
  */
 static esp_err_t _print_cmd_feed(void) {
     return printer_feed_lines(10U);
@@ -57,6 +59,7 @@ static esp_err_t _print_cmd_feed(void) {
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: run a canned image sequence to validate transfer and print pipeline quickly.
  */
 static esp_err_t _print_cmd_image(void) {
     // const char* bin[] = {
@@ -83,6 +86,7 @@ static esp_err_t _print_cmd_image(void) {
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: collect latest runtime metrics and format them into printable ASCII report lines.
  */
 static esp_err_t _print_cmd_text(void) {
     esp_err_t ret = ESP_OK;
@@ -164,6 +168,7 @@ static esp_err_t _print_cmd_text(void) {
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: configure barcode parameters, emit payload, then restore baseline print alignment.
  */
 static esp_err_t _print_cmd_qrcode(void) {
     static const uint8_t qr_payload[] = "https://xiao-zhi.local/qr-demo";
@@ -206,6 +211,7 @@ static esp_err_t _print_cmd_qrcode(void) {
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: toggle the auto-print state machine between start and stop with fixed interval reset.
  */
 static esp_err_t _print_cmd_Auto(void) {
     if (automatic_mode.action == Act_Start) {
@@ -227,6 +233,7 @@ static esp_err_t _print_cmd_Auto(void) {
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: centralize LVGL object validity checks to guard all UI updates uniformly.
  */
 static bool _print_obj_valid(lv_obj_t* obj) {
     return (obj != NULL) && lv_obj_is_valid(obj);
@@ -237,6 +244,7 @@ static bool _print_obj_valid(lv_obj_t* obj) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: map selection state to color, border, and shadow so command focus is visually explicit.
  */
 static void _print_apply_command_tile_style(lv_obj_t* btn,
                                             lv_obj_t* symbol_label,
@@ -276,6 +284,7 @@ static void _print_apply_command_tile_style(lv_obj_t* btn,
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: convert readiness/validity flags into consistent status color semantics.
  */
 static void _print_apply_status_title_style(lv_obj_t* label,
                                             bool printer_ready,
@@ -300,6 +309,7 @@ static void _print_apply_status_title_style(lv_obj_t* label,
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: build metric cards through one factory to keep layout and typography consistent.
  */
 static lv_obj_t* _print_open_metric_card(lv_obj_t* parent,
                                          lv_align_t align,
@@ -380,6 +390,7 @@ static lv_obj_t* _print_open_metric_card(lv_obj_t* parent,
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: update status text under lock and mark UI dirty for deferred render in timer context.
  */
 static void _print_set_status_text(print_ui_runtime_s* runtime, const char* fmt, ...) {
     char local_text[PRINT_UI_TEXT_LEN] = { 0 };
@@ -404,6 +415,7 @@ static void _print_set_status_text(print_ui_runtime_s* runtime, const char* fmt,
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: stage action feedback atomically so task and UI contexts stay race-safe.
  */
 static void _print_set_action_text(print_ui_runtime_s* runtime, const char* fmt, ...) {
     char local_text[PRINT_UI_TEXT_LEN] = { 0 };
@@ -428,6 +440,7 @@ static void _print_set_action_text(print_ui_runtime_s* runtime, const char* fmt,
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: isolate init attempt and synchronize runtime flags/message in one path.
  */
 static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime) {
     esp_err_t ret = ESP_FAIL;
@@ -460,6 +473,7 @@ static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: poll device status and mirror sampled telemetry into UI runtime cache.
  */
 static void _obtain_print_profile(print_ui_runtime_s* runtime) {
     esp_err_t ret = ESP_FAIL;
@@ -507,6 +521,7 @@ static void _obtain_print_profile(print_ui_runtime_s* runtime) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: maintain cyclic command index updates with lock protection and user feedback text.
  */
 static void _print_select_command(print_ui_runtime_s* runtime, bool next) {
     uint8_t cmd_count = 0U;
@@ -542,6 +557,7 @@ static void _print_select_command(print_ui_runtime_s* runtime, bool next) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: gate execution by readiness, run selected command, then refresh profile and action state.
  */
 static void _print_execute_selected_command(print_ui_runtime_s* runtime) {
     esp_err_t ret = ESP_OK;
@@ -604,6 +620,7 @@ static void _print_execute_selected_command(print_ui_runtime_s* runtime) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: apply a dirty-flag snapshot from runtime cache to LVGL widgets in one render pass.
  */
 static void _print_sync_ui(void* param) {
     print_ui_runtime_s* runtime = (print_ui_runtime_s*)param;
@@ -710,6 +727,7 @@ static void _print_sync_ui(void* param) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: bridge periodic LVGL timer ticks to centralized UI synchronization logic.
  */
 static void _print_ui_timer_cb(lv_timer_t* timer) {
     print_ui_runtime_s* runtime = NULL;
@@ -727,6 +745,7 @@ static void _print_ui_timer_cb(lv_timer_t* timer) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: time-slice automatic print workflow by interval counter and paper-ready checks.
  */
 static void _print_event_automatic_mode(print_ui_runtime_s* runtime) {
     const char* files[] = {
@@ -763,6 +782,7 @@ static void _print_event_automatic_mode(print_ui_runtime_s* runtime) {
  * input : see parameters.
  * output: none.
  * type  : private
+ * theory: run a single cooperative loop for input scan, telemetry poll, alarm, auto mode and retry.
  */
 static void _print_ui_task(void* param) {
     print_ui_runtime_s* runtime = (print_ui_runtime_s*)param;
@@ -837,6 +857,7 @@ static void _print_ui_task(void* param) {
  * input : lcd_w - LCD width; lcd_h - LCD height.
  * output: Created LVGL screen object.
  * type  : public
+ * theory: build full screen composition once, then drive state changes via runtime cache and timer.
  */
 lv_obj_t* print_open_screen(lv_obj_t* parent,
                             lv_coord_t area_w,
@@ -1159,6 +1180,7 @@ lv_obj_t* print_open_screen(lv_obj_t* parent,
  * input : see parameters.
  * output: none.
  * type  : public
+ * theory: stop asynchronous resources first, then deinit device and release UI tree deterministically.
  */
 void print_close_screen(lv_obj_t* screen) {
     esp_err_t ret = ESP_OK;

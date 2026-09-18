@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from at_client import AtClient, AtPidGains
 from ble_manager import BleManager
 
 
@@ -191,6 +192,7 @@ class SteeringScopeWidget(QWidget):
 class SteeringTabController:
     def __init__(self, ble_api: BleManager, tab_root: QWidget) -> None:
         self._ble = ble_api
+        self._at = AtClient(self._ble.send_text)
         self._root = tab_root
         self._is_connected = False
         self._angle_syncing = False
@@ -343,6 +345,10 @@ class SteeringTabController:
         self._ble.rx_signal.connect(self._on_ble_rx)
         self._ble.tx_signal.connect(self._on_ble_tx)
 
+        self._at.on_pid(self._on_at_pid)
+        self._at.on_ok(self._on_at_ok)
+        self._at.on_error(self._on_at_error)
+
     def _current_scope_window_sec(self) -> float:
         data = self.scope_window_combo.currentData()
         if isinstance(data, (int, float)):
@@ -368,6 +374,8 @@ class SteeringTabController:
         self._set_command_widgets_enabled(connected)
         if not connected:
             self._append_note("Steering tab ready. Connect BLE device first.")
+        else:
+            self._at.send_pid_get()
 
     def _on_scope_window_changed(self) -> None:
         self._scope.set_window_seconds(self._current_scope_window_sec())
@@ -426,10 +434,7 @@ class SteeringTabController:
         kp = self.kp_spin.value()
         ki = self.ki_spin.value()
         kd = self.kd_spin.value()
-        out_limit = self.pid_out_limit_spin.value()
-        self._send_command(
-            f"STEER_PID kp={kp:.4f} ki={ki:.4f} kd={kd:.4f} out={out_limit:.1f}"
-        )
+        self._at.send_pid_set(kp=kp, ki=ki, kd=kd)
 
     def _on_reset_i_clicked(self) -> None:
         self._send_command("STEER_PID_RESET_I")
@@ -460,9 +465,34 @@ class SteeringTabController:
 
         for line in lines:
             self._append_log(f"RX < {line}")
+            if self._at.handle_rx_line(line):
+                continue
             telemetry = self._parse_telemetry_line(line)
             if telemetry:
                 self._apply_telemetry(telemetry)
+
+    def _on_at_pid(self, pid: AtPidGains) -> None:
+        if not self.kp_spin.hasFocus():
+            self.kp_spin.setValue(pid.kp)
+        if not self.ki_spin.hasFocus():
+            self.ki_spin.setValue(pid.ki)
+        if not self.kd_spin.hasFocus():
+            self.kd_spin.setValue(pid.kd)
+        self._append_note(
+            f"AT PID synced: KP={pid.kp:.4f} KI={pid.ki:.4f} KD={pid.kd:.4f}"
+        )
+
+    def _on_at_ok(self, message: str) -> None:
+        if message:
+            self._append_note(f"AT OK: {message}")
+        else:
+            self._append_note("AT OK")
+
+    def _on_at_error(self, message: str) -> None:
+        if message:
+            self._append_note(f"AT ERROR: {message}")
+        else:
+            self._append_note("AT ERROR")
 
     def _append_note(self, text: str) -> None:
         self._append_log(f"SYS < {text}")

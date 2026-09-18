@@ -5,6 +5,13 @@
 static bool is_inited = false;
 static t_servo_ctr* servo_ctr = NULL;
 
+/*
+ * brief : _servo_perform_motor.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ * theory: map abstract motor direction to dual PWM outputs and apply raw duty immediately.
+ */
 static void _servo_perform_motor(e_motor_direction dir, uint8_t duty) {
     if (servo_ctr == NULL) {
         return;
@@ -38,6 +45,13 @@ static void _servo_perform_motor(e_motor_direction dir, uint8_t duty) {
     gpba02b_set_pwm_raw(SERVO_PWMB_PORT, SERVO_PWMB_PIN, servo_ctr->pwm_b);
 }
 
+/*
+ * brief : servo_get_adc_value.
+ * input : none.
+ * output: return value from this function.
+ * type  : public
+ * theory: read the latest configured ADC channel and expose it as servo feedback sample.
+ */
 uint16_t servo_get_adc_value(void) {
     int adc_val = 0;
     if (servo_ctr == NULL) {
@@ -48,6 +62,13 @@ uint16_t servo_get_adc_value(void) {
     return (uint16_t)adc_val;
 }
 
+/*
+ * brief : servo_debug_profile.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: execute a short directional pulse pattern then sample ADC for quick functional diagnostics.
+ */
 int servo_debug_profile(btn_status_e btn) {
     if (btn != Btn_Up_Click && btn != Btn_Down_Click) {
         return -1;
@@ -73,6 +94,7 @@ int servo_debug_profile(btn_status_e btn) {
  * input : none.
  * output: return value from this function.
  * type  : public
+ * theory: allocate runtime state, configure ADC/PWM peripherals, and enter safe stopped output state.
  */
 esp_err_t servo_init_hw(void) {
     esp_err_t ret = ESP_OK;
@@ -158,6 +180,7 @@ esp_err_t servo_init_hw(void) {
  * input : none.
  * output: return value from this function.
  * type  : public
+ * theory: drive PWM to zero, release ADC runtime dependencies, and clear module ownership state.
  */
 esp_err_t servo_deinit_hw(void) {
     esp_err_t ret_a = ESP_OK;

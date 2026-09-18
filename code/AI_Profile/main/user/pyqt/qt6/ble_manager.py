@@ -181,7 +181,6 @@ class BleManager(QObject):
 
         self._client = client
         self._connected_name = name or address
-        self.connected_signal.emit(True, self._connected_name)
         self.log_signal.emit(f"Connected: {self._connected_name}")
 
         if self._tx_uuid:
@@ -190,6 +189,8 @@ class BleManager(QObject):
                 self.log_signal.emit(f"Notify subscribed: {self._tx_uuid}")
             except Exception as exc:
                 self.log_signal.emit(f"Notify subscribe failed: {exc}")
+
+        self.connected_signal.emit(True, self._connected_name)
 
     async def _disconnect_async(self, silent: bool) -> None:
         if self._client is None:

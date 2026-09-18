@@ -18,6 +18,7 @@ static uint32_t s_batvol_diag_read_count = 0U;
  * input : see parameters.
  * output: return value from this function.
  * type  : private
+ * theory: prefer PSRAM for runtime buffer and fall back to internal RAM on demand.
  */
 static void* _batvol_alloc_cfg(size_t size) {
     void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -32,6 +33,7 @@ static void* _batvol_alloc_cfg(size_t size) {
  * input : none.
  * output: none.
  * type  : private
+ * theory: optionally discharge ADC input parasitic charge before sampling to stabilize readings.
  */
 static void _batvol_diag_pre_discharge(void) {
 #if BATVOL_DIAG_PRE_DISCHARGE_ENABLE
@@ -64,6 +66,7 @@ static void _batvol_diag_pre_discharge(void) {
  * input : none.
  * output: none.
  * type  : private
+ * theory: release active ADC calibration handle and reset calibration state flags.
  */
 static void _batvol_deinit_adc_cali(void) {
     if (s_bat_adc_cali_handle == NULL) {
@@ -86,6 +89,7 @@ static void _batvol_deinit_adc_cali(void) {
  * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: create supported calibration scheme so raw ADC values map to millivolts.
  */
 static esp_err_t _batvol_init_adc_cali(void) {
     esp_err_t ret = ESP_ERR_NOT_SUPPORTED;
@@ -126,6 +130,7 @@ static esp_err_t _batvol_init_adc_cali(void) {
  * input : none.
  * output: return value from this function.
  * type  : public
+ * theory: initialize ADC unit/channel and optional calibration exactly once for battery sensing.
  */
 esp_err_t batvol_init_cfg(void) {
     esp_err_t ret = ESP_OK;
@@ -243,6 +248,7 @@ esp_err_t batvol_init_cfg(void) {
  * input : none.
  * output: return value from this function.
  * type  : public
+ * theory: stop ADC resources and free runtime config so module can be reinitialized cleanly.
  */
 esp_err_t batvol_deinit_cfg(void) {
     esp_err_t ret = ESP_OK;
@@ -274,6 +280,13 @@ esp_err_t batvol_deinit_cfg(void) {
     return ret;
 }
 
+/*
+ * brief : batvol_read_iovol.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: average multiple ADC samples, apply calibration/fallback conversion, and output IO pin voltage.
+ */
 esp_err_t batvol_read_iovol(uint16_t* io_vol) {
     esp_err_t ret = ESP_OK;
     int raw = 0;
@@ -382,6 +395,7 @@ esp_err_t batvol_read_iovol(uint16_t* io_vol) {
  * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: convert measured divider-node voltage into battery voltage using resistor ratio.
  */
 esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv) {
     esp_err_t ret = ESP_OK;
