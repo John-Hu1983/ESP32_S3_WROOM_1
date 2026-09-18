@@ -61,6 +61,7 @@ extern "C" {
 
 #define GPBA02B_PWM_PERIOD_STEPS     (256u)
 #define GPBA02B_PWM_DUTY_PERCENT_MAX (100u)
+#define GPBA02B_PWM_DUTY_RAW_MAX     (GPBA02B_PWM_PERIOD_STEPS - 1u)
 // clang-format on
 
 typedef enum {
@@ -129,7 +130,9 @@ esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin);
 
 esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t frequency);
 
-esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent);
+esp_err_t gpba02b_set_pwm_raw(gpba02b_port_t port, uint8_t pin, uint16_t duty_raw);
+
+esp_err_t gpba02b_set_pwm_percent(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent);
 
 esp_err_t gpba02b_read_register(uint8_t reg, uint8_t* value);
 

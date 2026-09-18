@@ -412,8 +412,8 @@ esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv) {
     bat_mv_u32 = (uint32_t)io_mv;
 #else
     divider_sum = (uint32_t)up_r + (uint32_t)low_r;
-    bat_mv_u32 =
-        ((((uint32_t)io_mv) * divider_sum) + ((uint32_t)low_r / 2U)) / (uint32_t)low_r;
+    bat_mv_u32 = ((((uint32_t)io_mv) * divider_sum) + ((uint32_t)low_r / 2U))
+        / (uint32_t)low_r;
 #endif
 
     if (bat_mv_u32 > UINT16_MAX) {

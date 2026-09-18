@@ -26,14 +26,14 @@ gpba02b_config_t g_gpba02b_config = {
  */
 static uint8_t _gpba02b_get_buf(gpba02b_port_t port) {
     switch (port) {
-        case GPBA02B_PORT_A:
-            return GPBA02B_REG_BUFA;
-        case GPBA02B_PORT_B:
-            return GPBA02B_REG_BUFB;
-        case GPBA02B_PORT_C:
-            return GPBA02B_REG_BUFC;
-        default:
-            return GPBA02B_REG_BUFA;
+    case GPBA02B_PORT_A:
+        return GPBA02B_REG_BUFA;
+    case GPBA02B_PORT_B:
+        return GPBA02B_REG_BUFB;
+    case GPBA02B_PORT_C:
+        return GPBA02B_REG_BUFC;
+    default:
+        return GPBA02B_REG_BUFA;
     }
 }
 
@@ -45,14 +45,14 @@ static uint8_t _gpba02b_get_buf(gpba02b_port_t port) {
  */
 static uint8_t _gpba02b_get_dir(gpba02b_port_t port) {
     switch (port) {
-        case GPBA02B_PORT_A:
-            return GPBA02B_REG_DIRA;
-        case GPBA02B_PORT_B:
-            return GPBA02B_REG_DIRB;
-        case GPBA02B_PORT_C:
-            return GPBA02B_REG_DIRC;
-        default:
-            return GPBA02B_REG_DIRA;
+    case GPBA02B_PORT_A:
+        return GPBA02B_REG_DIRA;
+    case GPBA02B_PORT_B:
+        return GPBA02B_REG_DIRB;
+    case GPBA02B_PORT_C:
+        return GPBA02B_REG_DIRC;
+    default:
+        return GPBA02B_REG_DIRA;
     }
 }
 
@@ -64,14 +64,14 @@ static uint8_t _gpba02b_get_dir(gpba02b_port_t port) {
  */
 static uint8_t _gpba02b_get_att(gpba02b_port_t port) {
     switch (port) {
-        case GPBA02B_PORT_A:
-            return GPBA02B_REG_ATTA;
-        case GPBA02B_PORT_B:
-            return GPBA02B_REG_ATTB;
-        case GPBA02B_PORT_C:
-            return GPBA02B_REG_ATTC;
-        default:
-            return GPBA02B_REG_ATTA;
+    case GPBA02B_PORT_A:
+        return GPBA02B_REG_ATTA;
+    case GPBA02B_PORT_B:
+        return GPBA02B_REG_ATTB;
+    case GPBA02B_PORT_C:
+        return GPBA02B_REG_ATTC;
+    default:
+        return GPBA02B_REG_ATTA;
     }
 }
 
@@ -83,14 +83,14 @@ static uint8_t _gpba02b_get_att(gpba02b_port_t port) {
  */
 static uint8_t _gpba02b_get_data(gpba02b_port_t port) {
     switch (port) {
-        case GPBA02B_PORT_A:
-            return GPBA02B_REG_DATAA;
-        case GPBA02B_PORT_B:
-            return GPBA02B_REG_DATAB;
-        case GPBA02B_PORT_C:
-            return GPBA02B_REG_DATAC;
-        default:
-            return GPBA02B_REG_DATAA;
+    case GPBA02B_PORT_A:
+        return GPBA02B_REG_DATAA;
+    case GPBA02B_PORT_B:
+        return GPBA02B_REG_DATAB;
+    case GPBA02B_PORT_C:
+        return GPBA02B_REG_DATAC;
+    default:
+        return GPBA02B_REG_DATAA;
     }
 }
 
@@ -102,24 +102,24 @@ static uint8_t _gpba02b_get_data(gpba02b_port_t port) {
  */
 static uint32_t _gpba02b_get_div(uint8_t div_sel) {
     switch (div_sel & GPBA02B_PWM_DIV_SEL_MASK) {
-        case 0u:
-            return 1u;
-        case 1u:
-            return 2u;
-        case 2u:
-            return 4u;
-        case 3u:
-            return 16u;
-        case 4u:
-            return 32u;
-        case 5u:
-            return 64u;
-        case 6u:
-            return 128u;
-        case 7u:
-            return 256u;
-        default:
-            return 1u;
+    case 0u:
+        return 1u;
+    case 1u:
+        return 2u;
+    case 2u:
+        return 4u;
+    case 3u:
+        return 16u;
+    case 4u:
+        return 32u;
+    case 5u:
+        return 64u;
+    case 6u:
+        return 128u;
+    case 7u:
+        return 256u;
+    default:
+        return 1u;
     }
 }
 
@@ -167,8 +167,8 @@ static esp_err_t _gpba02b_run_xfer(uint8_t tx0, uint8_t tx1, uint8_t* rx1) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    uint8_t tx_buf[2] = {tx0, tx1};
-    uint8_t rx_buf[2] = {0, 0};
+    uint8_t tx_buf[2] = { tx0, tx1 };
+    uint8_t rx_buf[2] = { 0, 0 };
 
     spi_transaction_t t = {
         .flags = 0,
@@ -273,8 +273,9 @@ static uint8_t _gpba02b_get_duty(uint8_t duty_percent) {
         return 0xFFu;
     }
 
-    uint32_t duty_raw = ((((uint32_t)duty_percent) * (GPBA02B_PWM_PERIOD_STEPS - 1u)) + 50u) /
-                        GPBA02B_PWM_DUTY_PERCENT_MAX;
+    uint32_t duty_raw =
+        ((((uint32_t)duty_percent) * (GPBA02B_PWM_PERIOD_STEPS - 1u)) + 50u)
+        / GPBA02B_PWM_DUTY_PERCENT_MAX;
     return (uint8_t)duty_raw;
 }
 
@@ -301,11 +302,14 @@ static esp_err_t _gpba02b_get_dutyreg(gpba02b_port_t port, uint8_t pin, uint8_t*
     if (port == GPBA02B_PORT_C) {
         if (pin == 0u) {
             *reg = GPBA02B_REG_PC_DUTY0;
-        } else if (pin == 1u) {
+        }
+        else if (pin == 1u) {
             *reg = GPBA02B_REG_PC_DUTY1;
-        } else if (pin == 2u) {
+        }
+        else if (pin == 2u) {
             *reg = GPBA02B_REG_PC_DUTY2;
-        } else {
+        }
+        else {
             *reg = (uint8_t)(GPBA02B_REG_PC_DUTY3 + (pin - 3u));
         }
         return ESP_OK;
@@ -344,8 +348,8 @@ esp_err_t gpba02b_init_object(void) {
     }
 
     if (config->initialize_bus) {
-        if (config->sclk_io_num == GPIO_NUM_NC || config->mosi_io_num == GPIO_NUM_NC ||
-            config->miso_io_num == GPIO_NUM_NC) {
+        if (config->sclk_io_num == GPIO_NUM_NC || config->mosi_io_num == GPIO_NUM_NC
+            || config->miso_io_num == GPIO_NUM_NC) {
             return ESP_ERR_INVALID_ARG;
         }
 
@@ -440,7 +444,9 @@ esp_err_t gpba02b_deinit(void) {
  * output : ESP_OK on success, error code on failure.
  * type   : public
  */
-esp_err_t gpba02b_set_io_mode(gpba02b_port_t port, uint8_t pin, gpba02b_io_style_t style) {
+esp_err_t gpba02b_set_io_mode(gpba02b_port_t port,
+                              uint8_t pin,
+                              gpba02b_io_style_t style) {
     esp_err_t err = _gpba02b_chk_pin(port, pin);
     if (err != ESP_OK) {
         return err;
@@ -469,41 +475,41 @@ esp_err_t gpba02b_set_io_mode(gpba02b_port_t port, uint8_t pin, gpba02b_io_style
     }
 
     switch (style) {
-        case GPBA02B_IO_STYLE_INPUT_HIGH_Z:
-            buf_val &= (uint8_t)~mask;
-            dir_val &= (uint8_t)~mask;
-            att_val &= (uint8_t)~mask;
-            break;
-        case GPBA02B_IO_STYLE_INPUT_PULL_LOW:
-            buf_val |= mask;
-            dir_val &= (uint8_t)~mask;
-            att_val &= (uint8_t)~mask;
-            break;
-        case GPBA02B_IO_STYLE_INPUT_PULL_HIGH:
-            buf_val |= mask;
-            dir_val &= (uint8_t)~mask;
-            att_val |= mask;
-            break;
-        case GPBA02B_IO_STYLE_OUTPUT_CMOS:
-            dir_val |= mask;
-            att_val &= (uint8_t)~mask;
-            break;
-        case GPBA02B_IO_STYLE_OUTPUT_CMOS_INVERTED:
-            dir_val |= mask;
-            att_val |= mask;
-            break;
-        case GPBA02B_IO_STYLE_OUTPUT_OPEN_DRAIN_NMOS:
-            buf_val &= (uint8_t)~mask;
-            dir_val &= (uint8_t)~mask;
-            att_val &= (uint8_t)~mask;
-            break;
-        case GPBA02B_IO_STYLE_OUTPUT_OPEN_DRAIN_PMOS:
-            buf_val &= (uint8_t)~mask;
-            dir_val &= (uint8_t)~mask;
-            att_val |= mask;
-            break;
-        default:
-            return ESP_ERR_INVALID_ARG;
+    case GPBA02B_IO_STYLE_INPUT_HIGH_Z:
+        buf_val &= (uint8_t)~mask;
+        dir_val &= (uint8_t)~mask;
+        att_val &= (uint8_t)~mask;
+        break;
+    case GPBA02B_IO_STYLE_INPUT_PULL_LOW:
+        buf_val |= mask;
+        dir_val &= (uint8_t)~mask;
+        att_val &= (uint8_t)~mask;
+        break;
+    case GPBA02B_IO_STYLE_INPUT_PULL_HIGH:
+        buf_val |= mask;
+        dir_val &= (uint8_t)~mask;
+        att_val |= mask;
+        break;
+    case GPBA02B_IO_STYLE_OUTPUT_CMOS:
+        dir_val |= mask;
+        att_val &= (uint8_t)~mask;
+        break;
+    case GPBA02B_IO_STYLE_OUTPUT_CMOS_INVERTED:
+        dir_val |= mask;
+        att_val |= mask;
+        break;
+    case GPBA02B_IO_STYLE_OUTPUT_OPEN_DRAIN_NMOS:
+        buf_val &= (uint8_t)~mask;
+        dir_val &= (uint8_t)~mask;
+        att_val &= (uint8_t)~mask;
+        break;
+    case GPBA02B_IO_STYLE_OUTPUT_OPEN_DRAIN_PMOS:
+        buf_val &= (uint8_t)~mask;
+        dir_val &= (uint8_t)~mask;
+        att_val |= mask;
+        break;
+    default:
+        return ESP_ERR_INVALID_ARG;
     }
 
     /* Write order avoids glitches for styles that depend on BUFx first. */
@@ -589,14 +595,17 @@ esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level
             /* Normal CMOS output: BUFx bit is output level. */
             if (normalized_level != 0u) {
                 buf_val |= mask;
-            } else {
+            }
+            else {
                 buf_val &= (uint8_t)~mask;
             }
-        } else {
+        }
+        else {
             /* Inverted CMOS output: BUFx bit is inverted level. */
             if (normalized_level != 0u) {
                 buf_val &= (uint8_t)~mask;
-            } else {
+            }
+            else {
                 buf_val |= mask;
             }
         }
@@ -609,14 +618,17 @@ esp_err_t gpba02b_write_io_level(gpba02b_port_t port, uint8_t pin, uint8_t level
             /* NMOS: DIR=1 drives low, DIR=0 floating. */
             if (normalized_level != 0u) {
                 dir_val &= (uint8_t)~mask;
-            } else {
+            }
+            else {
                 dir_val |= mask;
             }
-        } else {
+        }
+        else {
             /* PMOS: DIR=1 drives high, DIR=0 floating. */
             if (normalized_level != 0u) {
                 dir_val |= mask;
-            } else {
+            }
+            else {
                 dir_val &= (uint8_t)~mask;
             }
         }
@@ -662,7 +674,8 @@ esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin) {
 
     if (port == GPBA02B_PORT_A) {
         s_ctx.pa_pwm_enable_shadow |= mask;
-        return _gpba02b_write_reg(GPBA02B_REG_PA_PWM_ENABLE, s_ctx.pa_pwm_enable_shadow);
+        return _gpba02b_write_reg(GPBA02B_REG_PA_PWM_ENABLE,
+                                  s_ctx.pa_pwm_enable_shadow);
     }
 
     s_ctx.pc_pwm_enable_shadow |= mask;
@@ -676,8 +689,8 @@ esp_err_t gpba02b_config_pwm_mode(gpba02b_port_t port, uint8_t pin) {
  * type   : public
  */
 esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t frequency) {
-    if ((port != GPBA02B_PORT_A && port != GPBA02B_PORT_C) ||
-        !_gpba02b_chk_freq(frequency)) {
+    if ((port != GPBA02B_PORT_A && port != GPBA02B_PORT_C)
+        || !_gpba02b_chk_freq(frequency)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -687,31 +700,36 @@ esp_err_t gpba02b_set_pwm_frequency(gpba02b_port_t port, gpba02b_pwm_freq_t freq
     }
 
     uint8_t div_sel = ((uint8_t)frequency) & GPBA02B_PWM_DIV_SEL_MASK;
-    uint32_t nominal_hz =
-        GPBA02B_PWM_BASE_CLOCK_HZ / (_gpba02b_get_div(div_sel) * GPBA02B_PWM_PERIOD_STEPS);
+    uint32_t nominal_hz = GPBA02B_PWM_BASE_CLOCK_HZ
+        / (_gpba02b_get_div(div_sel) * GPBA02B_PWM_PERIOD_STEPS);
 
-    ESP_LOGI(TAG, "PWM frequency set: nominal=%uHz div=%u", (unsigned)nominal_hz,
+    ESP_LOGI(TAG,
+             "PWM frequency set: nominal=%uHz div=%u",
+             (unsigned)nominal_hz,
              (unsigned)_gpba02b_get_div(div_sel));
 
     if (port == GPBA02B_PORT_A) {
-        s_ctx.pwmck_shadow = (uint8_t)((s_ctx.pwmck_shadow & (uint8_t)~GPBA02B_PWMCK_PA_DIV_MASK) |
-                                       (uint8_t)(div_sel << GPBA02B_PWMCK_PA_DIV_SHIFT));
-    } else {
         s_ctx.pwmck_shadow =
-            (uint8_t)((s_ctx.pwmck_shadow & (uint8_t)~GPBA02B_PWMCK_PC_DIV_MASK) | div_sel);
+            (uint8_t)((s_ctx.pwmck_shadow & (uint8_t)~GPBA02B_PWMCK_PA_DIV_MASK)
+                      | (uint8_t)(div_sel << GPBA02B_PWMCK_PA_DIV_SHIFT));
+    }
+    else {
+        s_ctx.pwmck_shadow =
+            (uint8_t)((s_ctx.pwmck_shadow & (uint8_t)~GPBA02B_PWMCK_PC_DIV_MASK)
+                      | div_sel);
     }
 
     return _gpba02b_write_reg(GPBA02B_REG_PWMCK, s_ctx.pwmck_shadow);
 }
 
 /*
- * brief  : Set PWM duty for one pin.
- * input  : port - PWM port (A/C), pin - PWM pin, duty_percent - duty percent value.
+ * brief  : Set PWM duty for one pin using raw register value.
+ * input  : port - PWM port (A/C), pin - PWM pin, duty_raw - raw duty [0..255].
  * output : ESP_OK on success, error code on failure.
  * type   : public
  */
-esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent) {
-    if (duty_percent > GPBA02B_PWM_DUTY_PERCENT_MAX) {
+esp_err_t gpba02b_set_pwm_raw(gpba02b_port_t port, uint8_t pin, uint16_t duty_raw) {
+    if (duty_raw > GPBA02B_PWM_DUTY_RAW_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -722,11 +740,25 @@ esp_err_t gpba02b_set_pwm_duty(gpba02b_port_t port, uint8_t pin, uint8_t duty_pe
     }
 
     err = _gpba02b_open_nfunc();
-    if (err != ESP_OK) {
+    if (err != ESP_OK) { 
         return err;
     }
 
-    return _gpba02b_write_reg(reg, _gpba02b_get_duty(duty_percent));
+    return _gpba02b_write_reg(reg, (uint8_t)duty_raw);
+}
+
+/*
+ * brief  : Set PWM duty for one pin.
+ * input  : port - PWM port (A/C), pin - PWM pin, duty_percent - duty percent value.
+ * output : ESP_OK on success, error code on failure.
+ * type   : public
+ */
+esp_err_t gpba02b_set_pwm_percent(gpba02b_port_t port, uint8_t pin, uint8_t duty_percent) {
+    if (duty_percent > GPBA02B_PWM_DUTY_PERCENT_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return gpba02b_set_pwm_raw(port, pin, _gpba02b_get_duty(duty_percent));
 }
 
 /*
@@ -744,7 +776,8 @@ esp_err_t gpba02b_read_register(uint8_t reg, uint8_t* value) {
      * Per GPBA02B datasheet, non-0xH address space is write-only/special command.
      * Also 03H/07H are write-only new-function-enable registers.
      */
-    if ((reg & 0x30u) != 0u || reg == GPBA02B_REG_NEW_FUNC_03 || reg == GPBA02B_REG_NEW_FUNC_07) {
+    if ((reg & 0x30u) != 0u || reg == GPBA02B_REG_NEW_FUNC_03
+        || reg == GPBA02B_REG_NEW_FUNC_07) {
         return ESP_ERR_NOT_SUPPORTED;
     }
 
@@ -776,7 +809,9 @@ esp_err_t gpba02b_set_device_id(uint8_t device_bit) {
  * output: Device address bit value (0 or 1).
  * type  : public
  */
-uint8_t gpba02b_get_device_id(void) { return s_ctx.device_bit; }
+uint8_t gpba02b_get_device_id(void) {
+    return s_ctx.device_bit;
+}
 
 /*
  * brief : Read full 8-bit data value from one GPBA02B port.
@@ -791,4 +826,3 @@ esp_err_t gpba02b_port_read(gpba02b_port_t port, uint8_t* value) {
 
     return _gpba02b_read_reg(_gpba02b_get_data(port), value);
 }
-

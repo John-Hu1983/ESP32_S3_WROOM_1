@@ -1,5 +1,11 @@
 menu "Xiaozhi Assistant"
 
+config I2C_SUPPRESS_DEPRECATE_WARN
+    bool
+    default y
+    help
+        Suppress legacy I2C driver deprecation warning from ESP-IDF.
+
 config OTA_URL
     string "Default OTA URL"
     default "https://api.tenclass.net/xiaozhi/ota/"

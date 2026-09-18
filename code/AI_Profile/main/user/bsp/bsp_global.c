@@ -32,7 +32,7 @@ _bsp_init_pwm(gpba02b_port_t port, uint8_t pin, gpba02b_pwm_freq_t fre, uint8_t 
 {
     gpba02b_config_pwm_mode(port, pin);
     gpba02b_set_pwm_frequency(port, fre);
-    gpba02b_set_pwm_duty(port, pin, percent);
+    gpba02b_set_pwm_percent(port, pin, percent);
 }
 
 /*

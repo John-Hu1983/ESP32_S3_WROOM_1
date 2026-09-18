@@ -122,6 +122,13 @@
 #define SERVO_ADC_CHANNEL                    (ADC_CHANNEL_3)
 #define SERVO_ADC_ATTENUATION                (ADC_ATTEN_DB_12)
 #define SERVO_ADC_BITWIDTH                   (ADC_BITWIDTH_12)
+#define SERVO_PWMA_PORT                      (GPBA02B_PORT_C)
+#define SERVO_PWMA_PIN                       (7)
+#define SERVO_PWMB_PORT                      (GPBA02B_PORT_C)
+#define SERVO_PWMB_PIN                       (6)
+
+
+
 
 /*
     Camera
