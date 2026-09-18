@@ -1,6 +1,9 @@
 #include "desktop_app.h"
 
-#include "driver/temperature_sensor.h"
+#include "cJSON.h"
+#include "esp_crt_bundle.h"
+#include "esp_http_client.h"
+#include "nvs.h"
 
 #include "user/gui/about_ui.h"
 #include "user/gui/bt_ui.h"
@@ -62,65 +65,493 @@ static uint32_t s_sys_info_elapsed_ms;
 static uint32_t s_time_elapsed_ms;
 static uint32_t s_time_sync_elapsed_ms;
 static uint32_t s_weather_elapsed_ms;
-static bool s_temp_sensor_ready;
-static temperature_sensor_handle_t s_temp_sensor;
+static TaskHandle_t s_weather_task_handle;
+static bool s_city_temp_valid;
+static float s_city_temp_c;
+static volatile bool s_weather_force_refresh;
+static char s_weather_city_label[DESKTOP_WEATHER_CITY_LABEL_LEN] =
+    BSP_WEATHER_CITY_LABEL;
+static char s_weather_latitude[DESKTOP_WEATHER_COORD_LEN] = BSP_WEATHER_LATITUDE;
+static char s_weather_longitude[DESKTOP_WEATHER_COORD_LEN] = BSP_WEATHER_LONGITUDE;
 #if (configUSE_TRACE_FACILITY == 1)
 static bool s_cpu_has_prev;
 static uint64_t s_cpu_prev_total_runtime;
 static uint64_t s_cpu_prev_idle_runtime;
 #endif
 
+#define DESKTOP_WEATHER_NVS_NAMESPACE "desktop_weather"
+#define DESKTOP_WEATHER_NVS_KEY_CITY  "city"
+#define DESKTOP_WEATHER_NVS_KEY_LAT   "lat"
+#define DESKTOP_WEATHER_NVS_KEY_LON   "lon"
+
+typedef struct {
+    char data[DESKTOP_WEATHER_HTTP_BUF_SIZE];
+    size_t len;
+    bool truncated;
+} desktop_weather_http_buf_s;
+
 /*
- * brief : _desktop_init_temp_sensor.
- * input : none.
- * output: return value from this function.
+ * brief : Copy source text to destination buffer safely.
+ * input : see parameters.
+ * output: none.
  * type  : private
  */
-static esp_err_t _desktop_init_temp_sensor(void) {
-    esp_err_t ret = ESP_OK;
-    temperature_sensor_config_t cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(10, 50);
-
-    if (s_temp_sensor_ready && (s_temp_sensor != NULL)) {
-        return ESP_OK;
+static void _desktop_copy_text(char* out, size_t out_len, const char* in) {
+    if ((out == NULL) || (out_len == 0U)) {
+        return;
     }
 
-    ret = temperature_sensor_install(&cfg, &s_temp_sensor);
-    if (ret != ESP_OK) {
-        s_temp_sensor = NULL;
-        return ret;
+    if (in == NULL) {
+        out[0] = '\0';
+        return;
     }
 
-    ret = temperature_sensor_enable(s_temp_sensor);
-    if (ret != ESP_OK) {
-        temperature_sensor_uninstall(s_temp_sensor);
-        s_temp_sensor = NULL;
-        return ret;
-    }
-
-    s_temp_sensor_ready = true;
-    return ESP_OK;
+    snprintf(out, out_len, "%s", in);
 }
 
 /*
- * brief : _desktop_read_temp.
+ * brief : Validate one weather location tuple.
  * input : see parameters.
  * output: return value from this function.
  * type  : private
  */
-static bool _desktop_read_temp(float* out_temp) {
+static bool _desktop_weather_location_valid(const char* city_label,
+                                            const char* latitude,
+                                            const char* longitude) {
+    if ((city_label == NULL) || (latitude == NULL) || (longitude == NULL)) {
+        return false;
+    }
+    if ((city_label[0] == '\0') || (latitude[0] == '\0') || (longitude[0] == '\0')) {
+        return false;
+    }
+
+    if (strlen(city_label) >= DESKTOP_WEATHER_CITY_LABEL_LEN) {
+        return false;
+    }
+    if (strlen(latitude) >= DESKTOP_WEATHER_COORD_LEN) {
+        return false;
+    }
+    if (strlen(longitude) >= DESKTOP_WEATHER_COORD_LEN) {
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * brief : Update in-memory weather location under caller-owned lock.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
+static bool _desktop_weather_set_locked(const char* city_label,
+                                        const char* latitude,
+                                        const char* longitude) {
+    if (!_desktop_weather_location_valid(city_label, latitude, longitude)) {
+        return false;
+    }
+
+    _desktop_copy_text(s_weather_city_label, sizeof(s_weather_city_label), city_label);
+    _desktop_copy_text(s_weather_latitude, sizeof(s_weather_latitude), latitude);
+    _desktop_copy_text(s_weather_longitude, sizeof(s_weather_longitude), longitude);
+    return true;
+}
+
+/*
+ * brief : Copy current weather location snapshot from shared state.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ */
+static bool _desktop_weather_get_snapshot(char* city_label,
+                                          size_t city_len,
+                                          char* latitude,
+                                          size_t latitude_len,
+                                          char* longitude,
+                                          size_t longitude_len) {
+    bool valid = false;
+
+    taskENTER_CRITICAL(&s_desktop_lock);
+    valid = _desktop_weather_location_valid(
+        s_weather_city_label, s_weather_latitude, s_weather_longitude
+    );
+    if (valid) {
+        _desktop_copy_text(city_label, city_len, s_weather_city_label);
+        _desktop_copy_text(latitude, latitude_len, s_weather_latitude);
+        _desktop_copy_text(longitude, longitude_len, s_weather_longitude);
+    }
+    taskEXIT_CRITICAL(&s_desktop_lock);
+
+    return valid;
+}
+
+/*
+ * brief : Persist weather location to NVS.
+ * input : none.
+ * output: return value from this function.
+ * type  : private
+ */
+static esp_err_t _desktop_weather_save_to_nvs(void) {
+    char city_label[DESKTOP_WEATHER_CITY_LABEL_LEN];
+    char latitude[DESKTOP_WEATHER_COORD_LEN];
+    char longitude[DESKTOP_WEATHER_COORD_LEN];
+    nvs_handle_t nvs_handle;
     esp_err_t ret = ESP_FAIL;
 
-    if (out_temp == NULL) {
-        return false;
+    if (!_desktop_weather_get_snapshot(city_label,
+                                       sizeof(city_label),
+                                       latitude,
+                                       sizeof(latitude),
+                                       longitude,
+                                       sizeof(longitude))) {
+        return ESP_ERR_INVALID_STATE;
     }
 
-    ret = _desktop_init_temp_sensor();
+    ret = nvs_open(DESKTOP_WEATHER_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = nvs_set_str(nvs_handle, DESKTOP_WEATHER_NVS_KEY_CITY, city_label);
+    if (ret != ESP_OK) {
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    ret = nvs_set_str(nvs_handle, DESKTOP_WEATHER_NVS_KEY_LAT, latitude);
+    if (ret != ESP_OK) {
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    ret = nvs_set_str(nvs_handle, DESKTOP_WEATHER_NVS_KEY_LON, longitude);
+    if (ret != ESP_OK) {
+        nvs_close(nvs_handle);
+        return ret;
+    }
+
+    ret = nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    return ret;
+}
+
+/*
+ * brief : Load weather location from NVS if stored.
+ * input : none.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_weather_load_from_nvs(void) {
+    nvs_handle_t nvs_handle;
+    char city_label[DESKTOP_WEATHER_CITY_LABEL_LEN];
+    char latitude[DESKTOP_WEATHER_COORD_LEN];
+    char longitude[DESKTOP_WEATHER_COORD_LEN];
+    size_t city_len = sizeof(city_label);
+    size_t latitude_len = sizeof(latitude);
+    size_t longitude_len = sizeof(longitude);
+    esp_err_t ret = ESP_FAIL;
+
+    ret = nvs_open(DESKTOP_WEATHER_NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (ret != ESP_OK) {
+        return;
+    }
+
+    ret = nvs_get_str(nvs_handle, DESKTOP_WEATHER_NVS_KEY_CITY, city_label, &city_len);
+    if (ret != ESP_OK) {
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    ret = nvs_get_str(nvs_handle, DESKTOP_WEATHER_NVS_KEY_LAT, latitude, &latitude_len);
+    if (ret != ESP_OK) {
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    ret = nvs_get_str(
+        nvs_handle, DESKTOP_WEATHER_NVS_KEY_LON, longitude, &longitude_len
+    );
+    if (ret != ESP_OK) {
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    taskENTER_CRITICAL(&s_desktop_lock);
+    (void)_desktop_weather_set_locked(city_label, latitude, longitude);
+    taskEXIT_CRITICAL(&s_desktop_lock);
+
+    nvs_close(nvs_handle);
+}
+
+bool desktop_get_weather_location(char* city_label,
+                                  size_t city_len,
+                                  char* latitude,
+                                  size_t latitude_len,
+                                  char* longitude,
+                                  size_t longitude_len) {
+    return _desktop_weather_get_snapshot(city_label,
+                                         city_len,
+                                         latitude,
+                                         latitude_len,
+                                         longitude,
+                                         longitude_len);
+}
+
+bool desktop_set_weather_location(const char* city_label,
+                                  const char* latitude,
+                                  const char* longitude) {
+    bool updated = false;
+    esp_err_t ret = ESP_FAIL;
+
+    taskENTER_CRITICAL(&s_desktop_lock);
+    updated = _desktop_weather_set_locked(city_label, latitude, longitude);
+    if (updated) {
+        s_city_temp_valid = false;
+        s_weather_force_refresh = true;
+    }
+    taskEXIT_CRITICAL(&s_desktop_lock);
+
+    if (!updated) {
         return false;
     }
 
-    ret = temperature_sensor_get_celsius(s_temp_sensor, out_temp);
-    return (ret == ESP_OK);
+    ret = _desktop_weather_save_to_nvs();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "weather location save failed: %s", esp_err_to_name(ret));
+    }
+
+    return true;
+}
+
+/*
+ * brief : Collect HTTP response chunks into fixed weather buffer.
+ * input : see parameters.
+ * output: ESP_OK always.
+ * type  : private
+ */
+static esp_err_t _desktop_weather_http_event(esp_http_client_event_t* evt) {
+    desktop_weather_http_buf_s* buf = NULL;
+    size_t free_len = 0U;
+    size_t copy_len = 0U;
+
+    if (evt == NULL) {
+        return ESP_OK;
+    }
+
+    buf = (desktop_weather_http_buf_s*)evt->user_data;
+    if (buf == NULL) {
+        return ESP_OK;
+    }
+
+    if ((evt->event_id != HTTP_EVENT_ON_DATA) || (evt->data == NULL)
+        || (evt->data_len <= 0)) {
+        return ESP_OK;
+    }
+
+    if (buf->len >= (sizeof(buf->data) - 1U)) {
+        buf->truncated = true;
+        return ESP_OK;
+    }
+
+    free_len = (sizeof(buf->data) - 1U) - buf->len;
+    copy_len = ((size_t)evt->data_len <= free_len) ? (size_t)evt->data_len : free_len;
+    if (copy_len > 0U) {
+        memcpy(&buf->data[buf->len], evt->data, copy_len);
+        buf->len += copy_len;
+        buf->data[buf->len] = '\0';
+    }
+
+    if ((size_t)evt->data_len > copy_len) {
+        buf->truncated = true;
+    }
+
+    return ESP_OK;
+}
+
+/*
+ * brief : Fetch city temperature from Open-Meteo service.
+ * input : out_temp_c - output pointer for Celsius temperature.
+ * output: ESP_OK on success, error code otherwise.
+ * type  : private
+ */
+static esp_err_t _desktop_fetch_city_temp(float* out_temp_c) {
+    char url[DESKTOP_WEATHER_URL_MAX_LEN];
+    char latitude[DESKTOP_WEATHER_COORD_LEN];
+    char longitude[DESKTOP_WEATHER_COORD_LEN];
+    desktop_weather_http_buf_s response = { 0 };
+    esp_http_client_config_t cfg = { 0 };
+    esp_http_client_handle_t client = NULL;
+    cJSON* root = NULL;
+    cJSON* current = NULL;
+    cJSON* temperature = NULL;
+    esp_err_t ret = ESP_FAIL;
+    int http_status = 0;
+
+    if (out_temp_c == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!_desktop_weather_get_snapshot(NULL,
+                                       0U,
+                                       latitude,
+                                       sizeof(latitude),
+                                       longitude,
+                                       sizeof(longitude))) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    snprintf(url,
+             sizeof(url),
+             DESKTOP_WEATHER_API_URL_FMT,
+             latitude,
+             longitude);
+
+    cfg.url = url;
+    cfg.method = HTTP_METHOD_GET;
+    cfg.timeout_ms = DESKTOP_WEATHER_HTTP_TIMEOUT_MS;
+    cfg.transport_type = HTTP_TRANSPORT_OVER_SSL;
+    cfg.crt_bundle_attach = esp_crt_bundle_attach;
+    cfg.event_handler = _desktop_weather_http_event;
+    cfg.user_data = &response;
+
+    client = esp_http_client_init(&cfg);
+    if (client == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    ret = esp_http_client_perform(client);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "weather request failed: %s", esp_err_to_name(ret));
+        goto exit;
+    }
+
+    http_status = esp_http_client_get_status_code(client);
+    if (http_status != 200) {
+        ESP_LOGW(TAG, "weather http status=%d", http_status);
+        ret = ESP_FAIL;
+        goto exit;
+    }
+
+    if ((response.len == 0U) || response.truncated) {
+        ESP_LOGW(TAG,
+                 "weather payload invalid len=%u truncated=%d",
+                 (unsigned)response.len,
+                 (int)response.truncated);
+        ret = ESP_FAIL;
+        goto exit;
+    }
+
+    root = cJSON_ParseWithLength(response.data, response.len);
+    if (root == NULL) {
+        ESP_LOGW(TAG, "weather json parse failed");
+        ret = ESP_FAIL;
+        goto exit;
+    }
+
+    current = cJSON_GetObjectItem(root, "current");
+    if (!cJSON_IsObject(current)) {
+        ESP_LOGW(TAG, "weather json current missing");
+        ret = ESP_FAIL;
+        goto exit;
+    }
+
+    temperature = cJSON_GetObjectItem(current, "temperature_2m");
+    if (!cJSON_IsNumber(temperature)) {
+        ESP_LOGW(TAG, "weather json temperature_2m missing");
+        ret = ESP_FAIL;
+        goto exit;
+    }
+
+    *out_temp_c = (float)temperature->valuedouble;
+    ret = ESP_OK;
+
+exit:
+    if (root != NULL) {
+        cJSON_Delete(root);
+    }
+    if (client != NULL) {
+        esp_http_client_cleanup(client);
+    }
+
+    return ret;
+}
+
+/*
+ * brief : Update cached city temperature for top bar rendering.
+ * input : temp_c - temperature value; valid - cache validity flag.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_set_city_temp_cache(float temp_c, bool valid) {
+    taskENTER_CRITICAL(&s_desktop_lock);
+    if (valid) {
+        s_city_temp_c = temp_c;
+    }
+    s_city_temp_valid = valid;
+    taskEXIT_CRITICAL(&s_desktop_lock);
+}
+
+/*
+ * brief : Read cached city temperature.
+ * input : out_temp_c - output pointer.
+ * output: true if cache has valid value, false otherwise.
+ * type  : private
+ */
+static bool _desktop_get_city_temp_cache(float* out_temp_c) {
+    bool valid = false;
+
+    taskENTER_CRITICAL(&s_desktop_lock);
+    valid = s_city_temp_valid;
+    if (valid && (out_temp_c != NULL)) {
+        *out_temp_c = s_city_temp_c;
+    }
+    taskEXIT_CRITICAL(&s_desktop_lock);
+
+    return valid;
+}
+
+/*
+ * brief : Periodically fetch city weather without blocking LVGL task.
+ * input : param - unused.
+ * output: none.
+ * type  : private
+ */
+static void _desktop_weather_task(void* param) {
+    uint32_t elapsed_ms = DESKTOP_WEATHER_FETCH_INTERVAL_MS;
+    float temp_c = 0.0f;
+    bool force_refresh = false;
+    esp_err_t ret = ESP_FAIL;
+
+    (void)param;
+
+    while (1) {
+        delay_ms(DESKTOP_WEATHER_TASK_PERIOD_MS);
+
+        if (!s_net_online) {
+            continue;
+        }
+
+        taskENTER_CRITICAL(&s_desktop_lock);
+        force_refresh = s_weather_force_refresh;
+        if (force_refresh) {
+            s_weather_force_refresh = false;
+        }
+        taskEXIT_CRITICAL(&s_desktop_lock);
+
+        if (!force_refresh && (elapsed_ms < DESKTOP_WEATHER_FETCH_INTERVAL_MS)) {
+            elapsed_ms += DESKTOP_WEATHER_TASK_PERIOD_MS;
+            continue;
+        }
+
+        elapsed_ms = 0U;
+        ret = _desktop_fetch_city_temp(&temp_c);
+        if (ret == ESP_OK) {
+            _desktop_set_city_temp_cache(temp_c, true);
+        }
+        else {
+            _desktop_set_city_temp_cache(0.0f, false);
+        }
+    }
 }
 
 /*
@@ -973,9 +1404,11 @@ static void _gain_real_time(void) {
  */
 static void _show_weather_detail(void) {
     const char* weather_symbol;
-    char temp_text[12];
+    char temp_text[48];
+    char city_label[DESKTOP_WEATHER_CITY_LABEL_LEN];
     float temp_val = 0.0f;
     bool temp_ok = false;
+    bool loc_ok = false;
 
     if (!_desktop_obj_valid(s_weather_label) || !_desktop_obj_valid(s_time_label)
         || !_desktop_obj_valid(s_temp_label)) {
@@ -993,12 +1426,26 @@ static void _show_weather_detail(void) {
     lv_label_set_text(s_weather_label, weather_symbol);
     lv_obj_align_to(s_weather_label, s_time_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
-    temp_ok = _desktop_read_temp(&temp_val);
+    loc_ok = _desktop_weather_get_snapshot(
+        city_label, sizeof(city_label), NULL, 0U, NULL, 0U
+    );
+    if (!loc_ok) {
+        _desktop_copy_text(city_label, sizeof(city_label), BSP_WEATHER_CITY_LABEL);
+    }
+
+    temp_ok = _desktop_get_city_temp_cache(&temp_val);
     if (temp_ok) {
-        snprintf(temp_text, sizeof(temp_text), "%.0fC", temp_val);
+        snprintf(temp_text,
+                 sizeof(temp_text),
+                 "%s %.0fC",
+                 city_label,
+                 temp_val);
     }
     else {
-        snprintf(temp_text, sizeof(temp_text), "--C");
+        snprintf(temp_text,
+                 sizeof(temp_text),
+                 "%s --C",
+                 city_label);
     }
 
     lv_label_set_text(s_temp_label, temp_text);
@@ -1044,6 +1491,8 @@ esp_err_t desktop_start_task(void) {
     esp_err_t ret;
     st7365p_cfg_t panel_cfg;
     size_t draw_buf_pixels;
+    char city_temp_text[48];
+    char city_label[DESKTOP_WEATHER_CITY_LABEL_LEN];
     esp_timer_create_args_t tick_timer_args = {
         .callback = desktop_tick_event,
         .arg = NULL,
@@ -1060,6 +1509,11 @@ esp_err_t desktop_start_task(void) {
     lv_obj_t* content;
     lv_coord_t msg_w;
     BaseType_t task_ok;
+
+    if (s_weather_task_handle != NULL) {
+        vTaskDelete(s_weather_task_handle);
+        s_weather_task_handle = NULL;
+    }
 
     st7365p_get_default_cfg(&panel_cfg);
 
@@ -1158,8 +1612,10 @@ esp_err_t desktop_start_task(void) {
     s_weather_label = NULL;
     s_time_label = NULL;
     s_msg_label = NULL;
-    s_temp_sensor_ready = false;
-    s_temp_sensor = NULL;
+    s_weather_task_handle = NULL;
+    s_city_temp_valid = false;
+    s_city_temp_c = 0.0f;
+    s_weather_force_refresh = true;
     s_net_online = false;
     s_desktop_time_valid = false;
     s_desktop_base_epoch_sec = 0U;
@@ -1173,6 +1629,8 @@ esp_err_t desktop_start_task(void) {
     s_cpu_prev_total_runtime = 0U;
     s_cpu_prev_idle_runtime = 0U;
 #endif
+
+    _desktop_weather_load_from_nvs();
 
     if (!_desktop_ensure_msg_buf()) {
         ESP_LOGE(TAG, "desktop message buffer alloc failed");
@@ -1222,7 +1680,19 @@ esp_err_t desktop_start_task(void) {
     s_temp_label = lv_label_create(top_bar);
     lv_obj_set_style_text_color(s_temp_label, lv_color_black(), 0);
     lv_obj_set_style_text_font(s_temp_label, &DESKTOP_TEXT_FONT, 0);
-    lv_label_set_text(s_temp_label, "--C");
+    if (!_desktop_weather_get_snapshot(city_label,
+                                       sizeof(city_label),
+                                       NULL,
+                                       0U,
+                                       NULL,
+                                       0U)) {
+        _desktop_copy_text(city_label, sizeof(city_label), BSP_WEATHER_CITY_LABEL);
+    }
+    snprintf(city_temp_text,
+             sizeof(city_temp_text),
+             "%s --C",
+             city_label);
+    lv_label_set_text(s_temp_label, city_temp_text);
     lv_obj_align_to(s_temp_label, s_weather_label, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     bottom_bar = lv_obj_create(scr);
@@ -1273,6 +1743,17 @@ esp_err_t desktop_start_task(void) {
     if (task_ok != pdPASS) {
         ESP_LOGE(TAG, "xTaskCreate desktop_lvgl failed");
         return ESP_FAIL;
+    }
+
+    task_ok = xTaskCreate(_desktop_weather_task,
+                          "desktop_weather",
+                          DESKTOP_WEATHER_TASK_STACK_SIZE,
+                          NULL,
+                          4,
+                          &s_weather_task_handle);
+    if (task_ok != pdPASS) {
+        s_weather_task_handle = NULL;
+        ESP_LOGW(TAG, "xTaskCreate desktop_weather failed");
     }
 
     ESP_LOGI(TAG,

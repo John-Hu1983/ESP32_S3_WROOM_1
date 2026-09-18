@@ -127,6 +127,11 @@
 #define SERVO_PWMB_PORT                      (GPBA02B_PORT_C)
 #define SERVO_PWMB_PIN                       (6)
 
+/* City weather */
+#define BSP_WEATHER_CITY_LABEL               ("Dongguan")
+#define BSP_WEATHER_LATITUDE                 ("23.0207")
+#define BSP_WEATHER_LONGITUDE                ("113.7518")
+
 /*
     Camera
 */

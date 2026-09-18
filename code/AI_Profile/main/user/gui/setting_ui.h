@@ -9,6 +9,7 @@ extern "C" {
 // clang-format off
 #define SETTING_UI_TASK_STACK_SIZE (4096U)
 #define SETTING_UI_TASK_PERIOD_MS  (10U)
+#define SETTING_UI_CITY_NAME_LEN   (24U)
 // clang-format on
 
 typedef struct {
@@ -16,6 +17,9 @@ typedef struct {
 	ui_menu_home_cb_t home_cb;
 	void* home_user_ctx;
 	btn_scan_s button_scan;
+	lv_obj_t* city_value_lab;
+	lv_obj_t* hint_lab;
+	uint8_t city_index;
 } setting_ui_runtime_s;
 
 lv_obj_t* config_open_screen(lv_obj_t* parent, lv_coord_t area_w, lv_coord_t area_h,

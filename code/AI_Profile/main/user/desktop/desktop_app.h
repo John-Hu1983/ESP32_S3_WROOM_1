@@ -47,6 +47,20 @@ extern "C" {
 #define DESKTOP_WEATHER_REFRESH_MS      (3000U)
 #define DESKTOP_REALTIME_MIN_UNIX_SEC   (1704067200ULL)
 
+#define DESKTOP_WEATHER_TASK_PERIOD_MS  (1000U)
+#define DESKTOP_WEATHER_TASK_STACK_SIZE (7168U)
+#define DESKTOP_WEATHER_FETCH_INTERVAL_MS (600000U)
+#define DESKTOP_WEATHER_HTTP_TIMEOUT_MS (4000U)
+#define DESKTOP_WEATHER_HTTP_BUF_SIZE   (768U)
+#define DESKTOP_WEATHER_URL_MAX_LEN     (192U)
+#define DESKTOP_WEATHER_CITY_LABEL_LEN  (24U)
+#define DESKTOP_WEATHER_COORD_LEN       (24U)
+#define DESKTOP_WEATHER_API_URL_FMT     ("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m&timezone=auto")
+
+#if !defined(BSP_WEATHER_CITY_LABEL) || !defined(BSP_WEATHER_LATITUDE) || !defined(BSP_WEATHER_LONGITUDE)
+#error "BSP_WEATHER_CITY_LABEL/BSP_WEATHER_LATITUDE/BSP_WEATHER_LONGITUDE must be defined in board config"
+#endif
+
 #define DESKTOP_ICON_COLS               (3U)
 #define DESKTOP_ICON_ROWS               (4U)
 #define DESKTOP_ICON_COUNT              (DESKTOP_ICON_COLS * DESKTOP_ICON_ROWS)
@@ -120,6 +134,12 @@ lv_color_t desktop_invert_color(lv_color_t color);
 
 esp_err_t desktop_start_task(void);
 void desktop_post_message(const char* msg);
+bool desktop_get_weather_location(char* city_label, size_t city_len,
+                                  char* latitude, size_t latitude_len,
+                                  char* longitude, size_t longitude_len);
+bool desktop_set_weather_location(const char* city_label,
+                                  const char* latitude,
+                                  const char* longitude);
 
 #ifdef __cplusplus
 }
