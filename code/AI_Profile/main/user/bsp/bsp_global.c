@@ -130,11 +130,11 @@ void bsp_init_env(void)
     esp_err_t ble_ret = ESP_OK;
 
     speaker_set_volume(90);
-    ble_ret = ble_start();
+    ble_ret = ble_start_nimble();
     if (ble_ret != ESP_OK) {
         ESP_LOGE(
             TAG,
-            "ble_start failed in bsp_init_env: %s",
+            "ble_start_nimble failed in bsp_init_env: %s",
             esp_err_to_name(ble_ret)
         );
     }

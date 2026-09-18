@@ -139,7 +139,7 @@ static void _bt_ui_rebuild_text(
  * type  : private
  */
 static void
-_bt_ui_append_ble_item(bt_ui_runtime_s* runtime, const ble_debug_item_s* item)
+_bt_ui_append_ble_item(bt_ui_runtime_s* runtime, const ble_message_item_s* item)
 {
     char line[BT_UI_IO_LINE_LEN];
     size_t prefix_len = 0U;
@@ -152,7 +152,7 @@ _bt_ui_append_ble_item(bt_ui_runtime_s* runtime, const ble_debug_item_s* item)
         return;
     }
 
-    if (item->dir == Ble_Debug_Dir_Tx) {
+    if (item->dir == Ble_Message_Dir_Tx) {
         target_lines = runtime->tx_lines;
         dirty_flag = &runtime->tx_dirty;
     }
@@ -190,7 +190,7 @@ _bt_ui_append_ble_item(bt_ui_runtime_s* runtime, const ble_debug_item_s* item)
  * type  : private
  */
 static void
-_bt_ui_refresh_param_text(bt_ui_runtime_s* runtime, const ble_debug_stats_s* stats)
+_bt_ui_refresh_param_text(bt_ui_runtime_s* runtime, const ble_message_stats_s* stats)
 {
     char param_text[BT_UI_PARAM_TEXT_LEN];
     const char* ready_text = "syncing";
@@ -304,15 +304,15 @@ static void _bt_ui_timer_cb(lv_timer_t* timer)
 }
 
 /*
- * brief : _bt_ui_refresh_debug.
+ * brief : _bt_ui_refresh_message.
  * input : see parameters.
  * output: none.
  * type  : private
  */
-static void _bt_ui_refresh_debug(bt_ui_runtime_s* runtime)
+static void _bt_ui_refresh_message(bt_ui_runtime_s* runtime)
 {
-    ble_debug_stats_s stats = { 0 };
-    ble_debug_item_s item = { 0 };
+    ble_message_stats_s stats = { 0 };
+    ble_message_item_s item = { 0 };
     uint32_t pop_count = 0U;
     bool has_item = false;
 
@@ -320,12 +320,12 @@ static void _bt_ui_refresh_debug(bt_ui_runtime_s* runtime)
         return;
     }
 
-    ble_debug_get_stats(&stats);
+    ble_message_get_stats(&stats);
 
     taskENTER_CRITICAL(&s_bt_ui_lock);
 
-    for (pop_count = 0U; pop_count < BT_UI_DEBUG_POP_BATCH; pop_count++) {
-        has_item = ble_debug_fifo_pop(&item);
+    for (pop_count = 0U; pop_count < BT_UI_MESSAGE_POP_BATCH; pop_count++) {
+        has_item = ble_message_fifo_pop(&item);
         if (!has_item) {
             break;
         }
@@ -354,10 +354,10 @@ static void _bt_ui_task(void* param)
             runtime->home_cb(runtime->home_user_ctx);
         }
 
-        runtime->debug_refresh_elapsed_ms += BT_UI_TASK_PERIOD_MS;
-        if (runtime->debug_refresh_elapsed_ms >= BT_UI_DEBUG_REFRESH_MS) {
-            runtime->debug_refresh_elapsed_ms = 0U;
-            _bt_ui_refresh_debug(runtime);
+        runtime->message_refresh_elapsed_ms += BT_UI_TASK_PERIOD_MS;
+        if (runtime->message_refresh_elapsed_ms >= BT_UI_MESSAGE_REFRESH_MS) {
+            runtime->message_refresh_elapsed_ms = 0U;
+            _bt_ui_refresh_message(runtime);
         }
 
         delay_ms(BT_UI_TASK_PERIOD_MS);
@@ -475,7 +475,7 @@ lv_obj_t* bt_open_screen(
     snprintf(
         s_bt_runtime.param_text,
         sizeof(s_bt_runtime.param_text),
-        "BLE debug monitor starting..."
+        "BLE message monitor starting..."
     );
     _bt_ui_push_line(s_bt_runtime.rx_lines, "No RX data.");
     _bt_ui_push_line(s_bt_runtime.tx_lines, "No TX data.");
@@ -484,7 +484,7 @@ lv_obj_t* bt_open_screen(
     s_bt_runtime.rx_dirty = true;
     s_bt_runtime.tx_dirty = true;
     _bt_ui_sync_ui(&s_bt_runtime);
-    _bt_ui_refresh_debug(&s_bt_runtime);
+    _bt_ui_refresh_message(&s_bt_runtime);
     _bt_ui_sync_ui(&s_bt_runtime);
 
     s_bt_runtime.ui_sync_timer =
@@ -495,7 +495,7 @@ lv_obj_t* bt_open_screen(
         return NULL;
     }
 
-    desktop_post_message("BLE debug assistant opened.");
+    desktop_post_message("BLE message assistant opened.");
 
     task_ok = xTaskCreate(
         _bt_ui_task,

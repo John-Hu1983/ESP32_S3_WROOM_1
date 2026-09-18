@@ -10,8 +10,8 @@ extern "C" {
 #define BT_UI_TASK_STACK_SIZE      	(4096U)
 #define BT_UI_TASK_PERIOD_MS       	(10U)
 #define BT_UI_TASK_PRIO            	(3U)
-#define BT_UI_DEBUG_REFRESH_MS     	(200U)
-#define BT_UI_DEBUG_POP_BATCH      	(8U)
+#define BT_UI_MESSAGE_REFRESH_MS   	(200U)
+#define BT_UI_MESSAGE_POP_BATCH    	(8U)
 #define BT_UI_IO_LINE_COUNT        	(8U)
 #define BT_UI_IO_LINE_LEN          	(64U)
 #define BT_UI_PARAM_TEXT_LEN       	(256U)
@@ -37,7 +37,7 @@ typedef struct {
 	lv_obj_t* param_edit;
 	lv_obj_t* rx_edit;
 	lv_obj_t* tx_edit;
-	uint32_t debug_refresh_elapsed_ms;
+	uint32_t message_refresh_elapsed_ms;
 	bool param_dirty;
 	bool rx_dirty;
 	bool tx_dirty;
