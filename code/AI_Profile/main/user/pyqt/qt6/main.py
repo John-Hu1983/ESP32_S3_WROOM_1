@@ -88,7 +88,17 @@ def main() -> None:
     window = MainWindow()
     window.show()
     _set_windows_title_bar_dark_mode(window)
-    sys.exit(app.exec())
+    exit_code = 0
+    try:
+        exit_code = app.exec()
+    except KeyboardInterrupt:
+        # Running from terminal may receive Ctrl+C; exit quietly.
+        try:
+            window.close()
+        except RuntimeError:
+            pass
+        exit_code = 0
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

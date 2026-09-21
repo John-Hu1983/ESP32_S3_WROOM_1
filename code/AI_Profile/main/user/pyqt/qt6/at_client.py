@@ -17,10 +17,15 @@ AtTextCallback = Callable[[str], None]
 
 
 class AtClient:
-    _PID_RE = re.compile(
-        r"^AT\+PID\s*:\s*KP\s*=\s*([-+]?\d+(?:\.\d+)?)\s*[, ]+"
-        r"KI\s*=\s*([-+]?\d+(?:\.\d+)?)\s*[, ]+"
-        r"KD\s*=\s*([-+]?\d+(?:\.\d+)?)\s*$",
+    _NUM_PATTERN = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+    _PID_SIMPLE_RE = re.compile(
+        rf"^AT\+PID\s*:\s*({_NUM_PATTERN})\s*,\s*({_NUM_PATTERN})\s*,\s*({_NUM_PATTERN})\s*$",
+        re.IGNORECASE,
+    )
+    _PID_NAMED_RE = re.compile(
+        rf"^AT\+PID\s*:\s*KP\s*=\s*({_NUM_PATTERN})\s*[, ]+"
+        rf"KI\s*=\s*({_NUM_PATTERN})\s*[, ]+"
+        rf"KD\s*=\s*({_NUM_PATTERN})\s*$",
         re.IGNORECASE,
     )
 
@@ -43,13 +48,13 @@ class AtClient:
             self._error_callbacks.append(callback)
 
     def send_reboot(self) -> None:
-        self._send_text("AT+REBOOT")
+        self._send_text("AT+REBOOT:")
 
     def send_pid_get(self) -> None:
-        self._send_text("AT+PID?")
+        self._send_text("AT+PID:")
 
     def send_pid_set(self, kp: float, ki: float, kd: float) -> None:
-        self._send_text(f"AT+PID={kp:.4f},{ki:.4f},{kd:.4f}")
+        self._send_text(f"AT+PID:{kp:.4f},{ki:.4f},{kd:.4f}")
 
     def handle_rx_text(self, text: str) -> bool:
         handled = False
@@ -86,7 +91,9 @@ class AtClient:
 
     @classmethod
     def _parse_pid_line(cls, line: str) -> AtPidGains | None:
-        match = cls._PID_RE.match(line)
+        match = cls._PID_SIMPLE_RE.match(line)
+        if match is None:
+            match = cls._PID_NAMED_RE.match(line)
         if match is None:
             return None
 

@@ -853,6 +853,17 @@ class Ui_MainWindow(object):
 
         self.setpoint_grid.addWidget(self.angle_set_spin, 0, 1, 1, 1)
 
+        self.adc_set_lab = QLabel(self.setpoint_card)
+        self.adc_set_lab.setObjectName(u"adc_set_lab")
+
+        self.setpoint_grid.addWidget(self.adc_set_lab, 1, 0, 1, 1)
+
+        self.adc_set_spin = QLineEdit(self.setpoint_card)
+        self.adc_set_spin.setObjectName(u"adc_set_spin")
+        self.adc_set_spin.setReadOnly(True)
+
+        self.setpoint_grid.addWidget(self.adc_set_spin, 1, 1, 1, 1)
+
 
         self.setpoint_right_layout.addLayout(self.setpoint_grid)
 
@@ -1113,6 +1124,8 @@ class Ui_MainWindow(object):
         self.setpoint_title.setText(QCoreApplication.translate("MainWindow", u"STEERING COMMAND", None))
         self.knob_value_lab.setText(QCoreApplication.translate("MainWindow", u"0 deg", None))
         self.angle_set_lab.setText(QCoreApplication.translate("MainWindow", u"Target Angle (deg)", None))
+        self.adc_set_lab.setText(QCoreApplication.translate("MainWindow", u"Target ADC (0~4095)", None))
+        self.adc_set_spin.setText(QCoreApplication.translate("MainWindow", u"0", None))
         self.setpoint_send_button.setText(QCoreApplication.translate("MainWindow", u"Send Setpoint", None))
         self.motor_enable_button.setText(QCoreApplication.translate("MainWindow", u"Enable Motor", None))
         self.motor_stop_button.setText(QCoreApplication.translate("MainWindow", u"Emergency Stop", None))

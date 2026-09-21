@@ -424,8 +424,8 @@ class BleTabController:
         self.clear_button.clicked.connect(self._on_clear_clicked)
 
         self.ping_button.clicked.connect(lambda: self._send_quick("PING"))
-        self.get_status_button.clicked.connect(lambda: self._send_quick("AT+PID?"))
-        self.reboot_button.clicked.connect(lambda: self._send_quick("AT+REBOOT"))
+        self.get_status_button.clicked.connect(lambda: self._send_quick("AT+PID:"))
+        self.reboot_button.clicked.connect(lambda: self._send_quick("AT+REBOOT:"))
 
         self._ble.scan_started_signal.connect(self._on_scan_started)
         self._ble.scan_item_signal.connect(self._on_scan_item)
@@ -552,23 +552,27 @@ class BleTabController:
         self._connect_to_device(name=name, address=address)
 
     def _on_connected_changed(self, connected: bool, device_name: str) -> None:
-        self._is_connected = connected
-        self.connect_button.setEnabled(not connected)
-        self.disconnect_button.setEnabled(connected)
-        self.send_button.setEnabled(connected)
+        try:
+            self._is_connected = connected
+            self.connect_button.setEnabled(not connected)
+            self.disconnect_button.setEnabled(connected)
+            self.send_button.setEnabled(connected)
 
-        if connected:
-            shown_name = device_name or self._last_connect_name or "N/A"
-            self.device_value.setText(shown_name)
-            self._auto_connect_pending = False
-            self._auto_scan_requested = False
-            self._save_last_connected_device(shown_name)
-            self._append_sys(f"Connected to {shown_name}.")
-        else:
-            self.device_value.setText("N/A")
-            self._append_sys("Disconnected.")
+            if connected:
+                shown_name = device_name or self._last_connect_name or "N/A"
+                self.device_value.setText(shown_name)
+                self._auto_connect_pending = False
+                self._auto_scan_requested = False
+                self._save_last_connected_device(shown_name)
+                self._append_sys(f"Connected to {shown_name}.")
+            else:
+                self.device_value.setText("N/A")
+                self._append_sys("Disconnected.")
 
-        self._refresh_status_strip()
+            self._refresh_status_strip()
+        except RuntimeError:
+            # UI may already be destroying while async BLE callbacks arrive.
+            return
 
     def _on_ble_rx(self, text: str) -> None:
         self._append_rx(text)

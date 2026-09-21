@@ -1423,6 +1423,23 @@ QWidget#steering_tab QLabel#rt_vbus_value {
                 </property>
                  </widget>
                 </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="adc_set_lab">
+                <property name="text">
+                 <string>Target ADC (0~4095)</string>
+                </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QLineEdit" name="adc_set_spin">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+                <property name="text">
+                 <string>0</string>
+                </property>
+                 </widget>
+                </item>
                </layout>
               </item>
               <item>

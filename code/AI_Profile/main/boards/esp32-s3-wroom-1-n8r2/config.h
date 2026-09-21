@@ -123,9 +123,9 @@
 #define SERVO_ADC_ATTENUATION                (ADC_ATTEN_DB_12)
 #define SERVO_ADC_BITWIDTH                   (ADC_BITWIDTH_12)
 #define SERVO_PWMA_PORT                      (GPBA02B_PORT_C)
-#define SERVO_PWMA_PIN                       (7)
+#define SERVO_PWMA_PIN                       (6)
 #define SERVO_PWMB_PORT                      (GPBA02B_PORT_C)
-#define SERVO_PWMB_PIN                       (6)
+#define SERVO_PWMB_PIN                       (7)
 
 /* City weather */
 #define BSP_WEATHER_CITY_LABEL               ("Dongguan")

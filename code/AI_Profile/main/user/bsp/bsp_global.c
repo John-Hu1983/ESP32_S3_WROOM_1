@@ -2,26 +2,8 @@
 
 #include "user/bsp/bsp_facility.h"
 #include "user/communication/ble/ble.h"
-#include "user/communication/protocol/at_cmd.h"
 
 #define TAG "bsp_global"
-
-/*
- * brief : _bsp_at_send_callback.
- * input : text is one AT response line; user_ctx is unused.
- * output: none.
- * type  : private
- */
-static void _bsp_at_send_callback(const char* text, void* user_ctx)
-{
-    (void)user_ctx;
-
-    if ((text == NULL) || (text[0] == '\0')) {
-        return;
-    }
-
-    (void)ble_send_text(text);
-}
 
 /*
  * brief : Set power-lock output level for board power domain hold.
@@ -148,7 +130,6 @@ void bsp_init_env(void)
     esp_err_t ble_ret = ESP_OK;
 
     speaker_set_volume(90);
-    at_cmd_set_send_callback(_bsp_at_send_callback, NULL);
     ble_ret = ble_start_nimble();
     if (ble_ret != ESP_OK) {
         ESP_LOGE(

@@ -479,7 +479,6 @@ static int _ble_gatt_access(uint16_t conn_handle,
     int rc = 0;
     esp_err_t at_ret = ESP_OK;
     uint16_t rx_len = 0U;
-    bool at_handled = false;
     (void)arg;
 
     (void)conn_handle;
@@ -511,12 +510,12 @@ static int _ble_gatt_access(uint16_t conn_handle,
                              s_ble_ctx->rx_cb_ctx);
         }
 
-        at_ret = at_cmd_parse_and_dispatch(s_ble_ctx->rx_text, &at_handled);
-        if (at_handled) {
-            if (at_ret != ESP_OK) {
-                ESP_LOGW(TAG, "AT cmd handled with status=%s", esp_err_to_name(at_ret));
-            }
+        at_ret = at_cmd_parse(s_ble_ctx->rx_text);
+        if (at_ret == ESP_OK) {
             return 0;
+        }
+        if (at_ret != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "AT parse status=%d", (int)at_ret);
         }
 
         if ((rx_len == 4U) && (memcmp(s_ble_ctx->rx_text, "PING", 4U) == 0)) {

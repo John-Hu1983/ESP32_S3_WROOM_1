@@ -213,6 +213,7 @@ class SteeringTabController:
         self.angle_knob: QDial
         self.angle_set_spin: QDoubleSpinBox
         self.knob_value_lab: QLabel
+        self.adc_set_spin: QLineEdit
         self.setpoint_send_button: QPushButton
         self.motor_enable_button: QPushButton
         self.motor_stop_button: QPushButton
@@ -267,6 +268,7 @@ class SteeringTabController:
         self.angle_knob = self._must_find(QDial, "angle_knob")
         self.angle_set_spin = self._must_find(QDoubleSpinBox, "angle_set_spin")
         self.knob_value_lab = self._must_find(QLabel, "knob_value_lab")
+        self.adc_set_spin = self._must_find(QLineEdit, "adc_set_spin")
         self.setpoint_send_button = self._must_find(QPushButton, "setpoint_send_button")
         self.motor_enable_button = self._must_find(QPushButton, "motor_enable_button")
         self.motor_stop_button = self._must_find(QPushButton, "motor_stop_button")
@@ -311,6 +313,8 @@ class SteeringTabController:
             Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
         )
         self.knob_value_lab.setText("0 deg")
+        self.adc_set_spin.setReadOnly(True)
+        self._set_adc_for_degree(0)
 
         self.rt_set_value.setText("0 deg")
         self.rt_fb_value.setText("0.0 deg")
@@ -321,6 +325,16 @@ class SteeringTabController:
 
         self.scope_live_badge.setText("LIVE")
         self.scope_pause_button.setText("Pause")
+
+    def _set_adc_for_degree(self, degree: int) -> int:
+        adc_value = self._degree_to_adc(degree)
+        self.adc_set_spin.setText(str(adc_value))
+        return adc_value
+
+    @staticmethod
+    def _degree_to_adc(degree: int) -> int:
+        clamped = max(0, min(330, int(degree)))
+        return int(round(clamped * 4095.0 / 330.0))
 
     def _bind_signals(self) -> None:
         self.scope_window_combo.currentIndexChanged.connect(self._on_scope_window_changed)
@@ -374,8 +388,6 @@ class SteeringTabController:
         self._set_command_widgets_enabled(connected)
         if not connected:
             self._append_note("Steering tab ready. Connect BLE device first.")
-        else:
-            self._at.send_pid_get()
 
     def _on_scope_window_changed(self) -> None:
         self._scope.set_window_seconds(self._current_scope_window_sec())
@@ -407,6 +419,7 @@ class SteeringTabController:
         angle_int = int(round(angle))
         self.knob_value_lab.setText(f"{angle_int} deg")
         self.rt_set_value.setText(f"{angle_int} deg")
+        self._set_adc_for_degree(angle_int)
 
     def _on_angle_spin_changed(self, value: float) -> None:
         if self._angle_syncing:
@@ -419,10 +432,12 @@ class SteeringTabController:
 
         self.knob_value_lab.setText(f"{value_int} deg")
         self.rt_set_value.setText(f"{value_int} deg")
+        self._set_adc_for_degree(value_int)
 
     def _on_send_setpoint_clicked(self) -> None:
         angle = int(round(self.angle_set_spin.value()))
-        self._send_command(f"STEER_SET angle={angle}")
+        adc_value = self._set_adc_for_degree(angle)
+        self._send_command(f"AT+SETPOINT:{angle},{adc_value}")
 
     def _on_motor_enable_clicked(self) -> None:
         self._send_command("STEER_ENABLE 1")

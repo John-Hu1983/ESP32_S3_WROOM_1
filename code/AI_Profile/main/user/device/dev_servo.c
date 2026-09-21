@@ -6,13 +6,13 @@ static bool is_inited = false;
 static t_servo_ctr* servo_ctr = NULL;
 
 /*
- * brief : _servo_perform_motor.
+ * brief : servo_run_motor.
  * input : see parameters.
  * output: none.
- * type  : private
+ * type  : public
  * theory: map abstract motor direction to dual PWM outputs and apply raw duty immediately.
  */
-static void _servo_perform_motor(e_motor_direction dir, uint8_t duty) {
+void servo_run_motor(e_motor_direction dir, uint8_t duty) {
     if (servo_ctr == NULL) {
         return;
     }
@@ -75,14 +75,14 @@ int servo_debug_profile(btn_status_e btn) {
     }
 
     if (btn == Btn_Up_Click) {
-        _servo_perform_motor(MOTOR_DIRECTION_CW, 64u);
+        servo_run_motor(MOTOR_DIRECTION_CW, 64u);
     }
     else if (btn == Btn_Down_Click) {
-        _servo_perform_motor(MOTOR_DIRECTION_CCW, 64u);
+        servo_run_motor(MOTOR_DIRECTION_CCW, 64u);
     }
 
     delay_ms(10);
-    _servo_perform_motor(MOTOR_DIRECTION_BRAKE, 255u);
+    servo_run_motor(MOTOR_DIRECTION_BRAKE, 255u);
     delay_ms(10);
     servo_ctr->vr = servo_get_adc_value();
     ESP_LOGI(TAG, "servo adc value: %u", servo_ctr->vr);

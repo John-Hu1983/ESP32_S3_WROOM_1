@@ -42,6 +42,7 @@ typedef struct {
 esp_err_t servo_init_hw(void);
 esp_err_t servo_deinit_hw(void);
 int servo_debug_profile(btn_status_e btn);
+void servo_run_motor(e_motor_direction dir, uint8_t duty);
 uint16_t servo_get_adc_value(void);
 #ifdef __cplusplus
 }
