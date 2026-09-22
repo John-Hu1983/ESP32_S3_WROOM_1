@@ -109,6 +109,11 @@ class Ui_MainWindow(object):
 "    padding: 2px 8px;\n"
 "    font-weight: 700;\n"
 "}\n"
+"QWidget#steering_tab QLabel#steering_conn_led {\n"
+"    background-color: #090909;\n"
+"    border: 1px solid #2a3644;\n"
+"    border-radius: 12px;\n"
+"}\n"
 "QWidget#steering_tab QFrame#scope_host {\n"
 "    border: 1px solid #1a3a55;\n"
 "    border-radius: 8px;\n"
@@ -125,14 +130,14 @@ class Ui_MainWindow(object):
 "}\n"
 "QWidget#steering_tab QPushButton {\n"
 "    border: 1px solid #20506f;\n"
-"    border-radius: 7px;\n"
+"   "
+                        " border-radius: 7px;\n"
 "    background-color: #0d2136;\n"
 "    color: #d2e6fb;\n"
 "    min-height: 28px;\n"
 "    padding: 2px 10px;\n"
 "}\n"
-"QWidget#steeri"
-                        "ng_tab QPushButton:hover {\n"
+"QWidget#steering_tab QPushButton:hover {\n"
 "    border-color: #2f88be;\n"
 "    background-color: #12304b;\n"
 "}\n"
@@ -158,13 +163,13 @@ class Ui_MainWindow(object):
 "    background-color: #311723;\n"
 "}\n"
 "QWidget#steering_tab QDoubleSpinBox,\n"
-"QWidget#steering_tab QComboBox,\n"
+"QWidget#st"
+                        "eering_tab QComboBox,\n"
 "QWidget#steering_tab QLineEdit {\n"
 "    border: 1px solid #1f4f74;\n"
 "    border-radius: 7px;\n"
 "    background-color: #061021;\n"
-""
-                        "    color: #b9d6ef;\n"
+"    color: #b9d6ef;\n"
 "    min-height: 26px;\n"
 "    padding: 2px 8px;\n"
 "    font-family: Consolas;\n"
@@ -615,10 +620,27 @@ class Ui_MainWindow(object):
         self.steering_hero_layout.setSpacing(2)
         self.steering_hero_layout.setObjectName(u"steering_hero_layout")
         self.steering_hero_layout.setContentsMargins(14, 10, 14, 10)
+        self.steering_hero_title_row = QHBoxLayout()
+        self.steering_hero_title_row.setSpacing(8)
+        self.steering_hero_title_row.setObjectName(u"steering_hero_title_row")
         self.steering_hero_title = QLabel(self.steering_hero_card)
         self.steering_hero_title.setObjectName(u"steering_hero_title")
 
-        self.steering_hero_layout.addWidget(self.steering_hero_title)
+        self.steering_hero_title_row.addWidget(self.steering_hero_title)
+
+        self.steering_hero_title_row_spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+
+        self.steering_hero_title_row.addItem(self.steering_hero_title_row_spacer)
+
+        self.steering_conn_led = QLabel(self.steering_hero_card)
+        self.steering_conn_led.setObjectName(u"steering_conn_led")
+        self.steering_conn_led.setMinimumSize(QSize(24, 24))
+        self.steering_conn_led.setMaximumSize(QSize(24, 24))
+
+        self.steering_hero_title_row.addWidget(self.steering_conn_led)
+
+
+        self.steering_hero_layout.addLayout(self.steering_hero_title_row)
 
         self.steering_hero_subtitle = QLabel(self.steering_hero_card)
         self.steering_hero_subtitle.setObjectName(u"steering_hero_subtitle")
@@ -719,9 +741,8 @@ class Ui_MainWindow(object):
         self.pid_card_layout.addWidget(self.pid_title)
 
         self.pid_grid = QGridLayout()
+        self.pid_grid.setSpacing(8)
         self.pid_grid.setObjectName(u"pid_grid")
-        self.pid_grid.setHorizontalSpacing(8)
-        self.pid_grid.setVerticalSpacing(8)
         self.kp_lab = QLabel(self.pid_card)
         self.kp_lab.setObjectName(u"kp_lab")
 
@@ -820,16 +841,11 @@ class Ui_MainWindow(object):
         self.knob_frame_layout.setSpacing(6)
         self.knob_frame_layout.setObjectName(u"knob_frame_layout")
         self.knob_frame_layout.setContentsMargins(10, 10, 10, 10)
-        self.knob_overlay = QWidget(self.knob_frame)
-        self.knob_overlay.setObjectName(u"knob_overlay")
-        self.knob_overlay.setMinimumSize(QSize(136, 136))
-        self.knob_overlay.setMaximumSize(QSize(136, 136))
-        self.knob_overlay_layout = QGridLayout(self.knob_overlay)
+        self.knob_overlay_layout = QGridLayout()
+        self.knob_overlay_layout.setSpacing(0)
         self.knob_overlay_layout.setObjectName(u"knob_overlay_layout")
-        self.knob_overlay_layout.setHorizontalSpacing(0)
-        self.knob_overlay_layout.setVerticalSpacing(0)
         self.knob_overlay_layout.setContentsMargins(0, 0, 0, 0)
-        self.angle_knob = QDial(self.knob_overlay)
+        self.angle_knob = QDial(self.knob_frame)
         self.angle_knob.setObjectName(u"angle_knob")
         self.angle_knob.setMinimumSize(QSize(136, 136))
         self.angle_knob.setMaximumSize(QSize(136, 136))
@@ -841,14 +857,14 @@ class Ui_MainWindow(object):
 
         self.knob_overlay_layout.addWidget(self.angle_knob, 0, 0, 1, 1)
 
-        self.knob_value_lab = QLabel(self.knob_overlay)
+        self.knob_value_lab = QLabel(self.knob_frame)
         self.knob_value_lab.setObjectName(u"knob_value_lab")
         self.knob_value_lab.setAlignment(Qt.AlignCenter)
 
         self.knob_overlay_layout.addWidget(self.knob_value_lab, 0, 0, 1, 1)
 
 
-        self.knob_frame_layout.addWidget(self.knob_overlay)
+        self.knob_frame_layout.addLayout(self.knob_overlay_layout)
 
 
         self.setpoint_body_row.addWidget(self.knob_frame)
@@ -857,9 +873,8 @@ class Ui_MainWindow(object):
         self.setpoint_right_layout.setSpacing(8)
         self.setpoint_right_layout.setObjectName(u"setpoint_right_layout")
         self.setpoint_grid = QGridLayout()
+        self.setpoint_grid.setSpacing(8)
         self.setpoint_grid.setObjectName(u"setpoint_grid")
-        self.setpoint_grid.setHorizontalSpacing(8)
-        self.setpoint_grid.setVerticalSpacing(8)
         self.angle_set_lab = QLabel(self.setpoint_card)
         self.angle_set_lab.setObjectName(u"angle_set_lab")
 
@@ -1074,7 +1089,7 @@ class Ui_MainWindow(object):
 
         self.retranslateUi(MainWindow)
 
-        self.tabWidget.setCurrentIndex(0)
+        self.tabWidget.setCurrentIndex(1)
 
 
         QMetaObject.connectSlotsByName(MainWindow)
@@ -1128,6 +1143,10 @@ class Ui_MainWindow(object):
         self.reboot_button.setText(QCoreApplication.translate("MainWindow", u"REBOOT", None))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.ble_tab), QCoreApplication.translate("MainWindow", u"BLE Config", None))
         self.steering_hero_title.setText(QCoreApplication.translate("MainWindow", u"STEERING ENGINE DEBUG CONSOLE", None))
+#if QT_CONFIG(tooltip)
+        self.steering_conn_led.setToolTip(QCoreApplication.translate("MainWindow", u"BLE Link LED", None))
+#endif // QT_CONFIG(tooltip)
+        self.steering_conn_led.setText("")
         self.steering_hero_subtitle.setText(QCoreApplication.translate("MainWindow", u"DC Motor + Variable Resistor closed-loop tuning and live telemetry", None))
         self.scope_title.setText(QCoreApplication.translate("MainWindow", u"SCOPE WAVEFORM", None))
         self.scope_hint.setText(QCoreApplication.translate("MainWindow", u"Setpoint / Feedback / PWM", None))
@@ -1160,9 +1179,9 @@ class Ui_MainWindow(object):
         self.rt_conn_lab.setText(QCoreApplication.translate("MainWindow", u"Connection", None))
         self.rt_conn_value.setText(QCoreApplication.translate("MainWindow", u"Disconnected", None))
         self.rt_set_lab.setText(QCoreApplication.translate("MainWindow", u"Setpoint", None))
-        self.rt_set_value.setText(QCoreApplication.translate("MainWindow", u"0.0 deg", None))
+        self.rt_set_value.setText(QCoreApplication.translate("MainWindow", u"0.0 ", None))
         self.rt_fb_lab.setText(QCoreApplication.translate("MainWindow", u"Feedback", None))
-        self.rt_fb_value.setText(QCoreApplication.translate("MainWindow", u"0.0 deg", None))
+        self.rt_fb_value.setText(QCoreApplication.translate("MainWindow", u"0.0 ", None))
         self.rt_err_lab.setText(QCoreApplication.translate("MainWindow", u"Error", None))
         self.rt_err_value.setText(QCoreApplication.translate("MainWindow", u"0.0 deg", None))
         self.rt_pwm_lab.setText(QCoreApplication.translate("MainWindow", u"PWM Output", None))

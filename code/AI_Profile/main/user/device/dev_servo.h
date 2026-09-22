@@ -25,6 +25,13 @@ extern "C" {
 #error "SERVO_PWMA_PORT/SERVO_PWMA_PIN/SERVO_PWMB_PORT/SERVO_PWMB_PIN must be defined in board config"
 #endif
 
+
+#define SERVO_PID_DUTY_MAX          (255.0f)
+#define SERVO_PID_DUTY_MIN          (10.0f)
+#define SERVO_PID_TOL_EXIT_ADC      (25.0f)
+#define SERVO_PID_BRAKE_DUTY        (255U)
+#define SERVO_BLE_REPORT_PERIOD_MS  (100U)
+
 // clang-format on
 
 typedef enum {
@@ -44,6 +51,8 @@ typedef struct {
 
 esp_err_t servo_init_hw(void);
 esp_err_t servo_deinit_hw(void);
+algo_pid_s* servo_read_pid_profile(void);
+t_servo_ctr* servo_read_motor_profile(void);
 void servo_set_target(float target);
 void servo_set_pid_para(float kp, float ki, float kd);
 void servo_compute_via_pid(uint16_t ms);

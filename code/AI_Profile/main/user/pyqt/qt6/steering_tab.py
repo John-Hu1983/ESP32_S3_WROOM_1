@@ -198,6 +198,7 @@ class SteeringTabController:
         self.scope_pause_button: QPushButton
         self.scope_clear_button: QPushButton
         self.scope_live_badge: QLabel
+        self.steering_conn_led: QLabel
 
         self.kp_spin: QDoubleSpinBox
         self.ki_spin: QDoubleSpinBox
@@ -253,6 +254,7 @@ class SteeringTabController:
         self.scope_pause_button = self._must_find(QPushButton, "scope_pause_button")
         self.scope_clear_button = self._must_find(QPushButton, "scope_clear_button")
         self.scope_live_badge = self._must_find(QLabel, "scope_live_badge")
+        self.steering_conn_led = self._must_find(QLabel, "steering_conn_led")
 
         self.kp_spin = self._must_find(QDoubleSpinBox, "kp_spin")
         self.ki_spin = self._must_find(QDoubleSpinBox, "ki_spin")
@@ -310,9 +312,9 @@ class SteeringTabController:
         )
         self.knob_value_lab.setText("0 deg")
         self.adc_set_spin.setReadOnly(True)
-        self._set_adc_for_degree(0)
+        adc_value = self._set_adc_for_degree(0)
 
-        self.rt_set_value.setText("0 deg")
+        self.rt_set_value.setText(str(adc_value))
         self.rt_fb_value.setText("0.0 deg")
         self.rt_err_value.setText("0.0 deg")
         self.rt_pwm_value.setText("0.0 %")
@@ -331,6 +333,12 @@ class SteeringTabController:
     def _degree_to_adc(degree: int) -> int:
         clamped = max(0, min(330, int(degree)))
         return int(round(clamped * 4095.0 / 330.0))
+
+    def _setpoint_to_adc_text(self, setpoint: float) -> str:
+        rounded = int(round(setpoint))
+        if 0 <= rounded <= 330:
+            return str(self._degree_to_adc(rounded))
+        return str(rounded)
 
     def _bind_signals(self) -> None:
         self.scope_window_combo.currentIndexChanged.connect(self._on_scope_window_changed)
@@ -381,9 +389,20 @@ class SteeringTabController:
     def _on_connected_changed(self, connected: bool, _device_name: str) -> None:
         self._is_connected = connected
         self.rt_conn_value.setText("Connected" if connected else "Disconnected")
+        self._update_ble_led()
         self._set_command_widgets_enabled(connected)
         if not connected:
             self._append_note("Steering tab ready. Connect BLE device first.")
+
+    def _update_ble_led(self) -> None:
+        color = "#ff2828" if self._is_connected else "#090909"
+        self.steering_conn_led.setStyleSheet(
+            "QLabel#steering_conn_led {"
+            f"background-color: {color};"
+            "border: 1px solid #2a3644;"
+            "border-radius: 12px;"
+            "}"
+        )
 
     def _on_scope_window_changed(self) -> None:
         self._scope.set_window_seconds(self._current_scope_window_sec())
@@ -414,8 +433,8 @@ class SteeringTabController:
 
         angle_int = int(round(angle))
         self.knob_value_lab.setText(f"{angle_int} deg")
-        self.rt_set_value.setText(f"{angle_int} deg")
-        self._set_adc_for_degree(angle_int)
+        adc_value = self._set_adc_for_degree(angle_int)
+        self.rt_set_value.setText(str(adc_value))
 
     def _on_angle_spin_changed(self, value: float) -> None:
         if self._angle_syncing:
@@ -427,8 +446,8 @@ class SteeringTabController:
         self._angle_syncing = False
 
         self.knob_value_lab.setText(f"{value_int} deg")
-        self.rt_set_value.setText(f"{value_int} deg")
-        self._set_adc_for_degree(value_int)
+        adc_value = self._set_adc_for_degree(value_int)
+        self.rt_set_value.setText(str(adc_value))
 
     def _on_send_setpoint_clicked(self) -> None:
         angle = int(round(self.angle_set_spin.value()))
@@ -592,7 +611,7 @@ class SteeringTabController:
 
         if setpoint is not None:
             self._last_setpoint = setpoint
-            self.rt_set_value.setText(f"{setpoint:.1f} deg")
+            self.rt_set_value.setText(self._setpoint_to_adc_text(setpoint))
         if feedback is not None:
             self._last_feedback = feedback
             if abs(feedback) > 360:

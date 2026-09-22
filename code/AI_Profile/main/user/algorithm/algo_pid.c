@@ -77,7 +77,8 @@ esp_err_t algo_pid_step(algo_pid_s* pid, float feedback, float* output) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    pid->curr_err = pid->target - feedback;
+    pid->feedback = feedback;
+    pid->curr_err = pid->target - pid->feedback;
     if (!_algo_pid_is_finite(pid->curr_err)) {
         return ESP_ERR_INVALID_ARG;
     }

@@ -2,45 +2,22 @@
 
 #define TAG "dev_servo"
 
-#define SERVO_PID_DUTY_MAX (255.0f)
-#define SERVO_PID_DUTY_MIN (10.0f)
-#define SERVO_PID_TOL_EXIT_ADC (4.0f)
-#define SERVO_PID_BRAKE_DUTY (255U)
-#define SERVO_BLE_REPORT_PERIOD_MS (100U)
-#define SERVO_PID_DEBUG_ENABLE (1)
-#define SERVO_PID_DEBUG_PERIOD (5U)
-
 static bool is_inited = false;
 static t_servo_ctr* servo_ctr = NULL;
 static algo_pid_s* servo_pid = NULL;
 static uint16_t s_ble_report_elapsed_ms = SERVO_BLE_REPORT_PERIOD_MS;
 static float s_pid_submin_acc = 0.0f;
 
-#if SERVO_PID_DEBUG_ENABLE
-static uint32_t s_pid_dbg_seq = 0U;
-static e_motor_direction s_pid_dbg_prev_dir = MOTOR_DIRECTION_STOP;
-static bool s_pid_dbg_prev_brake = false;
-#endif
-
 static void _servo_init_pid(uint16_t ms);
 static void _servo_report_ble(float duty_f, uint16_t vr, uint16_t ms);
 
-#if SERVO_PID_DEBUG_ENABLE
-static const char* _servo_dir_name(e_motor_direction dir) {
-    switch (dir) {
-    case MOTOR_DIRECTION_STOP:
-        return "STOP";
-    case MOTOR_DIRECTION_CW:
-        return "CW";
-    case MOTOR_DIRECTION_CCW:
-        return "CCW";
-    case MOTOR_DIRECTION_BRAKE:
-        return "BRAKE";
-    default:
-        return "UNKNOWN";
-    }
+algo_pid_s* servo_read_pid_profile(void) {
+    return servo_pid;
 }
-#endif
+
+t_servo_ctr* servo_read_motor_profile(void) {
+    return servo_ctr;
+}
 
 /*
  * brief : servo_run_motor.
@@ -266,9 +243,9 @@ static void _servo_init_pid(uint16_t ms) {
         return;
     }
 
-    servo_pid->cfg.kp = 0.1f;
-    servo_pid->cfg.ki = 0.0f;
-    servo_pid->cfg.kd = 0.0f;
+    servo_pid->cfg.kp = 0.2f;
+    servo_pid->cfg.ki = 0.08f;
+    servo_pid->cfg.kd = 0.005f;
     servo_pid->cfg.out_min = -SERVO_PID_DUTY_MAX;
     servo_pid->cfg.out_max = SERVO_PID_DUTY_MAX;
     servo_pid->cfg.i_min = -50.0f;
@@ -278,6 +255,7 @@ static void _servo_init_pid(uint16_t ms) {
 
     servo_pid->first_cycle = true;
     servo_pid->target = 0.0f;
+    servo_pid->feedback = 0.0f;
     servo_pid->prev_err = 0.0f;
     servo_pid->i_acc = 0.0f;
     servo_pid->curr_err = 0.0f;
@@ -324,21 +302,6 @@ void servo_set_target(float target) {
     }
     servo_pid->target = target;
     ESP_LOGI(TAG, "Servo target set to %.3f", target);
-
-#if SERVO_PID_DEBUG_ENABLE
-    ESP_LOGI(TAG,
-             "PID_CFG target=%.3f kp=%.3f ki=%.3f kd=%.3f dt=%.4f deadband=%.3f out=[%.1f,%.1f] i=[%.1f,%.1f]",
-             target,
-             servo_pid->cfg.kp,
-             servo_pid->cfg.ki,
-             servo_pid->cfg.kd,
-             servo_pid->cfg.dt_s,
-             servo_pid->cfg.err_deadband,
-             servo_pid->cfg.out_min,
-             servo_pid->cfg.out_max,
-             servo_pid->cfg.i_min,
-             servo_pid->cfg.i_max);
-#endif
 }
 
 void servo_set_pid_para(float kp, float ki, float kd) {
@@ -350,21 +313,6 @@ void servo_set_pid_para(float kp, float ki, float kd) {
     servo_pid->cfg.ki = ki;
     servo_pid->cfg.kd = kd;
     ESP_LOGI(TAG, "Servo PID parameters set to Kp=%.3f, Ki=%.3f, Kd=%.3f", kp, ki, kd);
-
-#if SERVO_PID_DEBUG_ENABLE
-    ESP_LOGI(TAG,
-             "PID_CFG target=%.3f kp=%.3f ki=%.3f kd=%.3f dt=%.4f deadband=%.3f out=[%.1f,%.1f] i=[%.1f,%.1f]",
-             servo_pid->target,
-             servo_pid->cfg.kp,
-             servo_pid->cfg.ki,
-             servo_pid->cfg.kd,
-             servo_pid->cfg.dt_s,
-             servo_pid->cfg.err_deadband,
-             servo_pid->cfg.out_min,
-             servo_pid->cfg.out_max,
-             servo_pid->cfg.i_min,
-             servo_pid->cfg.i_max);
-#endif
 }
 
 void servo_compute_via_pid(uint16_t ms) {
@@ -372,23 +320,6 @@ void servo_compute_via_pid(uint16_t ms) {
     float feedback = 0.0f;
     float output = 0.0f;
     float duty_f = 0.0f;
-#if SERVO_PID_DEBUG_ENABLE
-    float err_raw = 0.0f;           // target - feedback before PID deadband handling.
-    float err_used = 0.0f;          // curr_err used by PID after deadband handling.
-    float i_before = 0.0f;          // i_acc before algo_pid_step.
-    float i_after = 0.0f;           // i_acc after algo_pid_step.
-    float prev_err_before = 0.0f;   // prev_err snapshot before algo_pid_step.
-    float p_est = 0.0f;
-    float d_est = 0.0f;
-    float out_raw_est = 0.0f;
-    bool first_cycle_before = false;
-    bool is_brake_mode = false;
-    bool is_lifted_min_duty = false;
-    bool is_submin_skip = false;
-    bool is_saturated_out = false;
-    bool mode_changed = false;
-    const char* mode_text = "RUN";
-#endif
     uint8_t duty = 0U;
     e_motor_direction dir = MOTOR_DIRECTION_STOP;
 
@@ -399,13 +330,6 @@ void servo_compute_via_pid(uint16_t ms) {
     servo_ctr->vr = servo_get_adc_value();
     feedback = (float)servo_ctr->vr;
 
-#if SERVO_PID_DEBUG_ENABLE
-    err_raw = servo_pid->target - feedback;
-    i_before = servo_pid->i_acc;
-    prev_err_before = servo_pid->prev_err;
-    first_cycle_before = servo_pid->first_cycle;
-#endif
-
     ret = algo_pid_step(servo_pid, feedback, &output);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "PID step failed with error: %d", ret);
@@ -413,60 +337,10 @@ void servo_compute_via_pid(uint16_t ms) {
         return;
     }
 
-#if SERVO_PID_DEBUG_ENABLE
-    err_used = servo_pid->curr_err;
-    i_after = servo_pid->i_acc;
-    p_est = servo_pid->cfg.kp * err_used;
-    d_est = first_cycle_before ? 0.0f : (servo_pid->cfg.kd * (err_used - prev_err_before) / servo_pid->cfg.dt_s);
-    out_raw_est = p_est + i_after + d_est;
-    is_saturated_out = ((output >= servo_pid->cfg.out_max) || (output <= servo_pid->cfg.out_min));
-#endif
-
     if (servo_pid->curr_err == 0.0f) {
         s_pid_submin_acc = 0.0f;
         servo_run_motor(MOTOR_DIRECTION_BRAKE, SERVO_PID_BRAKE_DUTY);
         _servo_report_ble(0.0f, servo_ctr->vr, ms);
-
-#if SERVO_PID_DEBUG_ENABLE
-        is_brake_mode = true;
-        mode_text = "BRAKE";
-        mode_changed = (s_pid_dbg_prev_dir != MOTOR_DIRECTION_BRAKE) || !s_pid_dbg_prev_brake;
-        if (mode_changed) {
-            ESP_LOGI(TAG,
-                     "PID_EVT mode=%s target=%.1f fb=%u err_raw=%.3f err=%.3f out=%.3f duty=%u",
-                     mode_text,
-                     servo_pid->target,
-                     (unsigned)servo_ctr->vr,
-                     err_raw,
-                     err_used,
-                     output,
-                     (unsigned)SERVO_PID_BRAKE_DUTY);
-        }
-
-        s_pid_dbg_prev_dir = MOTOR_DIRECTION_BRAKE;
-        s_pid_dbg_prev_brake = true;
-        s_pid_dbg_seq++;
-        if ((s_pid_dbg_seq % SERVO_PID_DEBUG_PERIOD) == 0U) {
-            ESP_LOGI(TAG,
-                     "PID_DBG seq=%lu mode=%s target=%.1f fb=%u err_raw=%.3f err=%.3f p=%.3f i0=%.3f i1=%.3f d=%.3f raw=%.3f out=%.3f sat=%d lift=%d dir=%s duty=%u",
-                     (unsigned long)s_pid_dbg_seq,
-                     mode_text,
-                     servo_pid->target,
-                     (unsigned)servo_ctr->vr,
-                     err_raw,
-                     err_used,
-                     p_est,
-                     i_before,
-                     i_after,
-                     d_est,
-                     out_raw_est,
-                     output,
-                     is_saturated_out ? 1 : 0,
-                     0,
-                     _servo_dir_name(MOTOR_DIRECTION_BRAKE),
-                     (unsigned)SERVO_PID_BRAKE_DUTY);
-        }
-#endif
 
         return;
     }
@@ -484,17 +358,9 @@ void servo_compute_via_pid(uint16_t ms) {
         if (s_pid_submin_acc >= 1.0f) {
             duty_f = SERVO_PID_DUTY_MIN;
             s_pid_submin_acc -= 1.0f;
-
-#if SERVO_PID_DEBUG_ENABLE
-            is_lifted_min_duty = true;
-#endif
         }
         else {
             duty_f = 0.0f;
-
-#if SERVO_PID_DEBUG_ENABLE
-            is_submin_skip = true;
-#endif
         }
     }
     else {
@@ -513,50 +379,4 @@ void servo_compute_via_pid(uint16_t ms) {
 
     servo_run_motor(dir, duty);
     _servo_report_ble(duty_f, servo_ctr->vr, ms);
-
-#if SERVO_PID_DEBUG_ENABLE
-    mode_text = "RUN";
-    mode_changed = (dir != s_pid_dbg_prev_dir) || s_pid_dbg_prev_brake || is_lifted_min_duty
-        || is_submin_skip || is_saturated_out;
-    if (mode_changed) {
-        ESP_LOGI(TAG,
-                 "PID_EVT mode=%s target=%.1f fb=%u err_raw=%.3f err=%.3f out=%.3f duty=%u dir=%s sat=%d lift=%d skip=%d",
-                 mode_text,
-                 servo_pid->target,
-                 (unsigned)servo_ctr->vr,
-                 err_raw,
-                 err_used,
-                 output,
-                 (unsigned)duty,
-                 _servo_dir_name(dir),
-                 is_saturated_out ? 1 : 0,
-                 is_lifted_min_duty ? 1 : 0,
-                 is_submin_skip ? 1 : 0);
-    }
-
-    s_pid_dbg_prev_dir = dir;
-    s_pid_dbg_prev_brake = false;
-    s_pid_dbg_seq++;
-    if ((s_pid_dbg_seq % SERVO_PID_DEBUG_PERIOD) == 0U) {
-        ESP_LOGI(TAG,
-                 "PID_DBG seq=%lu mode=%s target=%.1f fb=%u err_raw=%.3f err=%.3f p=%.3f i0=%.3f i1=%.3f d=%.3f raw=%.3f out=%.3f sat=%d lift=%d skip=%d dir=%s duty=%u",
-                 (unsigned long)s_pid_dbg_seq,
-                 mode_text,
-                 servo_pid->target,
-                 (unsigned)servo_ctr->vr,
-                 err_raw,
-                 err_used,
-                 p_est,
-                 i_before,
-                 i_after,
-                 d_est,
-                 out_raw_est,
-                 output,
-                 is_saturated_out ? 1 : 0,
-                 is_lifted_min_duty ? 1 : 0,
-                 is_submin_skip ? 1 : 0,
-                 _servo_dir_name(dir),
-                 (unsigned)duty);
-    }
-#endif
 }

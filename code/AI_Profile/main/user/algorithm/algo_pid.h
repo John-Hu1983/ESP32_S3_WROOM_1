@@ -28,6 +28,7 @@ typedef struct {
     bool inited;          // True after successful init.
     bool first_cycle;     // True before first step; derivative term is suppressed.
     float target;         // Setpoint used to compute error.
+    float feedback;       // Cached current feedback from the most recent step.
     float prev_err;       // Previous-step error used by derivative term.
     float i_acc;          // Internal integral accumulator state.
     float curr_err;       // Cached current control error from the most recent step.
