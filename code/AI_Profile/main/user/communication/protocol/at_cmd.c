@@ -84,11 +84,7 @@ static void _atcmd_config_pid(const char* str) {
     s_pid_kp = kp;
     s_pid_ki = ki;
     s_pid_kd = kd;
-    ESP_LOGI(TAG,
-             "PID configured: Kp=%.3f, Ki=%.3f, Kd=%.3f",
-             s_pid_kp,
-             s_pid_ki,
-             s_pid_kd);
+    servo_set_pid_para(s_pid_kp, s_pid_ki, s_pid_kd);
 }
 
 static void _atcmd_set_point(const char* str) {
@@ -130,11 +126,7 @@ static void _atcmd_set_point(const char* str) {
 
     s_set_point_angle = (int32_t)angle;
     s_set_point_adc = (int32_t)adc;
-
-    ESP_LOGI(TAG,
-             "Set point configured: angle=%ld, adc=%ld",
-             (long)s_set_point_angle,
-             (long)s_set_point_adc);
+    servo_set_target((float)adc);
 }
 
 const at_cmd_t at_cmds[] = {

@@ -4,8 +4,11 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 
+#include "user/algorithm/algo_pid.h"
+#include "user/communication/ble/ble.h"
 #include "user/device/dev_button.h"
 #include "user/device/dev_gpba02b.h"
+#include "user/gui/servo_ui.h"
 #include "user/hal/hal_adc.h"
 #include "user/inc/bsp_config.h"
 
@@ -41,6 +44,9 @@ typedef struct {
 
 esp_err_t servo_init_hw(void);
 esp_err_t servo_deinit_hw(void);
+void servo_set_target(float target);
+void servo_set_pid_para(float kp, float ki, float kd);
+void servo_compute_via_pid(uint16_t ms);
 int servo_debug_profile(btn_status_e btn);
 void servo_run_motor(e_motor_direction dir, uint8_t duty);
 uint16_t servo_get_adc_value(void);

@@ -27,7 +27,9 @@ static void _servo_ui_task(void* param) {
             runtime->home_cb(runtime->home_user_ctx);
         }
 
-        (void)servo_debug_profile(btn_val);
+        servo_compute_via_pid(SERVO_UI_TASK_PERIOD_MS);
+
+        // (void)servo_debug_profile(btn_val);
     }
 }
 

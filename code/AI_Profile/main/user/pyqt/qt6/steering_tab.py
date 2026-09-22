@@ -149,9 +149,9 @@ class SteeringScopeWidget(QWidget):
         )
 
         legend_top = rect.top() + 8
-        self._draw_legend_item(painter, rect.right() - 200, legend_top, "Setpoint", "#4dd8ff")
-        self._draw_legend_item(painter, rect.right() - 130, legend_top, "Feedback", "#73ffa1")
-        self._draw_legend_item(painter, rect.right() - 56, legend_top, "PWM", "#ffc766")
+        self._draw_legend_item(painter, rect.left() + 14, legend_top, "Setpoint", "#4dd8ff")
+        self._draw_legend_item(painter, rect.left() + 110, legend_top, "Feedback", "#73ffa1")
+        self._draw_legend_item(painter, rect.left() + 206, legend_top, "PWM", "#ffc766")
 
     @staticmethod
     def _draw_trace(
@@ -167,13 +167,9 @@ class SteeringScopeWidget(QWidget):
 
         last_x = map_x(samples[0][0])
         last_y = map_y(samples[0][index])
-        for sample_t, setpoint, feedback, pwm in samples[1:]:
-            if index == 1:
-                val = setpoint
-            elif index == 2:
-                val = feedback
-            else:
-                val = pwm
+        for row in samples[1:]:
+            sample_t = row[0]
+            val = row[index]
             x = map_x(sample_t)
             y = map_y(val)
             painter.drawLine(last_x, last_y, x, y)
@@ -557,6 +553,9 @@ class SteeringTabController:
             ),
             "feedback": self._first_present(
                 numeric,
+                "motvr",
+                "servo_vr",
+                "vr",
                 "feedback",
                 "fb",
                 "angle",
@@ -565,7 +564,15 @@ class SteeringTabController:
                 "meas",
             ),
             "error": self._first_present(numeric, "error", "err"),
-            "pwm": self._first_present(numeric, "pwm", "out", "output", "duty"),
+            "pwm": self._first_present(
+                numeric,
+                "motpwm",
+                "motor_pwm",
+                "pwm",
+                "out",
+                "output",
+                "duty",
+            ),
             "rpm": self._first_present(numeric, "rpm", "speed"),
             "vbus": self._first_present(numeric, "vbus", "voltage", "batt", "vbatt"),
             "kp": self._first_present(numeric, "kp"),
@@ -588,15 +595,23 @@ class SteeringTabController:
             self.rt_set_value.setText(f"{setpoint:.1f} deg")
         if feedback is not None:
             self._last_feedback = feedback
-            self.rt_fb_value.setText(f"{feedback:.1f} deg")
+            if abs(feedback) > 360:
+                self.rt_fb_value.setText(str(int(round(feedback))))
+            else:
+                self.rt_fb_value.setText(f"{feedback:.1f} deg")
         if error is not None:
             self.rt_err_value.setText(f"{error:.2f} deg")
-        elif setpoint is not None and feedback is not None:
+        elif (
+            setpoint is not None
+            and feedback is not None
+            and abs(setpoint) <= 360
+            and abs(feedback) <= 360
+        ):
             self.rt_err_value.setText(f"{(setpoint - feedback):.2f} deg")
 
         if pwm is not None:
             self._last_pwm = pwm
-            self.rt_pwm_value.setText(f"{pwm:.1f} %")
+            self.rt_pwm_value.setText(f"{pwm:+.1f} %")
         if rpm is not None:
             self.rt_rpm_value.setText(f"{rpm:.1f} rpm")
         if vbus is not None:

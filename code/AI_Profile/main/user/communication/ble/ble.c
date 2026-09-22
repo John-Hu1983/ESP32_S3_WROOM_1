@@ -518,15 +518,15 @@ static int _ble_gatt_access(uint16_t conn_handle,
             ESP_LOGW(TAG, "AT parse status=%d", (int)at_ret);
         }
 
-        if ((rx_len == 4U) && (memcmp(s_ble_ctx->rx_text, "PING", 4U) == 0)) {
-            ble_send_text("PONG");
-        }
-        else if ((rx_len > 5U) && (memcmp(s_ble_ctx->rx_text, "ECHO ", 5U) == 0)) {
-            ble_send_text(&s_ble_ctx->rx_text[5]);
-        }
-        else {
-            ble_send_text("ACK");
-        }
+        // if ((rx_len == 4U) && (memcmp(s_ble_ctx->rx_text, "PING", 4U) == 0)) {
+        //     ble_send_text("PONG");
+        // }
+        // else if ((rx_len > 5U) && (memcmp(s_ble_ctx->rx_text, "ECHO ", 5U) == 0)) {
+        //     ble_send_text(&s_ble_ctx->rx_text[5]);
+        // }
+        // else {
+        //     ble_send_text("ACK");
+        // }
 
         return 0;
     }
@@ -650,6 +650,9 @@ esp_err_t ble_init_nimble(void) {
     if (s_ble_ctx->init_done) {
         return ESP_OK;
     }
+
+    // Reduce high-frequency NimBLE procedure logs (e.g. notify/att_handle) noise.
+    esp_log_level_set("NimBLE", ESP_LOG_WARN);
 
     bt_status = esp_bt_controller_get_status();
     ESP_LOGI(TAG, "BT controller status before init: %d", (int)bt_status);

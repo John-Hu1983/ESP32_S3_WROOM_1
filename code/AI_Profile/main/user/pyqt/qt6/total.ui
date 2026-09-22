@@ -220,11 +220,60 @@ QWidget#steering_tab QLabel#rt_vbus_value {
             <number>10</number>
            </property>
            <item>
-            <widget class="QLabel" name="hero_title">
-             <property name="text">
-              <string>BLE DEVICE CONFIG</string>
+            <layout class="QHBoxLayout" name="hero_title_row">
+             <property name="spacing">
+              <number>8</number>
              </property>
-            </widget>
+             <item>
+              <widget class="QLabel" name="hero_title">
+               <property name="text">
+                <string>BLE DEVICE CONFIG</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="hero_title_row_spacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QLabel" name="ble_conn_led">
+               <property name="minimumSize">
+                <size>
+                      <width>28</width>
+                      <height>28</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                      <width>28</width>
+                      <height>28</height>
+                </size>
+               </property>
+               <property name="toolTip">
+                <string>BLE Link LED</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel#ble_conn_led {
+    background-color: #090909;
+    border: 1px solid #2a3644;
+    border-radius: 14px;
+}</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </item>
            <item>
             <widget class="QLabel" name="hero_subtitle">
@@ -1634,7 +1683,7 @@ QWidget#steering_tab QLabel#rt_vbus_value {
          <item>
           <widget class="QLabel" name="runtime_hint">
            <property name="text">
-            <string>Tip: firmware telemetry supports formats like set=12.5, fb=11.9, pwm=28, rpm=320</string>
+                        <string>Tip: supports set=12.5, fb=11.9, pwm=28, rpm=320, AT+MOTVR: 2073, AT+MOTPWM: -5</string>
            </property>
           </widget>
          </item>

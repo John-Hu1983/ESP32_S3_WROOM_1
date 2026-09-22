@@ -17,6 +17,7 @@ class BleManager(QObject):
     DEFAULT_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb"
     DEFAULT_RX_UUID = "0000fff1-0000-1000-8000-00805f9b34fb"
     DEFAULT_TX_UUID = "0000fff2-0000-1000-8000-00805f9b34fb"
+    CONNECT_TIMEOUT_SEC = 6.0
 
     log_signal = pyqtSignal(str)
     scan_started_signal = pyqtSignal()
@@ -173,7 +174,7 @@ class BleManager(QObject):
 
         try:
             client = BleakClient(address, disconnected_callback=self._on_disconnected)
-            await client.connect(timeout=12.0)
+            await client.connect(timeout=self.CONNECT_TIMEOUT_SEC)
         except Exception as exc:
             self.log_signal.emit(f"Connect failed: {exc}")
             self.connected_signal.emit(False, "N/A")

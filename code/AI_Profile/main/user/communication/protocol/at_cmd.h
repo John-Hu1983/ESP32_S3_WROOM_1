@@ -13,6 +13,8 @@ extern "C" {
 #include "esp_log.h"
 #include "esp_system.h"
 
+#include "user/device/dev_servo.h"
+
 typedef void (*cmd_parse_code)(const char* para);
 typedef struct {
     const char* cmd;

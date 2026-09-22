@@ -22,6 +22,9 @@ TWidget = TypeVar("TWidget", bound=QWidget)
 
 
 class BleTabController:
+    SCAN_TIMEOUT_SEC = 6.0
+    RECONNECT_DELAY_MS = 6000
+
     def __init__(self, ble_api: BleManager, tab_root: QWidget) -> None:
         self._ble = ble_api
         self._root = tab_root
@@ -34,6 +37,12 @@ class BleTabController:
         self._auto_target_address = ""
         self._last_connect_name = ""
         self._last_connect_address = ""
+        self._manual_disconnect_requested = False
+        self._auto_reconnect_active = False
+
+        self._reconnect_timer = QTimer(self._root)
+        self._reconnect_timer.setSingleShot(True)
+        self._reconnect_timer.timeout.connect(self._on_reconnect_timeout)
 
         self.device_filter_edit: QLineEdit
         self.scan_button: QPushButton
@@ -51,6 +60,7 @@ class BleTabController:
         self.rx_value: QLabel
         self.tx_value: QLabel
         self.config_summary: QLabel
+        self.ble_conn_led: QLabel
 
         self.device_list: QListWidget
         self.rx_view: QPlainTextEdit
@@ -76,6 +86,7 @@ class BleTabController:
         self._is_connected = False
         self.disconnect_button.setEnabled(False)
         self.send_button.setEnabled(False)
+        self._update_ble_led()
 
         self._apply_ble_config(notify=False)
         self._schedule_auto_connect_if_enabled()
@@ -97,6 +108,7 @@ class BleTabController:
         self.rx_value = self._must_find(QLabel, "rx_value")
         self.tx_value = self._must_find(QLabel, "tx_value")
         self.config_summary = self._must_find(QLabel, "config_summary")
+        self.ble_conn_led = self._must_find(QLabel, "ble_conn_led")
 
         self.device_list = self._must_find(QListWidget, "device_list")
         self.rx_view = self._must_find(QPlainTextEdit, "rx_view")
@@ -153,6 +165,49 @@ class BleTabController:
         self._auto_connect_pending = True
         QTimer.singleShot(700, self._try_auto_connect_last_device)
 
+    def _stop_auto_reconnect(self) -> None:
+        self._auto_reconnect_active = False
+        if self._reconnect_timer.isActive():
+            self._reconnect_timer.stop()
+
+    def _schedule_auto_reconnect(self) -> None:
+        if not self._auto_reconnect_active or self._is_connected:
+            return
+
+        if self._reconnect_timer.isActive():
+            return
+
+        self._append_sys("Auto reconnect: retry in 6.0s.")
+        self._reconnect_timer.start(self.RECONNECT_DELAY_MS)
+
+    def _on_reconnect_timeout(self) -> None:
+        if not self._auto_reconnect_active or self._is_connected:
+            return
+
+        if self._is_scanning:
+            self._schedule_auto_reconnect()
+            return
+
+        target_name = self._last_connect_name.strip() or self._auto_target_name.strip()
+        target_address = (
+            self._last_connect_address.strip() or self._auto_target_address.strip()
+        )
+        if not target_name and not target_address:
+            self._append_sys("Auto reconnect: no last device info, stop retry.")
+            self._auto_reconnect_active = False
+            return
+
+        self._auto_target_name = target_name or self._auto_target_name
+        self._auto_target_address = target_address or self._auto_target_address
+        self._auto_connect_pending = True
+        self._append_sys(
+            "Auto reconnect: try {name} [{addr}]".format(
+                name=self._auto_target_name or self._auto_target_address,
+                addr=self._auto_target_address or "N/A",
+            )
+        )
+        self._try_auto_connect_last_device()
+
     def _try_auto_connect_last_device(self) -> None:
         if not self._auto_connect_pending or self._is_connected:
             return
@@ -182,7 +237,7 @@ class BleTabController:
         self._append_sys(f"Auto connect: scan with filter '{filter_text or 'ALL'}'.")
         self.device_list.clear()
         self._auto_scan_requested = True
-        self._ble.scan(name_filter=filter_text, timeout_sec=6.0)
+        self._ble.scan(name_filter=filter_text, timeout_sec=self.SCAN_TIMEOUT_SEC)
 
     def _pick_auto_connect_item(self) -> QListWidgetItem | None:
         target_address = self._auto_target_address.strip().lower()
@@ -416,7 +471,7 @@ class BleTabController:
     def _bind_signals(self) -> None:
         self.scan_button.clicked.connect(self._on_scan_clicked)
         self.connect_button.clicked.connect(self._on_connect_clicked)
-        self.disconnect_button.clicked.connect(self._ble.disconnect_device)
+        self.disconnect_button.clicked.connect(self._on_disconnect_clicked)
         self.apply_config_button.clicked.connect(self._on_apply_config_clicked)
 
         self.send_button.clicked.connect(self._on_send_clicked)
@@ -439,15 +494,26 @@ class BleTabController:
         self._apply_ble_config(notify=True)
 
     def _on_scan_clicked(self) -> None:
+        self._manual_disconnect_requested = False
+        self._stop_auto_reconnect()
         self._auto_scan_requested = False
         self._auto_connect_pending = False
         self._apply_ble_config(notify=False)
         self.device_list.clear()
         filter_text = self.device_filter_edit.text().strip()
         self._append_sys(f"Start scanning. Filter: '{filter_text or 'ALL'}'")
-        self._ble.scan(name_filter=filter_text, timeout_sec=6.0)
+        self._ble.scan(name_filter=filter_text, timeout_sec=self.SCAN_TIMEOUT_SEC)
+
+    def _on_disconnect_clicked(self) -> None:
+        self._manual_disconnect_requested = True
+        self._auto_scan_requested = False
+        self._auto_connect_pending = False
+        self._stop_auto_reconnect()
+        self._ble.disconnect_device()
 
     def _on_connect_clicked(self) -> None:
+        self._manual_disconnect_requested = False
+        self._stop_auto_reconnect()
         item = self.device_list.currentItem()
         if item is None:
             self._append_sys("Please select a device before CONNECT.")
@@ -475,6 +541,7 @@ class BleTabController:
 
         self._last_connect_name = clean_name
         self._last_connect_address = clean_address
+        self._manual_disconnect_requested = False
         self._apply_ble_config(notify=False)
         self.device_value.setText(clean_name)
         self._refresh_status_strip()
@@ -532,6 +599,7 @@ class BleTabController:
         if match_item is None:
             self._auto_connect_pending = False
             self._append_sys("Auto connect: no matching device in scan results.")
+            self._schedule_auto_reconnect()
             return
 
         self.device_list.setCurrentItem(match_item)
@@ -539,6 +607,7 @@ class BleTabController:
         if not isinstance(info, dict):
             self._auto_connect_pending = False
             self._append_sys("Auto connect: invalid scan result item.")
+            self._schedule_auto_reconnect()
             return
 
         name = str(info.get("name", "Unknown"))
@@ -546,6 +615,7 @@ class BleTabController:
         if not address:
             self._auto_connect_pending = False
             self._append_sys("Auto connect: matched device has empty address.")
+            self._schedule_auto_reconnect()
             return
 
         self._append_sys(f"Auto connect: matched {name} [{address}].")
@@ -553,6 +623,7 @@ class BleTabController:
 
     def _on_connected_changed(self, connected: bool, device_name: str) -> None:
         try:
+            was_connected = self._is_connected
             self._is_connected = connected
             self.connect_button.setEnabled(not connected)
             self.disconnect_button.setEnabled(connected)
@@ -564,15 +635,35 @@ class BleTabController:
                 self._auto_connect_pending = False
                 self._auto_scan_requested = False
                 self._save_last_connected_device(shown_name)
+                self._manual_disconnect_requested = False
+                self._stop_auto_reconnect()
                 self._append_sys(f"Connected to {shown_name}.")
             else:
                 self.device_value.setText("N/A")
                 self._append_sys("Disconnected.")
 
+                if self._manual_disconnect_requested:
+                    self._manual_disconnect_requested = False
+                    self._stop_auto_reconnect()
+                elif was_connected or self._auto_reconnect_active:
+                    self._auto_reconnect_active = True
+                    self._schedule_auto_reconnect()
+
+            self._update_ble_led()
             self._refresh_status_strip()
         except RuntimeError:
             # UI may already be destroying while async BLE callbacks arrive.
             return
+
+    def _update_ble_led(self) -> None:
+        color = "#ff2828" if self._is_connected else "#090909"
+        self.ble_conn_led.setStyleSheet(
+            "QLabel#ble_conn_led {"
+            f"background-color: {color};"
+            "border: 1px solid #2a3644;"
+            "border-radius: 14px;"
+            "}"
+        )
 
     def _on_ble_rx(self, text: str) -> None:
         self._append_rx(text)

@@ -25,43 +25,18 @@ typedef struct {
 } algo_pid_cfg_s;
 
 typedef struct {
-    float err;            // Current control error: target - feedback.
-    float p_term;         // Latest proportional contribution.
-    float i_term;         // Latest integral contribution after integral clamp.
-    float d_term;         // Latest derivative contribution.
-    float out;            // Latest final output after output saturation.
-} algo_pid_terms_s;
-
-typedef struct {
     bool inited;          // True after successful init.
     bool first_cycle;     // True before first step; derivative term is suppressed.
     float target;         // Setpoint used to compute error.
     float prev_err;       // Previous-step error used by derivative term.
     float i_acc;          // Internal integral accumulator state.
+    float curr_err;       // Cached current control error from the most recent step.
     algo_pid_cfg_s cfg;   // Active PID configuration.
-    algo_pid_terms_s terms;  // Cached terms from the most recent step.
 } algo_pid_s;
 // clang-format on
 
-void algo_pid_cfg_set_default(algo_pid_cfg_s* cfg);
-
-esp_err_t algo_pid_init(algo_pid_s* pid, const algo_pid_cfg_s* cfg);
-esp_err_t algo_pid_deinit(algo_pid_s* pid);
-esp_err_t algo_pid_reset(algo_pid_s* pid);
-
-esp_err_t algo_pid_set_cfg(algo_pid_s* pid, const algo_pid_cfg_s* cfg);
-esp_err_t algo_pid_get_cfg(const algo_pid_s* pid, algo_pid_cfg_s* cfg);
-
-esp_err_t algo_pid_set_target(algo_pid_s* pid, float target);
-esp_err_t algo_pid_get_target(const algo_pid_s* pid, float* target);
-
 esp_err_t algo_pid_step(algo_pid_s* pid, float feedback, float* output);
-esp_err_t algo_pid_step_with_target(algo_pid_s* pid,
-                                    float target,
-                                    float feedback,
-                                    float* output);
-
-esp_err_t algo_pid_get_terms(const algo_pid_s* pid, algo_pid_terms_s* terms);
+esp_err_t algo_pid_get_curr_err(const algo_pid_s* pid, float* curr_err);
 
 #ifdef __cplusplus
 }

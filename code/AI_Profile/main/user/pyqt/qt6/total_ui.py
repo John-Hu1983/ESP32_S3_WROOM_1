@@ -208,10 +208,32 @@ class Ui_MainWindow(object):
         self.hero_layout.setSpacing(2)
         self.hero_layout.setObjectName(u"hero_layout")
         self.hero_layout.setContentsMargins(14, 10, 14, 10)
+        self.hero_title_row = QHBoxLayout()
+        self.hero_title_row.setSpacing(8)
+        self.hero_title_row.setObjectName(u"hero_title_row")
         self.hero_title = QLabel(self.hero_card)
         self.hero_title.setObjectName(u"hero_title")
 
-        self.hero_layout.addWidget(self.hero_title)
+        self.hero_title_row.addWidget(self.hero_title)
+
+        self.hero_title_row_spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+
+        self.hero_title_row.addItem(self.hero_title_row_spacer)
+
+        self.ble_conn_led = QLabel(self.hero_card)
+        self.ble_conn_led.setObjectName(u"ble_conn_led")
+        self.ble_conn_led.setMinimumSize(QSize(28, 28))
+        self.ble_conn_led.setMaximumSize(QSize(28, 28))
+        self.ble_conn_led.setStyleSheet(u"QLabel#ble_conn_led {\n"
+"    background-color: #090909;\n"
+"    border: 1px solid #2a3644;\n"
+"    border-radius: 14px;\n"
+"}")
+
+        self.hero_title_row.addWidget(self.ble_conn_led)
+
+
+        self.hero_layout.addLayout(self.hero_title_row)
 
         self.hero_subtitle = QLabel(self.hero_card)
         self.hero_subtitle.setObjectName(u"hero_subtitle")
@@ -1061,6 +1083,10 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
         self.hero_title.setText(QCoreApplication.translate("MainWindow", u"BLE DEVICE CONFIG", None))
+#if QT_CONFIG(tooltip)
+        self.ble_conn_led.setToolTip(QCoreApplication.translate("MainWindow", u"BLE Link LED", None))
+#endif // QT_CONFIG(tooltip)
+        self.ble_conn_led.setText("")
         self.hero_subtitle.setText(QCoreApplication.translate("MainWindow", u"Search, connect, configure UUID, send and receive text", None))
         self.section_title.setText(QCoreApplication.translate("MainWindow", u"DEVICE / CONNECTION", None))
         self.device_filter_lab.setText(QCoreApplication.translate("MainWindow", u"Device Filter", None))
@@ -1145,7 +1171,7 @@ class Ui_MainWindow(object):
         self.rt_rpm_value.setText(QCoreApplication.translate("MainWindow", u"0.0 rpm", None))
         self.rt_vbus_lab.setText(QCoreApplication.translate("MainWindow", u"Bus Voltage", None))
         self.rt_vbus_value.setText(QCoreApplication.translate("MainWindow", u"0.0 V", None))
-        self.runtime_hint.setText(QCoreApplication.translate("MainWindow", u"Tip: firmware telemetry supports formats like set=12.5, fb=11.9, pwm=28, rpm=320", None))
+        self.runtime_hint.setText(QCoreApplication.translate("MainWindow", u"Tip: supports set=12.5, fb=11.9, pwm=28, rpm=320, AT+MOTVR: 2073, AT+MOTPWM: -5", None))
         self.telemetry_raw_title.setText(QCoreApplication.translate("MainWindow", u"RAW TELEMETRY", None))
         self.telemetry_raw_view.setPlaceholderText(QCoreApplication.translate("MainWindow", u"RX/TX log and parsed steering telemetry", None))
         self.telemetry_cmd_edit.setPlaceholderText(QCoreApplication.translate("MainWindow", u"Manual command, e.g. STEER_PID kp=1.3 ki=0.05 kd=0.01", None))
