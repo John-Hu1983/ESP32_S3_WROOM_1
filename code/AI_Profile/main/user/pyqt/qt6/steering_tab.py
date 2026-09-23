@@ -6,7 +6,7 @@ import time
 from collections import deque
 from typing import TypeVar
 
-from PyQt6.QtCore import QDateTime, Qt
+from PyQt6.QtCore import QDateTime, QTimer, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -186,12 +186,19 @@ class SteeringScopeWidget(QWidget):
 
 
 class SteeringTabController:
+    KNOB_SEND_INTERVAL_MS = 100
+
     def __init__(self, ble_api: BleManager, tab_root: QWidget) -> None:
         self._ble = ble_api
         self._at = AtClient(self._ble.send_text)
         self._root = tab_root
         self._is_connected = False
         self._angle_syncing = False
+        self._pending_knob_setpoint: tuple[int, int] | None = None
+
+        self._knob_send_timer = QTimer(self._root)
+        self._knob_send_timer.setSingleShot(True)
+        self._knob_send_timer.timeout.connect(self._send_pending_knob_setpoint)
 
         self.scope_host: QFrame
         self.scope_window_combo: QComboBox
@@ -392,6 +399,8 @@ class SteeringTabController:
         self._update_ble_led()
         self._set_command_widgets_enabled(connected)
         if not connected:
+            self._knob_send_timer.stop()
+            self._pending_knob_setpoint = None
             self._append_note("Steering tab ready. Connect BLE device first.")
 
     def _update_ble_led(self) -> None:
@@ -435,7 +444,24 @@ class SteeringTabController:
         self.knob_value_lab.setText(f"{angle_int} deg")
         adc_value = self._set_adc_for_degree(angle_int)
         self.rt_set_value.setText(str(adc_value))
-        self._send_setpoint(angle_int, adc_value, warn_if_disconnected=False)
+        self._schedule_knob_setpoint(angle_int, adc_value)
+
+    def _schedule_knob_setpoint(self, angle: int, adc_value: int) -> None:
+        if not self._is_connected:
+            return
+
+        self._pending_knob_setpoint = (angle, adc_value)
+        if not self._knob_send_timer.isActive():
+            self._knob_send_timer.start(self.KNOB_SEND_INTERVAL_MS)
+
+    def _send_pending_knob_setpoint(self) -> None:
+        pending = self._pending_knob_setpoint
+        self._pending_knob_setpoint = None
+        if pending is None:
+            return
+
+        angle, adc_value = pending
+        self._send_setpoint(angle, adc_value, warn_if_disconnected=False)
 
     def _on_angle_spin_changed(self, value: float) -> None:
         if self._angle_syncing:
@@ -462,7 +488,9 @@ class SteeringTabController:
             if warn_if_disconnected:
                 self._append_note("Command skipped: BLE is not connected.")
             return
-        self._ble.send_text(f"AT+SETPOINT:{angle},{adc_value}")
+        self._ble.send_latest_text(
+            "steering_setpoint", f"AT+SETPOINT:{angle},{adc_value}"
+        )
 
     def _on_motor_enable_clicked(self) -> None:
         self._send_command("STEER_ENABLE 1")

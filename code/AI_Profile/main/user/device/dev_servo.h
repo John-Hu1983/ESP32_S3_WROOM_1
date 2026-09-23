@@ -46,7 +46,6 @@ typedef struct {
     uint8_t pwm_b;
     uint16_t vr;
     e_motor_direction dir;
-    hal_adc_link_t adc_cfg;
 } t_servo_ctr;
 
 esp_err_t servo_init_hw(void);
@@ -58,7 +57,7 @@ void servo_set_pid_para(float kp, float ki, float kd);
 void servo_compute_via_pid(uint16_t ms);
 int servo_debug_profile(btn_status_e btn);
 void servo_run_motor(e_motor_direction dir, uint8_t duty);
-uint16_t servo_get_adc_value(void);
+esp_err_t servo_get_adc_value(uint16_t* adc_value);
 #ifdef __cplusplus
 }
 #endif

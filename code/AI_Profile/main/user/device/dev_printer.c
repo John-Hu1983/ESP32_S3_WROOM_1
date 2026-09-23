@@ -271,6 +271,11 @@ esp_err_t printer_init(const printer_cfg_t* config)
         return ESP_ERR_INVALID_ARG;
     }
 
+    ret = batvol_init_cfg();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
     if (s_printer.lock == NULL) {
         s_printer.lock = xSemaphoreCreateMutex();
         if (s_printer.lock == NULL) {

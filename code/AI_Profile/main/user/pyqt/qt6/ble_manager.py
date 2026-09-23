@@ -38,6 +38,8 @@ class BleManager(QObject):
         self._rx_uuid = self.DEFAULT_RX_UUID
         self._tx_uuid = self.DEFAULT_TX_UUID
         self._connected_name = "N/A"
+        self._latest_text: dict[str, str] = {}
+        self._latest_send_tasks: dict[str, asyncio.Task[None]] = {}
 
     @property
     def connected_name(self) -> str:
@@ -60,6 +62,11 @@ class BleManager(QObject):
     def send_text(self, text: str) -> None:
         self._submit(self._send_async(text))
 
+    def send_latest_text(self, key: str, text: str) -> None:
+        if self._loop.is_closed():
+            return
+        self._loop.call_soon_threadsafe(self._queue_latest_text, key, text)
+
     def shutdown(self) -> None:
         fut = asyncio.run_coroutine_threadsafe(
             self._disconnect_async(silent=True), self._loop
@@ -80,6 +87,22 @@ class BleManager(QObject):
         if self._loop.is_closed():
             return
         asyncio.run_coroutine_threadsafe(coro, self._loop)
+
+    def _queue_latest_text(self, key: str, text: str) -> None:
+        self._latest_text[key] = text
+        task = self._latest_send_tasks.get(key)
+        if task is None or task.done():
+            self._latest_send_tasks[key] = self._loop.create_task(
+                self._send_latest_text_async(key)
+            )
+
+    async def _send_latest_text_async(self, key: str) -> None:
+        try:
+            while key in self._latest_text:
+                text = self._latest_text.pop(key)
+                await self._send_async(text)
+        finally:
+            self._latest_send_tasks.pop(key, None)
 
     async def _scan_async(self, name_filter: str, timeout_sec: float) -> None:
         if BleakScanner is None:

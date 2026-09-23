@@ -752,7 +752,7 @@ class Ui_MainWindow(object):
         self.kp_spin.setObjectName(u"kp_spin")
         self.kp_spin.setDecimals(4)
         self.kp_spin.setMaximum(200.000000000000000)
-        self.kp_spin.setValue(1.200000000000000)
+        self.kp_spin.setValue(0.200000000000000)
 
         self.pid_grid.addWidget(self.kp_spin, 0, 1, 1, 1)
 
@@ -778,7 +778,7 @@ class Ui_MainWindow(object):
         self.kd_spin.setObjectName(u"kd_spin")
         self.kd_spin.setDecimals(4)
         self.kd_spin.setMaximum(200.000000000000000)
-        self.kd_spin.setValue(0.010000000000000)
+        self.kd_spin.setValue(0.005000000000000)
 
         self.pid_grid.addWidget(self.kd_spin, 1, 1, 1, 1)
 

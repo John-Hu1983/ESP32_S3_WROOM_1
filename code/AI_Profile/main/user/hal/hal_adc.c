@@ -2,14 +2,20 @@
 
 static adc_continuous_handle_t adc_handle = NULL;
 static TaskHandle_t adc_task_handle = NULL;
-static SemaphoreHandle_t adc_driver_lock = NULL;
+static SemaphoreHandle_t adc_command_lock = NULL;
+static SemaphoreHandle_t adc_command_done = NULL;
 static hal_adc_link_t* adc_link_head = NULL;
 static volatile bool adc_task_run = false;
 static bool adc_started = false;
+static volatile adc_command_e adc_command = ADC_COMMAND_NONE;
+static esp_err_t adc_command_result = ESP_OK;
 static portMUX_TYPE adc_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static void _adc_task(void* arg);
 static esp_err_t _adc_apply_config(void);
+static esp_err_t _adc_stop_driver(void);
+static esp_err_t _adc_request_command(adc_command_e command);
+static void _adc_process_command(void);
 static hal_adc_link_t* _adc_find_link(adc_unit_t unit, adc_channel_t channel);
 static bool _adc_unlink(hal_adc_link_t* link);
 
@@ -76,31 +82,28 @@ static bool _adc_unlink(hal_adc_link_t* link) {
 static esp_err_t _adc_apply_config(void) {
     adc_digi_pattern_config_t patterns[SOC_ADC_PATT_LEN_MAX] = { 0 };
     adc_continuous_config_t continuous_cfg = { 0 };
-    hal_adc_link_t* link = adc_link_head;
+    hal_adc_link_t* link = NULL;
     uint32_t pattern_count = 0U;
     esp_err_t ret = ESP_OK;
 
+    portENTER_CRITICAL(&adc_lock);
+    link = adc_link_head;
     while ((link != NULL) && (pattern_count < SOC_ADC_PATT_LEN_MAX)) {
         patterns[pattern_count].unit = link->unit;
         patterns[pattern_count].channel = link->channel;
-        patterns[pattern_count].atten = link->atten;
-        patterns[pattern_count].bit_width = link->bitwidth;
+        patterns[pattern_count].atten = HAL_ADC_ATTENUATION;
+        patterns[pattern_count].bit_width = HAL_ADC_BITWIDTH;
         pattern_count++;
         link = link->next;
     }
+    portEXIT_CRITICAL(&adc_lock);
     if ((pattern_count == 0U) || (link != NULL)) {
         return ESP_ERR_INVALID_SIZE;
-    }
-    if ((adc_driver_lock == NULL)
-        || (xSemaphoreTake(adc_driver_lock, pdMS_TO_TICKS(HAL_ADC_LOCK_TIMEOUT_MS))
-            != pdTRUE)) {
-        return ESP_ERR_TIMEOUT;
     }
 
     if (adc_started) {
         ret = adc_continuous_stop(adc_handle);
         if ((ret != ESP_OK) && (ret != ESP_ERR_INVALID_STATE)) {
-            xSemaphoreGive(adc_driver_lock);
             return ret;
         }
         adc_started = false;
@@ -113,7 +116,6 @@ static esp_err_t _adc_apply_config(void) {
 
     ret = adc_continuous_config(adc_handle, &continuous_cfg);
     if (ret != ESP_OK) {
-        xSemaphoreGive(adc_driver_lock);
         return ret;
     }
 
@@ -121,9 +123,93 @@ static esp_err_t _adc_apply_config(void) {
     if (ret == ESP_OK) {
         adc_started = true;
     }
-    xSemaphoreGive(adc_driver_lock);
 
     return ret;
+}
+
+/*
+ * brief : _adc_stop_driver.
+ * input : none.
+ * output: return value from this function.
+ * type  : private
+ * theory: stop and release the continuous driver in the task that acquired its hardware lock.
+ */
+static esp_err_t _adc_stop_driver(void) {
+    esp_err_t ret = ESP_OK;
+
+    if (adc_started) {
+        ret = adc_continuous_stop(adc_handle);
+        if ((ret != ESP_OK) && (ret != ESP_ERR_INVALID_STATE)) {
+            return ret;
+        }
+        adc_started = false;
+    }
+
+    ret = adc_continuous_deinit(adc_handle);
+    if (ret == ESP_OK) {
+        adc_handle = NULL;
+    }
+
+    return ret;
+}
+
+/*
+ * brief : _adc_request_command.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : private
+ * theory: serialize callers and synchronously delegate driver ownership operations to the ADC task.
+ */
+static esp_err_t _adc_request_command(adc_command_e command) {
+    esp_err_t ret = ESP_OK;
+
+    if ((adc_task_handle == NULL) || (adc_command_lock == NULL)
+        || (adc_command_done == NULL)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (xSemaphoreTake(adc_command_lock, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    (void)xSemaphoreTake(adc_command_done, 0U);
+    adc_command_result = ESP_FAIL;
+    adc_command = command;
+    xTaskNotifyGive(adc_task_handle);
+
+    if (xSemaphoreTake(adc_command_done, portMAX_DELAY) == pdTRUE) {
+        ret = adc_command_result;
+    }
+    else {
+        ret = ESP_ERR_TIMEOUT;
+    }
+
+    xSemaphoreGive(adc_command_lock);
+    return ret;
+}
+
+/*
+ * brief : _adc_process_command.
+ * input : none.
+ * output: none.
+ * type  : private
+ * theory: execute start, stop, and reconfiguration only from the ADC driver-owner task.
+ */
+static void _adc_process_command(void) {
+    adc_command_e command = adc_command;
+    esp_err_t ret = ESP_ERR_INVALID_ARG;
+
+    adc_command = ADC_COMMAND_NONE;
+    if (command == ADC_COMMAND_APPLY_CONFIG) {
+        ret = _adc_apply_config();
+    }
+    else if (command == ADC_COMMAND_STOP) {
+        ret = _adc_stop_driver();
+        adc_task_run = false;
+        adc_task_handle = NULL;
+    }
+
+    adc_command_result = ret;
+    xSemaphoreGive(adc_command_done);
 }
 
 /*
@@ -131,9 +217,9 @@ static esp_err_t _adc_apply_config(void) {
  * input : see parameters.
  * output: return value from this function.
  * type  : public
- * theory: allocate one persistent PSRAM link and apply the full DMA scan pattern.
+ * theory: allocate a private PSRAM link from unit/channel and apply the DMA scan pattern.
  */
-esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
+esp_err_t hal_adc_insert(adc_unit_t unit, adc_channel_t channel) {
     adc_continuous_handle_cfg_t handle_cfg = {
         .max_store_buf_size = HAL_ADC_FRAME_SAMPLES * sizeof(adc_digi_output_data_t) * 4U,
         .conv_frame_size = HAL_ADC_FRAME_SAMPLES * sizeof(adc_digi_output_data_t),
@@ -147,20 +233,16 @@ esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
     uint32_t cfg_count = 0U;
     esp_err_t ret = ESP_OK;
 
-    if ((cfg == NULL) || (cfg->unit != ADC_UNIT_1)) {
+    if (unit != ADC_UNIT_1) {
         return ESP_ERR_INVALID_ARG;
     }
 
     portENTER_CRITICAL(&adc_lock);
     current = adc_link_head;
     while (current != NULL) {
-        if ((current->unit == cfg->unit) && (current->channel == cfg->channel)) {
+        if ((current->unit == unit) && (current->channel == channel)) {
             portEXIT_CRITICAL(&adc_lock);
-            if ((current->atten == cfg->atten) && (current->bitwidth == cfg->bitwidth)
-                && (current->enable_cali == cfg->enable_cali)) {
-                return ESP_OK;
-            }
-            return ESP_ERR_INVALID_STATE;
+            return ESP_OK;
         }
         cfg_count++;
         current = current->next;
@@ -177,15 +259,19 @@ esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
     if (link == NULL) {
         return ESP_ERR_NO_MEM;
     }
-    link->unit = cfg->unit;
-    link->channel = cfg->channel;
-    link->atten = cfg->atten;
-    link->bitwidth = cfg->bitwidth;
-    link->enable_cali = cfg->enable_cali;
+    link->unit = unit;
+    link->channel = channel;
 
-    if (adc_driver_lock == NULL) {
-        adc_driver_lock = xSemaphoreCreateMutex();
-        if (adc_driver_lock == NULL) {
+    if (adc_command_lock == NULL) {
+        adc_command_lock = xSemaphoreCreateMutex();
+        if (adc_command_lock == NULL) {
+            heap_caps_free(link);
+            return ESP_ERR_NO_MEM;
+        }
+    }
+    if (adc_command_done == NULL) {
+        adc_command_done = xSemaphoreCreateBinary();
+        if (adc_command_done == NULL) {
             heap_caps_free(link);
             return ESP_ERR_NO_MEM;
         }
@@ -194,8 +280,6 @@ esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
     if (adc_handle == NULL) {
         ret = adc_continuous_new_handle(&handle_cfg, &adc_handle);
         if (ret != ESP_OK) {
-            vSemaphoreDelete(adc_driver_lock);
-            adc_driver_lock = NULL;
             heap_caps_free(link);
             return ret;
         }
@@ -214,22 +298,6 @@ esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
     }
     portEXIT_CRITICAL(&adc_lock);
 
-    ret = _adc_apply_config();
-    if (ret != ESP_OK) {
-        (void)_adc_unlink(link);
-        heap_caps_free(link);
-        if (adc_link_head != NULL) {
-            (void)_adc_apply_config();
-        }
-        else {
-            (void)adc_continuous_deinit(adc_handle);
-            adc_handle = NULL;
-            vSemaphoreDelete(adc_driver_lock);
-            adc_driver_lock = NULL;
-        }
-        return ret;
-    }
-
     if (adc_task_handle == NULL) {
         adc_task_run = true;
         if (xTaskCreate(_adc_task,
@@ -240,21 +308,27 @@ esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
                         &adc_task_handle)
             != pdPASS) {
             adc_task_run = false;
-            (void)adc_continuous_stop(adc_handle);
-            adc_started = false;
             (void)_adc_unlink(link);
             heap_caps_free(link);
-            if (adc_link_head != NULL) {
-                (void)_adc_apply_config();
-            }
-            else {
+            if (adc_link_head == NULL) {
                 (void)adc_continuous_deinit(adc_handle);
                 adc_handle = NULL;
-                vSemaphoreDelete(adc_driver_lock);
-                adc_driver_lock = NULL;
             }
             return ESP_ERR_NO_MEM;
         }
+    }
+
+    ret = _adc_request_command(ADC_COMMAND_APPLY_CONFIG);
+    if (ret != ESP_OK) {
+        (void)_adc_unlink(link);
+        heap_caps_free(link);
+        if (adc_link_head != NULL) {
+            (void)_adc_request_command(ADC_COMMAND_APPLY_CONFIG);
+        }
+        else {
+            (void)_adc_request_command(ADC_COMMAND_STOP);
+        }
+        return ret;
     }
 
     return ESP_OK;
@@ -270,29 +344,44 @@ esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
 static void _adc_task(void* arg) {
     adc_digi_output_data_t frame[HAL_ADC_FRAME_SAMPLES] = { 0 };
     hal_adc_link_t* cfg = NULL;
+    TickType_t update_tick = 0U;
     uint32_t read_len = 0U;
     uint32_t sample_count = 0U;
+    uint32_t matched_count = 0U;
+    uint32_t failure_count = 0U;
     uint32_t i = 0U;
     esp_err_t ret = ESP_OK;
 
     (void)arg;
 
     while (adc_task_run) {
-        if (xSemaphoreTake(adc_driver_lock, pdMS_TO_TICKS(HAL_ADC_LOCK_TIMEOUT_MS))
-            != pdTRUE) {
+        if (ulTaskNotifyTake(pdTRUE, adc_started ? 0U : portMAX_DELAY) > 0U) {
+            _adc_process_command();
+            if (!adc_task_run) {
+                break;
+            }
+        }
+        if (!adc_started) {
             continue;
         }
+
         ret = adc_continuous_read(adc_handle,
                                   (uint8_t*)frame,
                                   sizeof(frame),
                                   &read_len,
                                   20U);
-        xSemaphoreGive(adc_driver_lock);
         if (ret != ESP_OK) {
+            failure_count++;
+            if (failure_count >= HAL_ADC_RECOVERY_FAILURES) {
+                (void)_adc_apply_config();
+                failure_count = 0U;
+            }
             continue;
         }
 
         sample_count = read_len / sizeof(adc_digi_output_data_t);
+        matched_count = 0U;
+        update_tick = xTaskGetTickCount();
         portENTER_CRITICAL(&adc_lock);
         for (i = 0U; i < sample_count; i++) {
             cfg = _adc_find_link((adc_unit_t)frame[i].type2.unit,
@@ -306,8 +395,21 @@ static void _adc_task(void* arg) {
             if (cfg->cache_count < HAL_ADC_AVG_SAMPLES) {
                 cfg->cache_count++;
             }
+            cfg->last_update_tick = update_tick;
+            matched_count++;
         }
         portEXIT_CRITICAL(&adc_lock);
+
+        if (matched_count > 0U) {
+            failure_count = 0U;
+        }
+        else {
+            failure_count++;
+            if (failure_count >= HAL_ADC_RECOVERY_FAILURES) {
+                (void)_adc_apply_config();
+                failure_count = 0U;
+            }
+        }
     }
 
     adc_task_handle = NULL;
@@ -319,7 +421,7 @@ static void _adc_task(void* arg) {
  * input : see parameters.
  * output: return value from this function.
  * type  : public
- * theory: expose the live raw cache and calculate a stable average from its locked snapshot.
+ * theory: reject stale data, expose the live raw cache, and average a locked snapshot.
  */
 esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
                                      adc_channel_t channel,
@@ -327,6 +429,8 @@ esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
                                      hal_adc_sample_s* sample) {
     uint16_t cache[HAL_ADC_AVG_SAMPLES] = { 0 };
     hal_adc_link_t* cfg = NULL;
+    TickType_t now_tick = 0U;
+    TickType_t last_update_tick = 0U;
     uint32_t sample_count = 0U;
     uint32_t idx = 0U;
     uint32_t sum = 0U;
@@ -337,6 +441,7 @@ esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
     }
 
     *sample = (hal_adc_sample_s){ 0 };
+    now_tick = xTaskGetTickCount();
     portENTER_CRITICAL(&adc_lock);
     cfg = _adc_find_link(unit, channel);
     if (cfg == NULL) {
@@ -344,6 +449,7 @@ esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
         return ESP_ERR_NOT_FOUND;
     }
     sample->raw_cache = cfg->cache;
+    last_update_tick = cfg->last_update_tick;
     sample_count = cfg->cache_count;
     idx = cfg->cache_head;
     for (i = 0U; i < sample_count; i++) {
@@ -355,6 +461,9 @@ esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
 
     if (sample_count == 0U) {
         return ESP_ERR_NOT_FOUND;
+    }
+    if ((now_tick - last_update_tick) > pdMS_TO_TICKS(HAL_ADC_STALE_TIMEOUT_MS)) {
+        return ESP_ERR_TIMEOUT;
     }
     if ((avg_samples > 0U) && (avg_samples < sample_count)) {
         sample_count = avg_samples;
@@ -372,65 +481,3 @@ esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
     return ESP_OK;
 }
 
-/*
- * brief : hal_adc_deinit.
- * input : see parameters.
- * output: return value from this function.
- * type  : public
- * theory: remove one PSRAM link, reconfigure survivors, and release DMA after the last removal.
- */
-esp_err_t hal_adc_deinit(const hal_adc_link_t* cfg) {
-    hal_adc_link_t* link = NULL;
-    esp_err_t ret = ESP_OK;
-
-    if (cfg == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (adc_handle == NULL) {
-        return ESP_OK;
-    }
-
-    portENTER_CRITICAL(&adc_lock);
-    link = _adc_find_link(cfg->unit, cfg->channel);
-    portEXIT_CRITICAL(&adc_lock);
-    if ((link == NULL) || !_adc_unlink(link)) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    if (adc_link_head != NULL) {
-        ret = _adc_apply_config();
-        heap_caps_free(link);
-        return ret;
-    }
-
-    adc_task_run = false;
-    if (xSemaphoreTake(adc_driver_lock, pdMS_TO_TICKS(HAL_ADC_LOCK_TIMEOUT_MS))
-        != pdTRUE) {
-        heap_caps_free(link);
-        return ESP_ERR_TIMEOUT;
-    }
-    if (adc_started) {
-        ret = adc_continuous_stop(adc_handle);
-        if ((ret == ESP_OK) || (ret == ESP_ERR_INVALID_STATE)) {
-            ret = ESP_OK;
-        }
-        adc_started = false;
-    }
-    if (adc_task_handle != NULL) {
-        vTaskDelete(adc_task_handle);
-        adc_task_handle = NULL;
-    }
-
-    if (ret == ESP_OK) {
-        ret = adc_continuous_deinit(adc_handle);
-    }
-    if (ret == ESP_OK) {
-        adc_handle = NULL;
-    }
-    xSemaphoreGive(adc_driver_lock);
-    vSemaphoreDelete(adc_driver_lock);
-    adc_driver_lock = NULL;
-    heap_caps_free(link);
-
-    return ret;
-}

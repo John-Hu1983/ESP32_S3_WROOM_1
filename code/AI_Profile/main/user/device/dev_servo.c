@@ -75,28 +75,33 @@ void servo_run_motor(e_motor_direction dir, uint8_t duty) {
 
 /*
  * brief : servo_get_adc_value.
- * input : none.
+ * input : see parameters.
  * output: return value from this function.
  * type  : public
- * theory: fetch averaged ADC data from shared DMA cache and provide a non-blocking feedback sample.
+ * theory: return only a valid averaged DMA sample so control never reuses stale feedback.
  */
-uint16_t servo_get_adc_value(void) {
+esp_err_t servo_get_adc_value(uint16_t* adc_value) {
     hal_adc_sample_s sample = { 0 };
+    esp_err_t ret = ESP_OK;
 
+    if (adc_value == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
     if (servo_ctr == NULL) {
-        return 0;
+        return ESP_ERR_INVALID_STATE;
     }
 
-    if ((hal_adc_get_channel_sample(servo_ctr->adc_cfg.unit,
-                                    servo_ctr->adc_cfg.channel,
-                                    8U,
-                                    &sample)
-         == ESP_OK)
-        && sample.valid) {
-        return (uint16_t)sample.raw_avg;
+    ret = hal_adc_get_channel_sample(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL, 8U, &sample);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if (!sample.valid) {
+        return ESP_ERR_INVALID_RESPONSE;
     }
 
-    return 0;
+    *adc_value = (uint16_t)sample.raw_avg;
+
+    return ESP_OK;
 }
 
 /*
@@ -107,6 +112,8 @@ uint16_t servo_get_adc_value(void) {
  * theory: execute a short directional pulse pattern then sample ADC for quick functional diagnostics.
  */
 int servo_debug_profile(btn_status_e btn) {
+    esp_err_t ret = ESP_OK;
+
     if (btn != Btn_Up_Click && btn != Btn_Down_Click) {
         return -1;
     }
@@ -121,7 +128,11 @@ int servo_debug_profile(btn_status_e btn) {
     delay_ms(10);
     servo_run_motor(MOTOR_DIRECTION_BRAKE, 255u);
     delay_ms(10);
-    servo_ctr->vr = servo_get_adc_value();
+    ret = servo_get_adc_value(&servo_ctr->vr);
+    if (ret != ESP_OK) {
+        servo_run_motor(MOTOR_DIRECTION_STOP, 0U);
+        return -1;
+    }
     ESP_LOGI(TAG, "servo adc value: %u", servo_ctr->vr);
     return 0;
 }
@@ -162,15 +173,7 @@ esp_err_t servo_init_hw(void) {
     }
     memset(servo_pid, 0, sizeof(algo_pid_s));
 
-    // Initialize the ADC configuration for the servo control structure.
-    servo_ctr->adc_cfg = (hal_adc_link_t){
-        .unit = SERVO_ADC_UNIT,
-        .channel = SERVO_ADC_CHANNEL,
-        .atten = SERVO_ADC_ATTENUATION,
-        .bitwidth = SERVO_ADC_BITWIDTH,
-        .enable_cali = true,
-    };
-    ret = hal_adc_insert(&servo_ctr->adc_cfg);
+    ret = hal_adc_insert(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL);
     if (ret != ESP_OK) {
         return ret;
     }
@@ -233,7 +236,7 @@ esp_err_t servo_init_hw(void) {
  * input : none.
  * output: return value from this function.
  * type  : public
- * theory: drive PWM to zero, release ADC runtime dependencies, and clear module ownership state.
+ * theory: drive PWM to zero and clear servo state while ADC ownership remains in the HAL.
  */
 esp_err_t servo_deinit_hw(void) {
     esp_err_t ret_a = ESP_OK;
@@ -243,7 +246,6 @@ esp_err_t servo_deinit_hw(void) {
     ret_b = gpba02b_set_pwm_percent(SERVO_PWMB_PORT, SERVO_PWMB_PIN, 0U);
 
     if (servo_ctr != NULL) {
-        hal_adc_deinit(&servo_ctr->adc_cfg);
         heap_caps_free(servo_ctr);
         servo_ctr = NULL;
     }
@@ -387,7 +389,13 @@ void servo_compute_via_pid(uint16_t ms) {
         return;
     }
 
-    servo_ctr->vr = servo_get_adc_value();
+    ret = servo_get_adc_value(&servo_ctr->vr);
+    if (ret != ESP_OK) {
+        s_pid_submin_acc = 0.0f;
+        servo_pid->first_cycle = true;
+        servo_run_motor(MOTOR_DIRECTION_STOP, 0U);
+        return;
+    }
     feedback = (float)servo_ctr->vr;
 
     ret = algo_pid_step(servo_pid, feedback, &output);

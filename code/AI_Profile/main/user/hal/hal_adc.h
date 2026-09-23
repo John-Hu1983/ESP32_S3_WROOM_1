@@ -21,20 +21,17 @@ extern "C" {
 #define HAL_ADC_AVG_SAMPLES         (8U)
 #define HAL_ADC_TASK_STACK_SIZE     (2048U)
 #define HAL_ADC_TASK_PRIORITY       (5U)
-#define HAL_ADC_LOCK_TIMEOUT_MS     (100U)
+#define HAL_ADC_STALE_TIMEOUT_MS    (100U)
+#define HAL_ADC_RECOVERY_FAILURES   (5U)
+#define HAL_ADC_ATTENUATION         (ADC_ATTEN_DB_12)
+#define HAL_ADC_BITWIDTH            (ADC_BITWIDTH_12)
 // clang-format on
 
-typedef struct hal_adc_link {
-	adc_unit_t unit;
-	adc_channel_t channel;
-	adc_atten_t atten;
-	adc_bitwidth_t bitwidth;
-	bool enable_cali;
-	uint16_t cache[HAL_ADC_AVG_SAMPLES];
-	uint8_t cache_head;
-	uint8_t cache_count;
-	struct hal_adc_link* next;
-} hal_adc_link_t;
+typedef enum {
+	ADC_COMMAND_NONE = 0,
+	ADC_COMMAND_APPLY_CONFIG,
+	ADC_COMMAND_STOP,
+} adc_command_e;
 
 typedef struct {
 	bool valid;
@@ -44,12 +41,21 @@ typedef struct {
 	uint32_t sample_count;
 } hal_adc_sample_s;
 
-esp_err_t hal_adc_insert(const hal_adc_link_t* cfg);
+typedef struct hal_adc_link {
+    adc_unit_t unit;
+    adc_channel_t channel;
+    uint16_t cache[HAL_ADC_AVG_SAMPLES];
+    uint8_t cache_head;
+    uint8_t cache_count;
+    TickType_t last_update_tick;
+    struct hal_adc_link* next;
+} hal_adc_link_t;
+
+esp_err_t hal_adc_insert(adc_unit_t unit, adc_channel_t channel);
 esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
 									 adc_channel_t channel,
 									 uint32_t avg_samples,
 									 hal_adc_sample_s* sample);
-esp_err_t hal_adc_deinit(const hal_adc_link_t* cfg);
 
 #ifdef __cplusplus
 }
