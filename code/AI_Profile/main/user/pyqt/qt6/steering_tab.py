@@ -435,6 +435,7 @@ class SteeringTabController:
         self.knob_value_lab.setText(f"{angle_int} deg")
         adc_value = self._set_adc_for_degree(angle_int)
         self.rt_set_value.setText(str(adc_value))
+        self._send_setpoint(angle_int, adc_value, warn_if_disconnected=False)
 
     def _on_angle_spin_changed(self, value: float) -> None:
         if self._angle_syncing:
@@ -452,7 +453,16 @@ class SteeringTabController:
     def _on_send_setpoint_clicked(self) -> None:
         angle = int(round(self.angle_set_spin.value()))
         adc_value = self._set_adc_for_degree(angle)
-        self._send_command(f"AT+SETPOINT:{angle},{adc_value}")
+        self._send_setpoint(angle, adc_value, warn_if_disconnected=True)
+
+    def _send_setpoint(
+        self, angle: int, adc_value: int, *, warn_if_disconnected: bool
+    ) -> None:
+        if not self._is_connected:
+            if warn_if_disconnected:
+                self._append_note("Command skipped: BLE is not connected.")
+            return
+        self._ble.send_text(f"AT+SETPOINT:{angle},{adc_value}")
 
     def _on_motor_enable_clicked(self) -> None:
         self._send_command("STEER_ENABLE 1")

@@ -46,7 +46,7 @@ typedef struct {
     uint8_t pwm_b;
     uint16_t vr;
     e_motor_direction dir;
-    hal_adc_cfg_t adc_cfg;
+    hal_adc_link_t adc_cfg;
 } t_servo_ctr;
 
 esp_err_t servo_init_hw(void);

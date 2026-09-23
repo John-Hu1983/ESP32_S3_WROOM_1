@@ -2,7 +2,7 @@
 
 #define TAG "dev_bat_vol"
 
-static hal_adc_cfg_t* bat_cfg = NULL;
+static hal_adc_link_t* bat_cfg = NULL;
 static adc_oneshot_unit_handle_t s_bat_adc_unit_handle = NULL;
 static adc_cali_handle_t s_bat_adc_cali_handle = NULL;
 static adc_unit_t s_bat_adc_unit = SERVO_ADC_UNIT;
@@ -155,7 +155,7 @@ esp_err_t batvol_init_cfg(void) {
             .intr_type = GPIO_INTR_DISABLE,
         };
 
-        bat_cfg = (hal_adc_cfg_t*)_batvol_alloc_cfg(sizeof(hal_adc_cfg_t));
+        bat_cfg = (hal_adc_link_t*)_batvol_alloc_cfg(sizeof(hal_adc_link_t));
         if (bat_cfg == NULL) {
             return ESP_ERR_NO_MEM;
         }

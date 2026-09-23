@@ -3,10 +3,13 @@
 #include <stdint.h>
 
 #include "driver/rtc_io.h"
-#include "rom/ets_sys.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+#include "esp_adc/adc_oneshot.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "rom/ets_sys.h"
 
 #include "hal/hal_adc.h"
 #include "user/inc/bsp_config.h"

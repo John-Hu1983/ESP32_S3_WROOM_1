@@ -1,441 +1,436 @@
 #include "hal_adc.h"
 
-static const uint32_t s_hal_adc_approx_0db_mv = 950U;
-#ifdef ADC_ATTEN_DB_2_5
-static const uint32_t s_hal_adc_approx_2p5db_mv = 1250U;
-#endif
-static const uint32_t s_hal_adc_approx_6db_mv = 1750U;
-static const uint32_t s_hal_adc_approx_11db_mv = 2450U;
-#ifdef ADC_ATTEN_DB_12
-static const uint32_t s_hal_adc_approx_12db_mv = 3300U;
-#endif
+static adc_continuous_handle_t adc_handle = NULL;
+static TaskHandle_t adc_task_handle = NULL;
+static SemaphoreHandle_t adc_driver_lock = NULL;
+static hal_adc_link_t* adc_link_head = NULL;
+static volatile bool adc_task_run = false;
+static bool adc_started = false;
+static portMUX_TYPE adc_lock = portMUX_INITIALIZER_UNLOCKED;
 
-static hal_adc_runtime_s s_hal_adc_runtime[HAL_ADC_UNIT_MAX] = { 0 };
+static void _adc_task(void* arg);
+static esp_err_t _adc_apply_config(void);
+static hal_adc_link_t* _adc_find_link(adc_unit_t unit, adc_channel_t channel);
+static bool _adc_unlink(hal_adc_link_t* link);
 
 /*
- * brief : _hal_adc_unit_to_index.
+ * brief : _adc_find_link.
  * input : see parameters.
- * output: return value from this function.
+ * output: matching ADC configuration entity.
  * type  : private
+ * theory: walk the registered entity list and match one ADC unit/channel pair.
  */
-static esp_err_t _hal_adc_unit_to_index(adc_unit_t unit, uint8_t* index) {
-    if (index == NULL) {
-        return ESP_ERR_INVALID_ARG;
+static hal_adc_link_t* _adc_find_link(adc_unit_t unit, adc_channel_t channel) {
+    hal_adc_link_t* link = adc_link_head;
+
+    while (link != NULL) {
+        if ((link->unit == unit) && (link->channel == channel)) {
+            return link;
+        }
+        link = link->next;
     }
 
-    if (unit == ADC_UNIT_1) {
-        *index = 0U;
-        return ESP_OK;
-    }
-
-#if SOC_ADC_PERIPH_NUM >= 2
-    if (unit == ADC_UNIT_2) {
-        *index = 1U;
-        return ESP_OK;
-    }
-#endif
-
-    return ESP_ERR_NOT_SUPPORTED;
+    return NULL;
 }
 
 /*
- * brief : _hal_adc_get_runtime.
+ * brief : _adc_unlink.
  * input : see parameters.
+ * output: true when the entity was linked.
+ * type  : private
+ * theory: unlink under the cache lock so the reader task cannot retain a removed entity.
+ */
+static bool _adc_unlink(hal_adc_link_t* link) {
+    hal_adc_link_t* current = NULL;
+    hal_adc_link_t* previous = NULL;
+    bool found = false;
+
+    portENTER_CRITICAL(&adc_lock);
+    current = adc_link_head;
+    while (current != NULL) {
+        if (current == link) {
+            if (previous == NULL) {
+                adc_link_head = current->next;
+            }
+            else {
+                previous->next = current->next;
+            }
+            found = true;
+            break;
+        }
+        previous = current;
+        current = current->next;
+    }
+    portEXIT_CRITICAL(&adc_lock);
+
+    return found;
+}
+
+/*
+ * brief : _adc_apply_config.
+ * input : none.
  * output: return value from this function.
  * type  : private
+ * theory: stop DMA, rebuild its complete scan pattern from the entity list, and restart it.
  */
-static esp_err_t _hal_adc_get_runtime(adc_unit_t unit, hal_adc_runtime_s** runtime) {
-    uint8_t index = 0U;
-    esp_err_t ret = _hal_adc_unit_to_index(unit, &index);
+static esp_err_t _adc_apply_config(void) {
+    adc_digi_pattern_config_t patterns[SOC_ADC_PATT_LEN_MAX] = { 0 };
+    adc_continuous_config_t continuous_cfg = { 0 };
+    hal_adc_link_t* link = adc_link_head;
+    uint32_t pattern_count = 0U;
+    esp_err_t ret = ESP_OK;
 
+    while ((link != NULL) && (pattern_count < SOC_ADC_PATT_LEN_MAX)) {
+        patterns[pattern_count].unit = link->unit;
+        patterns[pattern_count].channel = link->channel;
+        patterns[pattern_count].atten = link->atten;
+        patterns[pattern_count].bit_width = link->bitwidth;
+        pattern_count++;
+        link = link->next;
+    }
+    if ((pattern_count == 0U) || (link != NULL)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if ((adc_driver_lock == NULL)
+        || (xSemaphoreTake(adc_driver_lock, pdMS_TO_TICKS(HAL_ADC_LOCK_TIMEOUT_MS))
+            != pdTRUE)) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    if (adc_started) {
+        ret = adc_continuous_stop(adc_handle);
+        if ((ret != ESP_OK) && (ret != ESP_ERR_INVALID_STATE)) {
+            xSemaphoreGive(adc_driver_lock);
+            return ret;
+        }
+        adc_started = false;
+    }
+
+    continuous_cfg.pattern_num = pattern_count;
+    continuous_cfg.adc_pattern = patterns;
+    continuous_cfg.sample_freq_hz = HAL_ADC_SAMPLE_FREQ_HZ;
+    continuous_cfg.conv_mode = ADC_CONV_SINGLE_UNIT_1;
+
+    ret = adc_continuous_config(adc_handle, &continuous_cfg);
     if (ret != ESP_OK) {
+        xSemaphoreGive(adc_driver_lock);
         return ret;
     }
-    if ((runtime == NULL) || (index >= HAL_ADC_UNIT_MAX)) {
-        return ESP_ERR_INVALID_ARG;
-    }
 
-    *runtime = &s_hal_adc_runtime[index];
-    return ESP_OK;
-}
-
-/*
- * brief : _hal_adc_bitwidth_to_max_raw.
- * input : see parameters.
- * output: return value from this function.
- * type  : private
- */
-static uint32_t _hal_adc_bitwidth_to_max_raw(adc_bitwidth_t bitwidth) {
-    switch (bitwidth) {
-    case ADC_BITWIDTH_9:
-        return 511U;
-    case ADC_BITWIDTH_10:
-        return 1023U;
-    case ADC_BITWIDTH_11:
-        return 2047U;
-    case ADC_BITWIDTH_12:
-        return 4095U;
-#ifdef ADC_BITWIDTH_13
-    case ADC_BITWIDTH_13:
-        return 8191U;
-#endif
-    case ADC_BITWIDTH_DEFAULT:
-    default:
-        return 4095U;
-    }
-}
-
-/*
- * brief : _hal_adc_atten_to_approx_full_scale_mv.
- * input : see parameters.
- * output: return value from this function.
- * type  : private
- */
-static uint32_t _hal_adc_atten_to_approx_full_scale_mv(adc_atten_t atten) {
-    switch (atten) {
-    case ADC_ATTEN_DB_0:
-        return s_hal_adc_approx_0db_mv;
-#ifdef ADC_ATTEN_DB_2_5
-    case ADC_ATTEN_DB_2_5:
-        return s_hal_adc_approx_2p5db_mv;
-#endif
-    case ADC_ATTEN_DB_6:
-        return s_hal_adc_approx_6db_mv;
-#ifdef ADC_ATTEN_DB_11
-    case ADC_ATTEN_DB_11:
-        return s_hal_adc_approx_11db_mv;
-#endif
-#ifdef ADC_ATTEN_DB_12
-    case ADC_ATTEN_DB_12:
-        return s_hal_adc_approx_12db_mv;
-#endif
-    default:
-        return s_hal_adc_approx_11db_mv;
-    }
-}
-
-/*
- * brief : _hal_adc_destroy_cali.
- * input : see parameters.
- * output: none.
- * type  : private
- */
-static void _hal_adc_destroy_cali(hal_adc_runtime_s* runtime) {
-    if ((runtime == NULL) || (runtime->cali_handle == NULL)) {
-        return;
-    }
-
-#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
-    (void)adc_cali_delete_scheme_curve_fitting(runtime->cali_handle);
-#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
-    (void)adc_cali_delete_scheme_line_fitting(runtime->cali_handle);
-#endif
-
-    runtime->cali_enabled = false;
-    runtime->cali_handle = NULL;
-}
-
-/*
- * brief : _hal_adc_create_cali.
- * input : see parameters.
- * output: return value from this function.
- * type  : private
- */
-static esp_err_t _hal_adc_create_cali(hal_adc_runtime_s* runtime,
-                                      adc_channel_t channel) {
-    esp_err_t ret = ESP_ERR_NOT_SUPPORTED;
-
-    if ((runtime == NULL) || (runtime->unit_handle == NULL)) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    _hal_adc_destroy_cali(runtime);
-
-#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
-    adc_cali_curve_fitting_config_t cali_cfg = {
-        .unit_id = runtime->unit,
-        .chan = channel,
-        .atten = runtime->atten,
-        .bitwidth = runtime->bitwidth,
-    };
-    ret = adc_cali_create_scheme_curve_fitting(&cali_cfg, &runtime->cali_handle);
-#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
-    adc_cali_line_fitting_config_t cali_cfg = {
-        .unit_id = runtime->unit,
-        .atten = runtime->atten,
-        .bitwidth = runtime->bitwidth,
-        .default_vref = 0,
-    };
-    ret = adc_cali_create_scheme_line_fitting(&cali_cfg, &runtime->cali_handle);
-#endif
-
+    ret = adc_continuous_start(adc_handle);
     if (ret == ESP_OK) {
-        runtime->cali_enabled = true;
-        runtime->cali_channel = channel;
+        adc_started = true;
     }
-    else {
-        runtime->cali_enabled = false;
-        runtime->cali_handle = NULL;
-    }
+    xSemaphoreGive(adc_driver_lock);
 
     return ret;
 }
 
 /*
- * brief : _hal_adc_init_unit_if_needed.
+ * brief : hal_adc_insert.
  * input : see parameters.
  * output: return value from this function.
- * type  : private
+ * type  : public
+ * theory: allocate one persistent PSRAM link and apply the full DMA scan pattern.
  */
-static esp_err_t _hal_adc_init_unit_if_needed(hal_adc_runtime_s* runtime) {
-    adc_oneshot_unit_init_cfg_t init_cfg = { 0 };
+esp_err_t hal_adc_insert(const hal_adc_link_t* cfg) {
+    adc_continuous_handle_cfg_t handle_cfg = {
+        .max_store_buf_size = HAL_ADC_FRAME_SAMPLES * sizeof(adc_digi_output_data_t) * 4U,
+        .conv_frame_size = HAL_ADC_FRAME_SAMPLES * sizeof(adc_digi_output_data_t),
+        .flags = {
+            .flush_pool = 1,
+        },
+    };
+    hal_adc_link_t* current = NULL;
+    hal_adc_link_t* tail = NULL;
+    hal_adc_link_t* link = NULL;
+    uint32_t cfg_count = 0U;
+    esp_err_t ret = ESP_OK;
 
-    if (runtime == NULL) {
+    if ((cfg == NULL) || (cfg->unit != ADC_UNIT_1)) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (runtime->inited && (runtime->unit_handle != NULL)) {
-        return ESP_OK;
+
+    portENTER_CRITICAL(&adc_lock);
+    current = adc_link_head;
+    while (current != NULL) {
+        if ((current->unit == cfg->unit) && (current->channel == cfg->channel)) {
+            portEXIT_CRITICAL(&adc_lock);
+            if ((current->atten == cfg->atten) && (current->bitwidth == cfg->bitwidth)
+                && (current->enable_cali == cfg->enable_cali)) {
+                return ESP_OK;
+            }
+            return ESP_ERR_INVALID_STATE;
+        }
+        cfg_count++;
+        current = current->next;
+    }
+    portEXIT_CRITICAL(&adc_lock);
+
+    if (cfg_count >= SOC_ADC_PATT_LEN_MAX) {
+        return ESP_ERR_INVALID_SIZE;
     }
 
-    init_cfg.unit_id = runtime->unit;
-    init_cfg.ulp_mode = ADC_ULP_MODE_DISABLE;
+    link = (hal_adc_link_t*)heap_caps_calloc(1,
+                                             sizeof(hal_adc_link_t),
+                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (link == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    link->unit = cfg->unit;
+    link->channel = cfg->channel;
+    link->atten = cfg->atten;
+    link->bitwidth = cfg->bitwidth;
+    link->enable_cali = cfg->enable_cali;
 
-    return adc_oneshot_new_unit(&init_cfg, &runtime->unit_handle);
+    if (adc_driver_lock == NULL) {
+        adc_driver_lock = xSemaphoreCreateMutex();
+        if (adc_driver_lock == NULL) {
+            heap_caps_free(link);
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    if (adc_handle == NULL) {
+        ret = adc_continuous_new_handle(&handle_cfg, &adc_handle);
+        if (ret != ESP_OK) {
+            vSemaphoreDelete(adc_driver_lock);
+            adc_driver_lock = NULL;
+            heap_caps_free(link);
+            return ret;
+        }
+    }
+
+    portENTER_CRITICAL(&adc_lock);
+    if (adc_link_head == NULL) {
+        adc_link_head = link;
+    }
+    else {
+        tail = adc_link_head;
+        while (tail->next != NULL) {
+            tail = tail->next;
+        }
+        tail->next = link;
+    }
+    portEXIT_CRITICAL(&adc_lock);
+
+    ret = _adc_apply_config();
+    if (ret != ESP_OK) {
+        (void)_adc_unlink(link);
+        heap_caps_free(link);
+        if (adc_link_head != NULL) {
+            (void)_adc_apply_config();
+        }
+        else {
+            (void)adc_continuous_deinit(adc_handle);
+            adc_handle = NULL;
+            vSemaphoreDelete(adc_driver_lock);
+            adc_driver_lock = NULL;
+        }
+        return ret;
+    }
+
+    if (adc_task_handle == NULL) {
+        adc_task_run = true;
+        if (xTaskCreate(_adc_task,
+                        "adc_task",
+                        HAL_ADC_TASK_STACK_SIZE,
+                        NULL,
+                        HAL_ADC_TASK_PRIORITY,
+                        &adc_task_handle)
+            != pdPASS) {
+            adc_task_run = false;
+            (void)adc_continuous_stop(adc_handle);
+            adc_started = false;
+            (void)_adc_unlink(link);
+            heap_caps_free(link);
+            if (adc_link_head != NULL) {
+                (void)_adc_apply_config();
+            }
+            else {
+                (void)adc_continuous_deinit(adc_handle);
+                adc_handle = NULL;
+                vSemaphoreDelete(adc_driver_lock);
+                adc_driver_lock = NULL;
+            }
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    return ESP_OK;
 }
 
 /*
- * brief : hal_adc_init.
- * input : cfg points to unit/channel/atten/bitwidth and calibration switch.
- * output: return value from this function.
- * type  : public
+ * brief : _adc_task.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ * theory: let DMA collect samples continuously and only copy completed data into a small cache.
  */
-
-esp_err_t hal_adc_init(const hal_adc_cfg_t* cfg) {
-    adc_oneshot_chan_cfg_t chan_cfg = { 0 };
-    hal_adc_runtime_s* runtime = NULL;
+static void _adc_task(void* arg) {
+    adc_digi_output_data_t frame[HAL_ADC_FRAME_SAMPLES] = { 0 };
+    hal_adc_link_t* cfg = NULL;
+    uint32_t read_len = 0U;
+    uint32_t sample_count = 0U;
+    uint32_t i = 0U;
     esp_err_t ret = ESP_OK;
 
-    if (cfg == NULL) {
+    (void)arg;
+
+    while (adc_task_run) {
+        if (xSemaphoreTake(adc_driver_lock, pdMS_TO_TICKS(HAL_ADC_LOCK_TIMEOUT_MS))
+            != pdTRUE) {
+            continue;
+        }
+        ret = adc_continuous_read(adc_handle,
+                                  (uint8_t*)frame,
+                                  sizeof(frame),
+                                  &read_len,
+                                  20U);
+        xSemaphoreGive(adc_driver_lock);
+        if (ret != ESP_OK) {
+            continue;
+        }
+
+        sample_count = read_len / sizeof(adc_digi_output_data_t);
+        portENTER_CRITICAL(&adc_lock);
+        for (i = 0U; i < sample_count; i++) {
+            cfg = _adc_find_link((adc_unit_t)frame[i].type2.unit,
+                                 (adc_channel_t)frame[i].type2.channel);
+            if (cfg == NULL) {
+                continue;
+            }
+
+            cfg->cache[cfg->cache_head] = (uint16_t)frame[i].type2.data;
+            cfg->cache_head = (uint8_t)((cfg->cache_head + 1U) % HAL_ADC_AVG_SAMPLES);
+            if (cfg->cache_count < HAL_ADC_AVG_SAMPLES) {
+                cfg->cache_count++;
+            }
+        }
+        portEXIT_CRITICAL(&adc_lock);
+    }
+
+    adc_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+/*
+ * brief : hal_adc_get_channel_sample.
+ * input : see parameters.
+ * output: return value from this function.
+ * type  : public
+ * theory: expose the live raw cache and calculate a stable average from its locked snapshot.
+ */
+esp_err_t hal_adc_get_channel_sample(adc_unit_t unit,
+                                     adc_channel_t channel,
+                                     uint32_t avg_samples,
+                                     hal_adc_sample_s* sample) {
+    uint16_t cache[HAL_ADC_AVG_SAMPLES] = { 0 };
+    hal_adc_link_t* cfg = NULL;
+    uint32_t sample_count = 0U;
+    uint32_t idx = 0U;
+    uint32_t sum = 0U;
+    uint32_t i = 0U;
+
+    if (sample == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    ret = _hal_adc_get_runtime(cfg->unit, &runtime);
-    if (ret != ESP_OK) {
-        return ret;
+    *sample = (hal_adc_sample_s){ 0 };
+    portENTER_CRITICAL(&adc_lock);
+    cfg = _adc_find_link(unit, channel);
+    if (cfg == NULL) {
+        portEXIT_CRITICAL(&adc_lock);
+        return ESP_ERR_NOT_FOUND;
+    }
+    sample->raw_cache = cfg->cache;
+    sample_count = cfg->cache_count;
+    idx = cfg->cache_head;
+    for (i = 0U; i < sample_count; i++) {
+        idx = (idx == 0U) ? HAL_ADC_AVG_SAMPLES : idx;
+        idx--;
+        cache[i] = cfg->cache[idx];
+    }
+    portEXIT_CRITICAL(&adc_lock);
+
+    if (sample_count == 0U) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    if ((avg_samples > 0U) && (avg_samples < sample_count)) {
+        sample_count = avg_samples;
     }
 
-    runtime->unit = cfg->unit;
-    runtime->atten = cfg->atten;
-    runtime->bitwidth = cfg->bitwidth;
-
-    ret = _hal_adc_init_unit_if_needed(runtime);
-    if (ret != ESP_OK) {
-        runtime->inited = false;
-        runtime->unit_handle = NULL;
-        return ret;
+    for (i = 0U; i < sample_count; i++) {
+        sum += cache[i];
     }
 
-    chan_cfg.atten = cfg->atten;
-    chan_cfg.bitwidth = cfg->bitwidth;
-    ret = adc_oneshot_config_channel(runtime->unit_handle, cfg->channel, &chan_cfg);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    runtime->inited = true;
-
-    if (cfg->enable_cali) {
-        (void)_hal_adc_create_cali(runtime, cfg->channel);
-    }
-    else {
-        _hal_adc_destroy_cali(runtime);
-    }
+    sample->valid = true;
+    sample->raw_latest = cache[0];
+    sample->raw_avg = sum / sample_count;
+    sample->sample_count = sample_count;
 
     return ESP_OK;
 }
 
 /*
  * brief : hal_adc_deinit.
- * input : cfg points to the ADC unit to release.
+ * input : see parameters.
  * output: return value from this function.
  * type  : public
+ * theory: remove one PSRAM link, reconfigure survivors, and release DMA after the last removal.
  */
-
-esp_err_t hal_adc_deinit(const hal_adc_cfg_t* cfg) {
-    hal_adc_runtime_s* runtime = NULL;
+esp_err_t hal_adc_deinit(const hal_adc_link_t* cfg) {
+    hal_adc_link_t* link = NULL;
     esp_err_t ret = ESP_OK;
 
     if (cfg == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-
-    ret = _hal_adc_get_runtime(cfg->unit, &runtime);
-
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    if (!runtime->inited || (runtime->unit_handle == NULL)) {
+    if (adc_handle == NULL) {
         return ESP_OK;
     }
 
-    _hal_adc_destroy_cali(runtime);
+    portENTER_CRITICAL(&adc_lock);
+    link = _adc_find_link(cfg->unit, cfg->channel);
+    portEXIT_CRITICAL(&adc_lock);
+    if ((link == NULL) || !_adc_unlink(link)) {
+        return ESP_ERR_NOT_FOUND;
+    }
 
-    ret = adc_oneshot_del_unit(runtime->unit_handle);
-    if (ret != ESP_OK) {
+    if (adc_link_head != NULL) {
+        ret = _adc_apply_config();
+        heap_caps_free(link);
         return ret;
     }
 
-    runtime->inited = false;
-    runtime->cali_enabled = false;
-    runtime->unit_handle = NULL;
-    runtime->cali_handle = NULL;
-
-    return ESP_OK;
-}
-
-/*
- * brief : hal_adc_config_channel.
- * input : cfg points to target channel configuration and calibration switch.
- * output: return value from this function.
- * type  : public
- */
-
-esp_err_t hal_adc_config_channel(const hal_adc_cfg_t* cfg) {
-    adc_oneshot_chan_cfg_t chan_cfg = { 0 };
-    hal_adc_runtime_s* runtime = NULL;
-    esp_err_t ret = ESP_OK;
-
-    if (cfg == NULL) {
-        return ESP_ERR_INVALID_ARG;
+    adc_task_run = false;
+    if (xSemaphoreTake(adc_driver_lock, pdMS_TO_TICKS(HAL_ADC_LOCK_TIMEOUT_MS))
+        != pdTRUE) {
+        heap_caps_free(link);
+        return ESP_ERR_TIMEOUT;
     }
-
-    ret = _hal_adc_get_runtime(cfg->unit, &runtime);
-
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    if (!runtime->inited || (runtime->unit_handle == NULL)) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    chan_cfg.atten = cfg->atten;
-    chan_cfg.bitwidth = cfg->bitwidth;
-    ret = adc_oneshot_config_channel(runtime->unit_handle, cfg->channel, &chan_cfg);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    runtime->atten = cfg->atten;
-    runtime->bitwidth = cfg->bitwidth;
-
-    if (cfg->enable_cali) {
-        (void)_hal_adc_create_cali(runtime, cfg->channel);
-    }
-    else {
-        _hal_adc_destroy_cali(runtime);
-    }
-
-    return ESP_OK;
-}
-
-/*
- * brief : hal_adc_read_raw.
- * input : cfg points to ADC unit/channel; value returns raw sample code.
- * output: return value from this function.
- * type  : public
- */
-
-esp_err_t hal_adc_read_raw(const hal_adc_cfg_t* cfg, int* value) {
-    hal_adc_runtime_s* runtime = NULL;
-    esp_err_t ret = ESP_OK;
-
-    if ((cfg == NULL) || (value == NULL)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    ret = _hal_adc_get_runtime(cfg->unit, &runtime);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    if (!runtime->inited || (runtime->unit_handle == NULL)) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    return adc_oneshot_read(runtime->unit_handle, cfg->channel, value);
-}
-
-/*
- * brief : hal_adc_read_mv.
- * input : cfg points to ADC unit/channel and calibration preference.
- * output: return value from this function; mv returns voltage in millivolts.
- * type  : public
- */
-esp_err_t hal_adc_read_mv(const hal_adc_cfg_t* cfg, int* mv) {
-    hal_adc_runtime_s* runtime = NULL;
-    int raw = 0;
-    uint32_t max_raw = 0U;
-    uint32_t full_scale_mv = 0U;
-    esp_err_t ret = ESP_OK;
-
-    if ((cfg == NULL) || (mv == NULL)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    ret = _hal_adc_get_runtime(cfg->unit, &runtime);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    if (!runtime->inited || (runtime->unit_handle == NULL)) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    ret = adc_oneshot_read(runtime->unit_handle, cfg->channel, &raw);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    if (cfg->enable_cali) {
-        if ((runtime->cali_channel != cfg->channel) || (runtime->cali_handle == NULL)) {
-            (void)_hal_adc_create_cali(runtime, cfg->channel);
+    if (adc_started) {
+        ret = adc_continuous_stop(adc_handle);
+        if ((ret == ESP_OK) || (ret == ESP_ERR_INVALID_STATE)) {
+            ret = ESP_OK;
         }
+        adc_started = false;
     }
-    else {
-        _hal_adc_destroy_cali(runtime);
-    }
-
-    if (runtime->cali_enabled && (runtime->cali_handle != NULL)) {
-        ret = adc_cali_raw_to_voltage(runtime->cali_handle, raw, mv);
-        if (ret == ESP_OK) {
-            return ESP_OK;
-        }
-
-        _hal_adc_destroy_cali(runtime);
+    if (adc_task_handle != NULL) {
+        vTaskDelete(adc_task_handle);
+        adc_task_handle = NULL;
     }
 
-    max_raw = _hal_adc_bitwidth_to_max_raw(runtime->bitwidth);
-    full_scale_mv = _hal_adc_atten_to_approx_full_scale_mv(runtime->atten);
-    if (max_raw == 0U) {
-        return ESP_ERR_INVALID_STATE;
+    if (ret == ESP_OK) {
+        ret = adc_continuous_deinit(adc_handle);
     }
-
-    *mv = (int)((((uint32_t)raw) * full_scale_mv) / max_raw);
-    return ESP_OK;
-}
-
-/*
- * brief : hal_adc_is_ready.
- * input : unit selects ADC runtime slot to query.
- * output: true when the ADC unit has been initialized.
- * type  : public
- */
-
-bool hal_adc_is_ready(adc_unit_t unit) {
-    hal_adc_runtime_s* runtime = NULL;
-    esp_err_t ret = _hal_adc_get_runtime(unit, &runtime);
-
-    if (ret != ESP_OK) {
-        return false;
+    if (ret == ESP_OK) {
+        adc_handle = NULL;
     }
+    xSemaphoreGive(adc_driver_lock);
+    vSemaphoreDelete(adc_driver_lock);
+    adc_driver_lock = NULL;
+    heap_caps_free(link);
 
-    return runtime->inited && (runtime->unit_handle != NULL);
+    return ret;
 }

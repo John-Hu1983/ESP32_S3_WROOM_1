@@ -117,8 +117,8 @@
 #define PRINTER_UART_DTR_GPIO                (GPIO_NUM_15)
 
 /* Servo */
-#define SERVO_ADC_IO                         (GPIO_NUM_4)
 #define SERVO_ADC_UNIT                       (ADC_UNIT_1)
+#define SERVO_ADC_IO                         (GPIO_NUM_4)
 #define SERVO_ADC_CHANNEL                    (ADC_CHANNEL_3)
 #define SERVO_ADC_ATTENUATION                (ADC_ATTEN_DB_12)
 #define SERVO_ADC_BITWIDTH                   (ADC_BITWIDTH_12)
@@ -127,14 +127,22 @@
 #define SERVO_PWMB_PORT                      (GPBA02B_PORT_C)
 #define SERVO_PWMB_PIN                       (7)
 
+/* PIMD */
+#define PIDM_ADC_UNIT                        (ADC_UNIT_1)
+#define PIDM_ADC_IO                          (GPIO_NUM_1)
+#define PIDM_ADC_CHANNEL                     (ADC_CHANNEL_0)
+#define PIDM_ADC_ATTENUATION                 (ADC_ATTEN_DB_12)
+#define PIDM_ADC_BITWIDTH                    (ADC_BITWIDTH_12)
+#define PIDM_PULSE_IO                        (GPIO_NUM_2)
+#define PIDM_ENA_PORT                        (GPBA02B_PORT_B)
+#define PIDM_ENA_PIN                         (2)
+
 /* City weather */
 #define BSP_WEATHER_CITY_LABEL               ("Dongguan")
 #define BSP_WEATHER_LATITUDE                 ("23.0207")
 #define BSP_WEATHER_LONGITUDE                ("113.7518")
 
-/*
-    Camera
-*/
+/*    Camera */
 #define CAM_SCCB_I2C_PORT                    (0)
 #define CAM_SCCB_FREQ_HZ                     (100000U)
 #define CAM_SCCB_TIMEOUT_MS                  (100)

@@ -11,10 +11,24 @@ static float s_pid_submin_acc = 0.0f;
 static void _servo_init_pid(uint16_t ms);
 static void _servo_report_ble(float duty_f, uint16_t vr, uint16_t ms);
 
+/*
+ * brief : servo_read_pid_profile.
+ * input : none.
+ * output: return value from this function.
+ * type  : public
+ * theory: expose PID runtime snapshot pointer for UI or diagnostics without copying state.
+ */
 algo_pid_s* servo_read_pid_profile(void) {
     return servo_pid;
 }
 
+/*
+ * brief : servo_read_motor_profile.
+ * input : none.
+ * output: return value from this function.
+ * type  : public
+ * theory: expose motor runtime snapshot pointer so callers can read pwm and direction state.
+ */
 t_servo_ctr* servo_read_motor_profile(void) {
     return servo_ctr;
 }
@@ -64,16 +78,25 @@ void servo_run_motor(e_motor_direction dir, uint8_t duty) {
  * input : none.
  * output: return value from this function.
  * type  : public
- * theory: read the latest configured ADC channel and expose it as servo feedback sample.
+ * theory: fetch averaged ADC data from shared DMA cache and provide a non-blocking feedback sample.
  */
 uint16_t servo_get_adc_value(void) {
-    int adc_val = 0;
+    hal_adc_sample_s sample = { 0 };
+
     if (servo_ctr == NULL) {
         return 0;
     }
 
-    hal_adc_read_raw(&servo_ctr->adc_cfg, &adc_val);
-    return (uint16_t)adc_val;
+    if ((hal_adc_get_channel_sample(servo_ctr->adc_cfg.unit,
+                                    servo_ctr->adc_cfg.channel,
+                                    8U,
+                                    &sample)
+         == ESP_OK)
+        && sample.valid) {
+        return (uint16_t)sample.raw_avg;
+    }
+
+    return 0;
 }
 
 /*
@@ -140,15 +163,17 @@ esp_err_t servo_init_hw(void) {
     memset(servo_pid, 0, sizeof(algo_pid_s));
 
     // Initialize the ADC configuration for the servo control structure.
-    servo_ctr->adc_cfg = (hal_adc_cfg_t){
+    servo_ctr->adc_cfg = (hal_adc_link_t){
         .unit = SERVO_ADC_UNIT,
         .channel = SERVO_ADC_CHANNEL,
         .atten = SERVO_ADC_ATTENUATION,
         .bitwidth = SERVO_ADC_BITWIDTH,
         .enable_cali = true,
     };
-    hal_adc_init(&servo_ctr->adc_cfg);
-    hal_adc_config_channel(&servo_ctr->adc_cfg);
+    ret = hal_adc_insert(&servo_ctr->adc_cfg);
+    if (ret != ESP_OK) {
+        return ret;
+    }
 
     // Initialize the PID controller for the servo.
     _servo_init_pid(SERVO_UI_TASK_PERIOD_MS);
@@ -238,6 +263,13 @@ esp_err_t servo_deinit_hw(void) {
     return ret_b;
 }
 
+/*
+ * brief : _servo_init_pid.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ * theory: initialize PID gains, limits, and runtime accumulators into a deterministic startup state.
+ */
 static void _servo_init_pid(uint16_t ms) {
     if (servo_pid == NULL) {
         return;
@@ -263,6 +295,13 @@ static void _servo_init_pid(uint16_t ms) {
     s_pid_submin_acc = 0.0f;
 }
 
+/*
+ * brief : _servo_report_ble.
+ * input : see parameters.
+ * output: none.
+ * type  : private
+ * theory: rate-limit BLE telemetry to a fixed period and emit paired duty/feedback messages.
+ */
 static void _servo_report_ble(float duty_f, uint16_t vr, uint16_t ms) {
     uint16_t next_elapsed = 0U;
     char tx_text[32] = { 0 };
@@ -296,6 +335,13 @@ static void _servo_report_ble(float duty_f, uint16_t vr, uint16_t ms) {
     (void)ble_send_text(tx_text);
 }
 
+/*
+ * brief : servo_set_target.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ * theory: update the shared PID target atomically through a single setter entry point.
+ */
 void servo_set_target(float target) {
     if (servo_pid == NULL) {
         return;
@@ -304,6 +350,13 @@ void servo_set_target(float target) {
     ESP_LOGI(TAG, "Servo target set to %.3f", target);
 }
 
+/*
+ * brief : servo_set_pid_para.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ * theory: support runtime gain retuning by directly replacing kp, ki, and kd in controller config.
+ */
 void servo_set_pid_para(float kp, float ki, float kd) {
     if (servo_pid == NULL) {
         return;
@@ -315,6 +368,13 @@ void servo_set_pid_para(float kp, float ki, float kd) {
     ESP_LOGI(TAG, "Servo PID parameters set to Kp=%.3f, Ki=%.3f, Kd=%.3f", kp, ki, kd);
 }
 
+/*
+ * brief : servo_compute_via_pid.
+ * input : see parameters.
+ * output: none.
+ * type  : public
+ * theory: run one closed-loop control step (sample, pid solve, direction/duty shaping, and motor apply).
+ */
 void servo_compute_via_pid(uint16_t ms) {
     esp_err_t ret = ESP_OK;
     float feedback = 0.0f;
