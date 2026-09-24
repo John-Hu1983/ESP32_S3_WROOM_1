@@ -2,18 +2,21 @@
 
 #define TAG "dev_pidm"
 
-static bool s_pidm_ready = false;
-static bool s_pidm_metal_detected = false;
-static uint32_t s_pidm_trigger_count = 0U;
-static uint32_t s_pidm_response_slope = 0U;
-static uint32_t s_pidm_threshold_slope = 0U;
-static int32_t s_pidm_baseline_q8 = 0;
-static int32_t s_pidm_noise_q8 = 0;
-static uint16_t s_pidm_calibration_count = 0U;
-static uint8_t s_pidm_detect_hits = 0U;
-static uint8_t s_pidm_release_hits = 0U;
-static esp_err_t s_pidm_trigger_error = ESP_OK;
-static portMUX_TYPE s_pidm_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool pidm_ready = false;
+static uint32_t pidm_trigger_count = 0U;
+static pidm_profile_s s_pidm_profile = { 0 };
+static int32_t pidm_ref_peak_q8 = 0;
+static int32_t pidm_ref_slope_q8 = 0;
+static uint16_t pidm_ref_count = 0U;
+static uint8_t pidm_assert_streak = 0U;
+static uint8_t pidm_release_streak = 0U;
+static bool pidm_ref_ready = false;
+static bool pidm_event_present = false;
+static esp_err_t pidm_trigger_error = ESP_OK;
+static SemaphoreHandle_t pidm_probe_lock = NULL;
+static TaskHandle_t pidm_task_handle = NULL;
+static volatile bool pidm_task_stop = false;
+static portMUX_TYPE pidm_lock = portMUX_INITIALIZER_UNLOCKED;
 
 /*
  * brief : Return the absolute value of one bounded signed detector term.
@@ -27,183 +30,335 @@ static int32_t _pidm_abs_i32(int32_t value) {
 }
 
 /*
- * brief : Calculate the adaptive slope margin above baseline.
- * input : noise - current mean absolute slope deviation.
- * output: threshold margin in ADC counts per millisecond.
+ * brief : Learn the initial no-metal peak and slope reference.
+ * input : peak_excess - peak above baseline; slope - maximum rising slope.
+ * output: none.
  * type  : private
- * theory: scale with measured noise while retaining a minimum margin in quiet conditions.
+ * theory: use an incremental Q8 mean so startup reference learning needs no sample history.
  */
-static uint32_t _pidm_detection_margin(uint32_t noise) {
-    uint32_t margin = noise * PIDM_DETECT_NOISE_MULTIPLIER;
+static void _pidm_reference_learn(uint32_t peak_excess, uint32_t slope) {
+    int32_t peak_q8 = (int32_t)(peak_excess << 8U);
+    int32_t slope_q8 = (int32_t)(slope << 8U);
+    int32_t divisor = 0;
 
-    if (margin < PIDM_DETECT_MIN_MARGIN) {
-        margin = PIDM_DETECT_MIN_MARGIN;
+    if (pidm_ref_count == 0U) {
+        pidm_ref_peak_q8 = peak_q8;
+        pidm_ref_slope_q8 = slope_q8;
+    }
+    else {
+        divisor = (int32_t)pidm_ref_count + 1;
+        pidm_ref_peak_q8 += (peak_q8 - pidm_ref_peak_q8) / divisor;
+        pidm_ref_slope_q8 += (slope_q8 - pidm_ref_slope_q8) / divisor;
     }
 
-    return margin;
+    if (pidm_ref_count < UINT16_MAX) {
+        pidm_ref_count++;
+    }
+    if (pidm_ref_count >= PIDM_REFERENCE_LEARN_PULSES) {
+        pidm_ref_ready = true;
+    }
 }
 
 /*
- * brief : Capture the post-charge ADC response slope.
- * input : slope - destination for the robust slope estimate.
- * output: ESP_OK on success; otherwise ADC or response error code.
+ * brief : Track slow no-metal drift after reference learning.
+ * input : peak_excess - peak above baseline; slope - maximum rising slope.
+ * output: none.
  * type  : private
- * theory: synchronously sample the 200-1000 us rise, then use trimmed window amplitude as a slope proxy.
+ * theory: update only non-hit frames with a slow Q8 exponential moving average.
  */
-static esp_err_t _pidm_capture_response_slope(uint32_t* slope) {
-    uint16_t values[PIDM_ADC_SAMPLE_COUNT] = { 0 };
-    uint16_t key = 0U;
-    uint32_t low_average = 0U;
-    uint32_t high_average = 0U;
+static void _pidm_reference_update(uint32_t peak_excess, uint32_t slope) {
+    int32_t peak_q8 = (int32_t)(peak_excess << 8U);
+    int32_t slope_q8 = (int32_t)(slope << 8U);
+
+    pidm_ref_peak_q8 += (peak_q8 - pidm_ref_peak_q8) >> PIDM_REFERENCE_EMA_SHIFT;
+    pidm_ref_slope_q8 += (slope_q8 - pidm_ref_slope_q8) >> PIDM_REFERENCE_EMA_SHIFT;
+}
+
+/*
+ * brief : Extract one PIDM pulse feature set from baseline and response samples.
+ * input : baseline/wave - samples captured immediately before and after the pulse.
+ * output: feature - extracted baseline, peak, slope, hold, and area values.
+ * type  : private
+ * theory: derive a CFAR threshold from current baseline noise, then measure response shape above it.
+ */
+static void _pidm_extract_feature(const uint16_t* baseline,
+                                  const uint16_t* wave,
+                                  pidm_profile_s* feature) {
+    int32_t baseline_sum = 0;
+    int32_t noise_sum = 0;
+    int32_t wave_sum = 0;
+    int32_t baseline_raw = 0;
+    int32_t threshold_raw = 0;
+    int32_t previous_raw = 0;
+    int32_t peak_raw = 0;
+    int32_t raw = 0;
+    int32_t delta = 0;
+    uint64_t area = 0U;
+    uint32_t threshold_rise = 0U;
+    uint32_t current_hold_us = 0U;
+    uint32_t slope = 0U;
+    uint32_t peak_index = 0U;
     uint32_t i = 0U;
-    uint32_t j = 0U;
+
+    for (i = 0U; i < PIDM_BASELINE_SAMPLE_COUNT; ++i) {
+        baseline_sum += baseline[i];
+    }
+    baseline_raw = baseline_sum / (int32_t)PIDM_BASELINE_SAMPLE_COUNT;
+
+    for (i = 0U; i < PIDM_BASELINE_SAMPLE_COUNT; ++i) {
+        noise_sum += _pidm_abs_i32((int32_t)baseline[i] - baseline_raw);
+    }
+    feature->baseline_noise =
+        (uint32_t)(noise_sum / (int32_t)PIDM_BASELINE_SAMPLE_COUNT);
+    threshold_rise =
+        ((feature->baseline_noise * PIDM_THRESHOLD_NOISE_GAIN_Q4) + 8U) / 16U;
+    if (threshold_rise < PIDM_THRESHOLD_MIN_RISE) {
+        threshold_rise = PIDM_THRESHOLD_MIN_RISE;
+    }
+
+    threshold_raw = baseline_raw + (int32_t)threshold_rise;
+    previous_raw = wave[0];
+    peak_raw = baseline_raw;
+    for (i = 0U; i < PIDM_WAVE_SAMPLE_COUNT; ++i) {
+        raw = wave[i];
+        wave_sum += raw;
+        if (raw > peak_raw) {
+            peak_raw = raw;
+            peak_index = i;
+        }
+
+        delta = raw - previous_raw;
+        if (delta > 0) {
+            slope = ((uint32_t)delta * 1000U) / PIDM_WAVE_INTERVAL_US;
+
+            if (slope > feature->response_slope) {
+                feature->response_slope = slope;
+            }
+        }
+
+        if (raw > threshold_raw) {
+            area += (uint64_t)(raw - threshold_raw) * PIDM_WAVE_INTERVAL_US;
+            if (area > UINT32_MAX) {
+                area = UINT32_MAX;
+            }
+            current_hold_us += PIDM_WAVE_INTERVAL_US;
+            if (current_hold_us > feature->high_hold_us) {
+                feature->high_hold_us = current_hold_us;
+            }
+        }
+        else {
+            current_hold_us = 0U;
+        }
+        previous_raw = raw;
+    }
+
+    feature->adc_latest = wave[PIDM_WAVE_SAMPLE_COUNT - 1U];
+    feature->adc_average = (uint32_t)(wave_sum / (int32_t)PIDM_WAVE_SAMPLE_COUNT);
+    feature->adc_sample_count = PIDM_WAVE_SAMPLE_COUNT;
+    feature->baseline_raw = (uint32_t)baseline_raw;
+    feature->threshold_raw = (uint32_t)threshold_raw;
+    feature->peak_raw = (uint32_t)peak_raw;
+    feature->peak_time_us =
+        PIDM_RESPONSE_SETTLE_US + (peak_index * PIDM_WAVE_INTERVAL_US);
+    feature->area_adc_us = (uint32_t)area;
+}
+
+/*
+ * brief : Update adaptive PIDM reference and debounced metal state.
+ * input : feature - latest extracted pulse features.
+ * output: none.
+ * type  : private
+ * theory: compare peak and slope against learned no-metal references, then debounce hits and misses.
+ */
+static void _pidm_update_detection(pidm_profile_s* feature) {
+    bool was_detected = pidm_event_present;
+    bool calibration_completed = false;
+    uint32_t peak_excess = 0U;
+    uint32_t peak_reference = 0U;
+    uint32_t slope_reference = 0U;
+
+    if (feature->peak_raw > feature->baseline_raw) {
+        peak_excess = feature->peak_raw - feature->baseline_raw;
+    }
+
+    if (!pidm_ref_ready) {
+        _pidm_reference_learn(peak_excess, feature->response_slope);
+        calibration_completed = pidm_ref_ready;
+        feature->peak_delta_raw = 0U;
+        feature->slope_delta = 0U;
+        feature->pulse_hit = false;
+    }
+    else {
+        peak_reference = (uint32_t)(pidm_ref_peak_q8 >> 8U);
+        slope_reference = (uint32_t)(pidm_ref_slope_q8 >> 8U);
+        if (peak_excess > peak_reference) {
+            feature->peak_delta_raw = peak_excess - peak_reference;
+        }
+        if (feature->response_slope > slope_reference) {
+            feature->slope_delta = feature->response_slope - slope_reference;
+        }
+        feature->peak_hit = feature->peak_delta_raw >= PIDM_PEAK_DELTA_MIN;
+        feature->slope_hit = feature->slope_delta >= PIDM_SLOPE_DELTA_MIN_ADC_PER_MS;
+        feature->pulse_hit = feature->peak_hit && feature->slope_hit;
+
+        if (!pidm_event_present && !feature->pulse_hit) {
+            _pidm_reference_update(peak_excess, feature->response_slope);
+        }
+    }
+
+    feature->hold_hit = feature->high_hold_us >= PIDM_HIGH_HOLD_MIN_US;
+    feature->area_hit = feature->area_adc_us >= PIDM_AREA_MIN_ADC_US;
+
+    if (feature->pulse_hit) {
+        if (pidm_assert_streak < UINT8_MAX) {
+            pidm_assert_streak++;
+        }
+        pidm_release_streak = 0U;
+        if (pidm_assert_streak >= PIDM_DETECT_ASSERT_COUNT) {
+            pidm_event_present = true;
+        }
+    }
+    else {
+        if (pidm_release_streak < UINT8_MAX) {
+            pidm_release_streak++;
+        }
+        pidm_assert_streak = 0U;
+        if (pidm_release_streak >= PIDM_DETECT_RELEASE_COUNT) {
+            pidm_event_present = false;
+        }
+    }
+
+    peak_reference = (uint32_t)(pidm_ref_peak_q8 >> 8U);
+    slope_reference = (uint32_t)(pidm_ref_slope_q8 >> 8U);
+    feature->calibrated = pidm_ref_ready;
+    feature->metal_detected = pidm_event_present;
+    feature->peak_excess_raw = peak_excess;
+    feature->peak_reference_raw = peak_reference;
+    feature->baseline_slope = slope_reference;
+    feature->threshold_slope = slope_reference + PIDM_SLOPE_DELTA_MIN_ADC_PER_MS;
+    feature->calibration_count = pidm_ref_count;
+    feature->detect_hits = pidm_assert_streak;
+    feature->release_hits = pidm_release_streak;
+
+    if (calibration_completed) {
+        ESP_LOGI(TAG,
+                 "reference ready: peak=%lu slope=%lu",
+                 (unsigned long)peak_reference,
+                 (unsigned long)slope_reference);
+    }
+    if (was_detected != pidm_event_present) {
+        ESP_LOGI(TAG,
+                 "metal %s: dpk=%lu dsl=%lu hold=%lu area=%lu",
+                 pidm_event_present ? "detected" : "released",
+                 (unsigned long)feature->peak_delta_raw,
+                 (unsigned long)feature->slope_delta,
+                 (unsigned long)feature->high_hold_us,
+                 (unsigned long)feature->area_adc_us);
+    }
+}
+
+/*
+ * brief : Capture and process one complete PIDM detection pulse.
+ * input : feature - destination feature snapshot.
+ * output: ESP_OK on success; otherwise ADC or GPIO error.
+ * type  : private
+ * theory: sample the live baseline, pulse the frontend, capture its response waveform, and classify it.
+ */
+static esp_err_t _pidm_probe(pidm_profile_s* feature) {
+    uint16_t baseline[PIDM_BASELINE_SAMPLE_COUNT] = { 0 };
+    uint16_t wave[PIDM_WAVE_SAMPLE_COUNT] = { 0 };
+    uint32_t i = 0U;
     esp_err_t ret = ESP_OK;
 
-    if (slope == NULL) {
+    if (feature == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    esp_rom_delay_us(PIDM_RESPONSE_START_US);
-    for (i = 0U; i < PIDM_ADC_SAMPLE_COUNT; ++i) {
-        ret = hal_adc_read(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL, &values[i]);
+    // Capture the baseline samples before triggering the detection pulse.
+    for (i = 0U; i < PIDM_BASELINE_SAMPLE_COUNT; ++i) {
+        ret = hal_adc_read(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL, &baseline[i]);
         if (ret != ESP_OK) {
             return ret;
         }
-    }
-
-    for (i = 1U; i < PIDM_ADC_SAMPLE_COUNT; ++i) {
-        key = values[i];
-        j = i;
-        while ((j > 0U) && (values[j - 1U] > key)) {
-            values[j] = values[j - 1U];
-            j--;
+        if ((i + 1U) < PIDM_BASELINE_SAMPLE_COUNT) {
+            esp_rom_delay_us(PIDM_BASELINE_INTERVAL_US);
         }
-        values[j] = key;
     }
 
-    low_average = ((uint32_t)values[0] + values[1]) / 2U;
-    high_average = ((uint32_t)values[PIDM_ADC_SAMPLE_COUNT - 1U]
-                    + values[PIDM_ADC_SAMPLE_COUNT - 2U])
-                   / 2U;
-    if (high_average <= low_average) {
-        *slope = 0U;
-        return ESP_OK;
+    // Trigger the detection pulse and capture the response waveform.
+    ret = gpio_set_level(PIDM_PULSE_IO, 1U);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    esp_rom_delay_us(PIDM_TRIGGER_PULSE_US);
+    ret = gpio_set_level(PIDM_PULSE_IO, 0U);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    esp_rom_delay_us(PIDM_RESPONSE_SETTLE_US);
+
+    for (i = 0U; i < PIDM_WAVE_SAMPLE_COUNT; ++i) {
+        ret = hal_adc_read(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL, &wave[i]);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        if ((i + 1U) < PIDM_WAVE_SAMPLE_COUNT) {
+            esp_rom_delay_us(PIDM_WAVE_INTERVAL_US);
+        }
     }
 
-    *slope = ((high_average - low_average) * 1000U)
-             / (PIDM_RESPONSE_END_US - PIDM_RESPONSE_START_US);
+    // Extract features from the captured baseline and waveform, then update the detection status.
+    _pidm_extract_feature(baseline, wave, feature);
+    _pidm_update_detection(feature);
     return ESP_OK;
 }
 
 /*
- * brief : Update adaptive PIDM metal detection state.
- * input : response_slope - latest robust ADC slope estimate.
+ * brief : Run periodic PIDM detection independently from the UI.
+ * input : arg - unused task argument.
  * output: none.
  * type  : private
- * theory: learn a no-metal baseline/noise floor, then apply consecutive-hit and release hysteresis.
+ * theory: own detector cadence in the device layer and wake promptly when deinitialization requests stop.
  */
-static void _pidm_update_detection(uint32_t response_slope) {
-    bool was_detected = false;
-    bool is_detected = false;
-    bool calibration_completed = false;
-    uint32_t baseline = 0U;
-    uint32_t noise = 0U;
-    uint32_t margin = 0U;
-    uint32_t release_threshold = 0U;
-    uint32_t divisor = 0U;
-    int32_t sample_q8 = (int32_t)(response_slope << 8U);
-    int32_t error_q8 = 0;
-    int32_t deviation_q8 = 0;
+static void _pidm_detection_task(void* arg) {
+    esp_err_t ret = ESP_OK;
 
-    portENTER_CRITICAL(&s_pidm_lock);
-    was_detected = s_pidm_metal_detected;
-    s_pidm_response_slope = response_slope;
+    (void)arg;
 
-    if (s_pidm_calibration_count < PIDM_DETECT_CALIBRATION_COUNT) {
-        divisor = (uint32_t)s_pidm_calibration_count + 1U;
-        if (s_pidm_calibration_count == 0U) {
-            s_pidm_baseline_q8 = sample_q8;
-            s_pidm_noise_q8 = 0;
+    while (!pidm_task_stop) {
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(PIDM_DETECTION_PERIOD_MS));
+        if (pidm_task_stop) {
+            break;
         }
-        else {
-            error_q8 = sample_q8 - s_pidm_baseline_q8;
-            s_pidm_baseline_q8 += error_q8 / (int32_t)divisor;
-            deviation_q8 = _pidm_abs_i32(sample_q8 - s_pidm_baseline_q8);
-            s_pidm_noise_q8 += (deviation_q8 - s_pidm_noise_q8)
-                               / (int32_t)divisor;
-        }
-        s_pidm_calibration_count++;
-        s_pidm_detect_hits = 0U;
-        s_pidm_release_hits = 0U;
-        s_pidm_metal_detected = false;
-        calibration_completed =
-            (s_pidm_calibration_count == PIDM_DETECT_CALIBRATION_COUNT);
-    }
-    else {
-        baseline = (uint32_t)(s_pidm_baseline_q8 >> 8U);
-        noise = (uint32_t)(s_pidm_noise_q8 >> 8U);
-        margin = _pidm_detection_margin(noise);
-        s_pidm_threshold_slope = baseline + margin;
 
-        if (!s_pidm_metal_detected) {
-            if (response_slope > s_pidm_threshold_slope) {
-                if (s_pidm_detect_hits < PIDM_DETECT_ASSERT_COUNT) {
-                    s_pidm_detect_hits++;
-                }
-            }
-            else {
-                s_pidm_detect_hits = 0U;
-                error_q8 = sample_q8 - s_pidm_baseline_q8;
-                s_pidm_baseline_q8 += error_q8
-                                      / (1 << PIDM_DETECT_BASELINE_FILTER_SHIFT);
-                deviation_q8 = _pidm_abs_i32(sample_q8 - s_pidm_baseline_q8);
-                s_pidm_noise_q8 += (deviation_q8 - s_pidm_noise_q8)
-                                   / (1 << PIDM_DETECT_NOISE_FILTER_SHIFT);
-            }
-
-            if (s_pidm_detect_hits >= PIDM_DETECT_ASSERT_COUNT) {
-                s_pidm_metal_detected = true;
-                s_pidm_release_hits = 0U;
-            }
-        }
-        else {
-            release_threshold = baseline
-                                + ((margin * PIDM_DETECT_RELEASE_HYST_PERCENT) / 100U);
-            if (response_slope < release_threshold) {
-                if (s_pidm_release_hits < PIDM_DETECT_RELEASE_COUNT) {
-                    s_pidm_release_hits++;
-                }
-            }
-            else {
-                s_pidm_release_hits = 0U;
-            }
-
-            if (s_pidm_release_hits >= PIDM_DETECT_RELEASE_COUNT) {
-                s_pidm_metal_detected = false;
-                s_pidm_detect_hits = 0U;
-            }
+        ret = pidm_trigger_detection();
+        if ((ret != ESP_OK) && (ret != ESP_ERR_INVALID_STATE)) {
+            ESP_LOGW(TAG, "detection failed: 0x%x", (unsigned)ret);
         }
     }
 
-    baseline = (uint32_t)(s_pidm_baseline_q8 >> 8U);
-    noise = (uint32_t)(s_pidm_noise_q8 >> 8U);
-    s_pidm_threshold_slope = baseline + _pidm_detection_margin(noise);
-    is_detected = s_pidm_metal_detected;
-    portEXIT_CRITICAL(&s_pidm_lock);
+    pidm_task_handle = NULL;
+    vTaskDelete(NULL);
+}
 
-    if (calibration_completed) {
-        ESP_LOGI(TAG,
-                 "calibrated: baseline=%lu threshold=%lu",
-                 (unsigned long)baseline,
-                 (unsigned long)s_pidm_threshold_slope);
+/*
+ * brief : Stop the device-owned PIDM detection task.
+ * input : none.
+ * output: none.
+ * type  : private
+ * theory: notify the task out of its period wait, then wait until any active probe finishes cleanly.
+ */
+static void _pidm_stop_detection_task(void) {
+    TaskHandle_t task_handle = pidm_task_handle;
+
+    if (task_handle == NULL) {
+        return;
     }
-    if (was_detected != is_detected) {
-        ESP_LOGI(TAG,
-                 "metal %s: slope=%lu baseline=%lu threshold=%lu",
-                 is_detected ? "detected" : "released",
-                 (unsigned long)response_slope,
-                 (unsigned long)baseline,
-                 (unsigned long)s_pidm_threshold_slope);
+
+    pidm_task_stop = true;
+    xTaskNotifyGive(task_handle);
+    while (pidm_task_handle != NULL) {
+        vTaskDelay(1U);
     }
 }
 
@@ -220,6 +375,9 @@ esp_err_t pidm_init_runtime(void) {
 
     if (!GPIO_IS_VALID_OUTPUT_GPIO(PIDM_PULSE_IO)) {
         return ESP_ERR_INVALID_ARG;
+    }
+    if (pidm_ready) {
+        return ESP_OK;
     }
 
     ret = hal_adc_init(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL);
@@ -277,19 +435,43 @@ esp_err_t pidm_init_runtime(void) {
         return ret;
     }
 
-    portENTER_CRITICAL(&s_pidm_lock);
-    s_pidm_ready = true;
-    s_pidm_metal_detected = false;
-    s_pidm_trigger_count = 0U;
-    s_pidm_response_slope = 0U;
-    s_pidm_threshold_slope = 0U;
-    s_pidm_baseline_q8 = 0;
-    s_pidm_noise_q8 = 0;
-    s_pidm_calibration_count = 0U;
-    s_pidm_detect_hits = 0U;
-    s_pidm_release_hits = 0U;
-    s_pidm_trigger_error = ESP_OK;
-    portEXIT_CRITICAL(&s_pidm_lock);
+    if (pidm_probe_lock == NULL) {
+        pidm_probe_lock = xSemaphoreCreateMutex();
+        if (pidm_probe_lock == NULL) {
+            (void)pidm_deinit_runtime();
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    portENTER_CRITICAL(&pidm_lock);
+    pidm_ready = true;
+    pidm_trigger_count = 0U;
+    s_pidm_profile = (pidm_profile_s){
+        .ready = true,
+        .pulse_width_us = PIDM_TRIGGER_PULSE_US,
+    };
+    pidm_ref_peak_q8 = 0;
+    pidm_ref_slope_q8 = 0;
+    pidm_ref_count = 0U;
+    pidm_assert_streak = 0U;
+    pidm_release_streak = 0U;
+    pidm_ref_ready = false;
+    pidm_event_present = false;
+    pidm_trigger_error = ESP_OK;
+    portEXIT_CRITICAL(&pidm_lock);
+
+    pidm_task_stop = false;
+    if (xTaskCreate(_pidm_detection_task,
+                    "pidm_detection",
+                    PIDM_DETECTION_TASK_STACK_SIZE,
+                    NULL,
+                    PIDM_DETECTION_TASK_PRIORITY,
+                    &pidm_task_handle)
+        != pdPASS) {
+        pidm_task_handle = NULL;
+        (void)pidm_deinit_runtime();
+        return ESP_ERR_NO_MEM;
+    }
 
     return ESP_OK;
 }
@@ -305,27 +487,24 @@ esp_err_t pidm_deinit_runtime(void) {
     esp_err_t ret = ESP_OK;
     esp_err_t release_ret = ESP_OK;
 
+    _pidm_stop_detection_task();
+
     ret = gpio_set_level(PIDM_PULSE_IO, 0U);
-
     release_ret = gpba02b_write_io_level(PIDM_ENA_PORT, PIDM_ENA_PIN, 0U);
+
     if ((ret == ESP_OK) && (release_ret != ESP_OK)) {
         ret = release_ret;
     }
 
-    release_ret =
-        gpba02b_set_io_mode(PIDM_ENA_PORT, PIDM_ENA_PIN, GPBA02B_IO_STYLE_INPUT_HIGH_Z);
-    if ((ret == ESP_OK) && (release_ret != ESP_OK)) {
-        ret = release_ret;
-    }
+    portENTER_CRITICAL(&pidm_lock);
+    pidm_ready = false;
+    s_pidm_profile.ready = false;
+    portEXIT_CRITICAL(&pidm_lock);
 
-    release_ret = gpio_reset_pin(PIDM_PULSE_IO);
-    if ((ret == ESP_OK) && (release_ret != ESP_OK)) {
-        ret = release_ret;
+    if (pidm_probe_lock != NULL) {
+        vSemaphoreDelete(pidm_probe_lock);
+        pidm_probe_lock = NULL;
     }
-
-    portENTER_CRITICAL(&s_pidm_lock);
-    s_pidm_ready = false;
-    portEXIT_CRITICAL(&s_pidm_lock);
 
     return ret;
 }
@@ -333,52 +512,44 @@ esp_err_t pidm_deinit_runtime(void) {
 /*
  * brief : Generate one PIDM detection pulse.
  * input : none.
- * output: ESP_OK on success; otherwise GPIO error code.
+ * output: ESP_OK on success; otherwise ADC or GPIO error code.
  * type  : public
- * theory: hold the pulse output high for the configured blocking interval, then return it low.
+ * theory: capture baseline and pulse response in the device layer, then publish one classified snapshot.
  */
 esp_err_t pidm_trigger_detection(void) {
+    pidm_profile_s feature = { 0 };
     bool ready = false;
-    uint32_t response_slope = 0U;
     esp_err_t ret = ESP_OK;
 
-    portENTER_CRITICAL(&s_pidm_lock);
-    ready = s_pidm_ready;
-    portEXIT_CRITICAL(&s_pidm_lock);
+    portENTER_CRITICAL(&pidm_lock);
+    ready = pidm_ready;
+    portEXIT_CRITICAL(&pidm_lock);
     if (!ready) {
         return ESP_ERR_INVALID_STATE;
     }
-
-    ret = gpio_set_level(PIDM_PULSE_IO, 1U);
-    if (ret != ESP_OK) {
-        portENTER_CRITICAL(&s_pidm_lock);
-        s_pidm_trigger_error = ret;
-        portEXIT_CRITICAL(&s_pidm_lock);
-        return ret;
+    if ((pidm_probe_lock == NULL)
+        || (xSemaphoreTake(pidm_probe_lock, portMAX_DELAY) != pdTRUE)) {
+        return ESP_ERR_INVALID_STATE;
     }
 
-    esp_rom_delay_us(PIDM_TRIGGER_PULSE_US);
+    ret = _pidm_probe(&feature);
 
-    ret = gpio_set_level(PIDM_PULSE_IO, 0U);
-    portENTER_CRITICAL(&s_pidm_lock);
-    s_pidm_trigger_error = ret;
+    portENTER_CRITICAL(&pidm_lock);
+    pidm_trigger_error = ret;
     if (ret == ESP_OK) {
-        s_pidm_trigger_count++;
+        pidm_trigger_count++;
+        feature.ready = true;
+        feature.adc_valid = true;
+        feature.trigger_count = pidm_trigger_count;
+        feature.pulse_width_us = PIDM_TRIGGER_PULSE_US;
+        feature.trigger_error = ESP_OK;
+        s_pidm_profile = feature;
     }
-    portEXIT_CRITICAL(&s_pidm_lock);
-
-    if (ret != ESP_OK) {
-        return ret;
+    else {
+        s_pidm_profile.trigger_error = ret;
     }
-
-    ret = _pidm_capture_response_slope(&response_slope);
-    if (ret == ESP_OK) {
-        _pidm_update_detection(response_slope);
-    }
-
-    portENTER_CRITICAL(&s_pidm_lock);
-    s_pidm_trigger_error = ret;
-    portEXIT_CRITICAL(&s_pidm_lock);
+    portEXIT_CRITICAL(&pidm_lock);
+    xSemaphoreGive(pidm_probe_lock);
 
     return ret;
 }
@@ -388,37 +559,30 @@ esp_err_t pidm_trigger_detection(void) {
  * input : profile - destination snapshot.
  * output: ESP_OK when ADC data is valid; otherwise argument, state, or ADC error code.
  * type  : public
- * theory: take one current ADC conversion and copy the scalar control state into the snapshot.
+ * theory: copy the last complete device-owned detection result without touching ADC hardware.
  */
 esp_err_t pidm_read_profile(pidm_profile_s* profile) {
-     uint16_t raw = 0U;
     esp_err_t ret = ESP_OK;
 
     if (profile == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    ret = hal_adc_read(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL, &raw);
+    portENTER_CRITICAL(&pidm_lock);
+    *profile = s_pidm_profile;
+    profile->ready = pidm_ready;
+    profile->trigger_error = pidm_trigger_error;
+    portEXIT_CRITICAL(&pidm_lock);
 
-    profile->adc_valid = (ret == ESP_OK);
-    profile->adc_latest = raw;
-    profile->adc_average = raw;
-    profile->adc_sample_count = (ret == ESP_OK) ? 1U : 0U;
-    profile->pulse_width_us = PIDM_TRIGGER_PULSE_US;
-
-    portENTER_CRITICAL(&s_pidm_lock);
-    profile->ready = s_pidm_ready;
-    profile->calibrated =
-        (s_pidm_calibration_count >= PIDM_DETECT_CALIBRATION_COUNT);
-    profile->metal_detected = s_pidm_metal_detected;
-    profile->trigger_count = s_pidm_trigger_count;
-    profile->response_slope = s_pidm_response_slope;
-    profile->baseline_slope = (uint32_t)(s_pidm_baseline_q8 >> 8U);
-    profile->threshold_slope = s_pidm_threshold_slope;
-    profile->calibration_count = s_pidm_calibration_count;
-    profile->detect_hits = s_pidm_detect_hits;
-    profile->trigger_error = s_pidm_trigger_error;
-    portEXIT_CRITICAL(&s_pidm_lock);
+    if (!profile->ready) {
+        ret = ESP_ERR_INVALID_STATE;
+    }
+    else if (profile->trigger_error != ESP_OK) {
+        ret = profile->trigger_error;
+    }
+    else if (!profile->adc_valid) {
+        ret = ESP_ERR_NOT_FOUND;
+    }
 
     return ret;
 }

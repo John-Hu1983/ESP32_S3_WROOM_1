@@ -6,8 +6,10 @@ static pidm_ui_runtime_s s_pidm_ui_runtime;
 
 #if LV_USE_LINE != 0
 typedef struct {
-    lv_point_precise_t points[PIDM_UI_SCOPE_POINT_COUNT];
-    int32_t history[PIDM_UI_SCOPE_POINT_COUNT];
+    lv_point_precise_t peak_points[PIDM_UI_SCOPE_POINT_COUNT];
+    lv_point_precise_t slope_points[PIDM_UI_SCOPE_POINT_COUNT];
+    int32_t peak_history[PIDM_UI_SCOPE_POINT_COUNT];
+    int32_t slope_history[PIDM_UI_SCOPE_POINT_COUNT];
 } pidm_scope_buffer_s;
 
 static pidm_scope_buffer_s* s_pidm_scope_buffer = NULL;
@@ -15,7 +17,9 @@ static pidm_scope_buffer_s* s_pidm_scope_buffer = NULL;
 static bool _pidm_scope_alloc_buffer(void);
 static void _pidm_scope_free_buffer(void);
 static void _pidm_scope_reset_samples(lv_coord_t plot_w, lv_coord_t plot_h);
-static void _pidm_scope_push_sample(pidm_ui_runtime_s* runtime, int32_t value);
+static void _pidm_scope_push_sample(pidm_ui_runtime_s* runtime,
+                                    int32_t peak_delta,
+                                    int32_t slope_delta);
 #endif
 
 static void _pidm_ui_refresh(pidm_ui_runtime_s* runtime);
@@ -60,27 +64,27 @@ static void _pidm_scope_free_buffer(void) {
 }
 
 /*
- * brief : Convert an ADC reading into the oscilloscope Y coordinate.
- * input : value - raw ADC value; plot_h - drawable height.
+ * brief : Convert one detector feature into the oscilloscope Y coordinate.
+ * input : value - detector feature value; plot_h - drawable height.
  * output: mapped Y coordinate.
  * type  : private
- * theory: clamp the 12-bit ADC range before applying a linear map to the plot height.
+ * theory: clamp the detector range before applying a linear map to the plot height.
  */
 static lv_coord_t _pidm_scope_value_to_y(int32_t value, lv_coord_t plot_h) {
     int32_t clamped = value;
-    int32_t range = PIDM_UI_SCOPE_Y_MAX_ADC - PIDM_UI_SCOPE_Y_MIN_ADC;
+    int32_t range = PIDM_UI_SCOPE_Y_MAX - PIDM_UI_SCOPE_Y_MIN;
 
     if (plot_h <= 1) {
         return 0;
     }
-    if (clamped < PIDM_UI_SCOPE_Y_MIN_ADC) {
-        clamped = PIDM_UI_SCOPE_Y_MIN_ADC;
+    if (clamped < PIDM_UI_SCOPE_Y_MIN) {
+        clamped = PIDM_UI_SCOPE_Y_MIN;
     }
-    else if (clamped > PIDM_UI_SCOPE_Y_MAX_ADC) {
-        clamped = PIDM_UI_SCOPE_Y_MAX_ADC;
+    else if (clamped > PIDM_UI_SCOPE_Y_MAX) {
+        clamped = PIDM_UI_SCOPE_Y_MAX;
     }
 
-    return (lv_coord_t)(((clamped - PIDM_UI_SCOPE_Y_MIN_ADC) * (plot_h - 1)) / range);
+    return (lv_coord_t)(((clamped - PIDM_UI_SCOPE_Y_MIN) * (plot_h - 1)) / range);
 }
 
 /*
@@ -104,48 +108,59 @@ static void _pidm_scope_reset_samples(lv_coord_t plot_w, lv_coord_t plot_h) {
     }
 
     for (i = 0U; i < PIDM_UI_SCOPE_POINT_COUNT; ++i) {
-        s_pidm_scope_buffer->history[i] = 0;
-        s_pidm_scope_buffer->points[i].x =
+        s_pidm_scope_buffer->peak_history[i] = 0;
+        s_pidm_scope_buffer->slope_history[i] = 0;
+        s_pidm_scope_buffer->peak_points[i].x =
             (lv_coord_t)((i * (uint32_t)(plot_w - 1))
                          / (PIDM_UI_SCOPE_POINT_COUNT - 1U));
-        s_pidm_scope_buffer->points[i].y = 0;
+        s_pidm_scope_buffer->slope_points[i].x =
+            s_pidm_scope_buffer->peak_points[i].x;
+        s_pidm_scope_buffer->peak_points[i].y = 0;
+        s_pidm_scope_buffer->slope_points[i].y = 0;
     }
 }
 
 /*
- * brief : Append one ADC sample to the oscilloscope trace.
- * input : runtime - PIDM UI state; value - raw ADC value.
+ * brief : Append one adaptive detector sample to each oscilloscope trace.
+ * input : runtime - PIDM UI state; peak/slope delta - latest detector strengths.
  * output: none.
  * type  : private
- * theory: shift the fixed PSRAM history in place and reuse the same LVGL point array.
+ * theory: plot DPK directly and compress slope so both decision features remain fully visible.
  */
-static void _pidm_scope_push_sample(pidm_ui_runtime_s* runtime, int32_t value) {
+static void _pidm_scope_push_sample(pidm_ui_runtime_s* runtime,
+                                    int32_t peak_delta,
+                                    int32_t slope_delta) {
     uint32_t i = 0U;
 
-    if ((runtime == NULL) || (runtime->scope_line == NULL)
+    if ((runtime == NULL) || (runtime->scope_peak_line == NULL)
+        || (runtime->scope_slope_line == NULL)
         || (s_pidm_scope_buffer == NULL) || (runtime->scope_plot_h < 2)) {
         return;
     }
 
-    if (value < PIDM_UI_SCOPE_Y_MIN_ADC) {
-        value = PIDM_UI_SCOPE_Y_MIN_ADC;
-    }
-    else if (value > PIDM_UI_SCOPE_Y_MAX_ADC) {
-        value = PIDM_UI_SCOPE_Y_MAX_ADC;
-    }
+    slope_delta = (slope_delta + ((int32_t)PIDM_UI_SCOPE_SLOPE_SCALE / 2))
+                  / (int32_t)PIDM_UI_SCOPE_SLOPE_SCALE;
 
     for (i = 0U; i < (PIDM_UI_SCOPE_POINT_COUNT - 1U); ++i) {
-        s_pidm_scope_buffer->history[i] = s_pidm_scope_buffer->history[i + 1U];
+        s_pidm_scope_buffer->peak_history[i] =
+            s_pidm_scope_buffer->peak_history[i + 1U];
+        s_pidm_scope_buffer->slope_history[i] =
+            s_pidm_scope_buffer->slope_history[i + 1U];
     }
-    s_pidm_scope_buffer->history[PIDM_UI_SCOPE_POINT_COUNT - 1U] = value;
+    s_pidm_scope_buffer->peak_history[PIDM_UI_SCOPE_POINT_COUNT - 1U] = peak_delta;
+    s_pidm_scope_buffer->slope_history[PIDM_UI_SCOPE_POINT_COUNT - 1U] = slope_delta;
 
     for (i = 0U; i < PIDM_UI_SCOPE_POINT_COUNT; ++i) {
-        s_pidm_scope_buffer->points[i].y = _pidm_scope_value_to_y(
-            s_pidm_scope_buffer->history[i],
+        s_pidm_scope_buffer->peak_points[i].y = _pidm_scope_value_to_y(
+            s_pidm_scope_buffer->peak_history[i],
+            runtime->scope_plot_h);
+        s_pidm_scope_buffer->slope_points[i].y = _pidm_scope_value_to_y(
+            s_pidm_scope_buffer->slope_history[i],
             runtime->scope_plot_h);
     }
 
-    lv_obj_invalidate(runtime->scope_line);
+    lv_obj_invalidate(runtime->scope_peak_line);
+    lv_obj_invalidate(runtime->scope_slope_line);
 }
 #endif
 
@@ -173,6 +188,9 @@ static void _pidm_ui_refresh(pidm_ui_runtime_s* runtime) {
     pidm_profile_s profile = { 0 };
     char text[24] = { 0 };
     const char* status = "OFFLINE";
+    const char* metal = "--";
+    lv_color_t status_color = lv_color_hex(0x8A969A);
+    lv_color_t metal_color = lv_color_hex(0x8A969A);
     esp_err_t ret = ESP_OK;
 
     if (runtime == NULL) {
@@ -181,38 +199,78 @@ static void _pidm_ui_refresh(pidm_ui_runtime_s* runtime) {
 
     ret = pidm_read_profile(&profile);
     if (profile.adc_valid) {
-        snprintf(text, sizeof(text), "%lu", (unsigned long)profile.adc_latest);
-        _pidm_set_edit_text(runtime->latest_edit, text);
-        snprintf(text, sizeof(text), "%lu", (unsigned long)profile.adc_average);
-        _pidm_set_edit_text(runtime->average_edit, text);
-        snprintf(text, sizeof(text), "%lu", (unsigned long)profile.adc_sample_count);
-        _pidm_set_edit_text(runtime->samples_edit, text);
+        snprintf(text, sizeof(text), "%lu", (unsigned long)profile.peak_delta_raw);
+        _pidm_set_edit_text(runtime->peak_delta_edit, text);
+        snprintf(text, sizeof(text), "%lu", (unsigned long)profile.slope_delta);
+        _pidm_set_edit_text(runtime->slope_delta_edit, text);
+        _pidm_set_edit_text(runtime->pulse_hit_edit,
+                            profile.pulse_hit ? "YES" : "NO");
 #if LV_USE_LINE != 0
-        _pidm_scope_push_sample(runtime, (int32_t)profile.adc_latest);
+        if (runtime->rendered_trigger_count != profile.trigger_count) {
+            _pidm_scope_push_sample(runtime,
+                                    (int32_t)profile.peak_delta_raw,
+                                    (int32_t)profile.slope_delta);
+            runtime->rendered_trigger_count = profile.trigger_count;
+        }
 #endif
     }
     else {
-        _pidm_set_edit_text(runtime->latest_edit, "--");
-        _pidm_set_edit_text(runtime->average_edit, "--");
-        _pidm_set_edit_text(runtime->samples_edit, "0");
+        _pidm_set_edit_text(runtime->peak_delta_edit, "--");
+        _pidm_set_edit_text(runtime->slope_delta_edit, "--");
+        _pidm_set_edit_text(runtime->pulse_hit_edit, "--");
     }
 
-    snprintf(text, sizeof(text), "%lu", (unsigned long)profile.trigger_count);
-    _pidm_set_edit_text(runtime->triggers_edit, text);
-    snprintf(text, sizeof(text), "%lu us", (unsigned long)profile.pulse_width_us);
-    _pidm_set_edit_text(runtime->pulse_edit, text);
+    if (profile.calibrated) {
+        _pidm_set_edit_text(runtime->calibration_edit, "READY");
+    }
+    else {
+        snprintf(text,
+                 sizeof(text),
+                 "%u/%u",
+                 (unsigned)profile.calibration_count,
+                 (unsigned)PIDM_REFERENCE_LEARN_PULSES);
+        _pidm_set_edit_text(runtime->calibration_edit, text);
+    }
 
-    if (profile.ready && (ret == ESP_OK) && (profile.trigger_error == ESP_OK)) {
-        status = "RUNNING";
+    if (profile.ready && (ret == ESP_OK) && profile.metal_detected) {
+        status = "METAL";
+        status_color = lv_color_hex(0xFF5A52);
+        metal = "YES";
+        metal_color = lv_color_hex(0xFF5A52);
+    }
+    else if (profile.ready && (ret == ESP_OK) && profile.calibrated) {
+        status = "CLEAR";
+        status_color = lv_color_hex(0x55E6A5);
+        metal = "NO";
+        metal_color = lv_color_hex(0x55E6A5);
+    }
+    else if (profile.ready && (ret == ESP_OK) && !profile.calibrated) {
+        status = "CALIBRATE";
+        status_color = lv_color_hex(0xFFD166);
+        metal = "WAIT";
+        metal_color = lv_color_hex(0xFFD166);
     }
     else if (profile.ready
              && ((ret == ESP_ERR_NOT_FOUND) || (ret == ESP_ERR_TIMEOUT))) {
         status = "ADC WAIT";
+        status_color = lv_color_hex(0xFFD166);
     }
     else if (profile.ready) {
         status = "ERROR";
+        status_color = lv_color_hex(0xFF5A52);
     }
-    _pidm_set_edit_text(runtime->status_edit, status);
+    _pidm_set_edit_text(runtime->result_edit, status);
+    if (runtime->result_edit != NULL) {
+        lv_obj_set_style_text_color(runtime->result_edit,
+                                    status_color,
+                                    LV_PART_MAIN);
+    }
+    _pidm_set_edit_text(runtime->metal_edit, metal);
+    if (runtime->metal_edit != NULL) {
+        lv_obj_set_style_text_color(runtime->metal_edit,
+                                    metal_color,
+                                    LV_PART_MAIN);
+    }
 }
 
 /*
@@ -234,16 +292,15 @@ static void _pidm_ui_timer_cb(lv_timer_t* timer) {
 }
 
 /*
- * brief : Run PIDM button scanning and periodic detection pulses.
+ * brief : Run PIDM button scanning while the page is active.
  * input : param - PIDM UI runtime pointer.
  * output: none.
  * type  : private
- * theory: keep blocking pulse generation outside the LVGL timer while UI drawing stays on LVGL context.
+ * theory: keep page input outside LVGL refresh while the device layer owns all detection work.
  */
 static void _pidm_ui_task(void* param) {
     pidm_ui_runtime_s* runtime = (pidm_ui_runtime_s*)param;
     btn_status_e btn_val = Btn_Idle;
-    uint16_t det_tick = 0U;
 
     while (1) {
         delay_ms(PIDM_UI_TASK_PERIOD_MS);
@@ -251,12 +308,6 @@ static void _pidm_ui_task(void* param) {
         btn_val = button_scan_state(&runtime->button_scan, PIDM_UI_TASK_PERIOD_MS);
         if ((btn_val == Btn_Both_Click) && (runtime->home_cb != NULL)) {
             runtime->home_cb(runtime->home_user_ctx);
-        }
-
-        det_tick += PIDM_UI_TASK_PERIOD_MS;
-        if (det_tick >= PIDM_UI_DETECTION_PERIOD_MS) {
-            det_tick = 0U;
-            (void)pidm_trigger_detection();
         }
     }
 }
@@ -411,22 +462,25 @@ static void _pidm_add_scope_grid(lv_obj_t* plot, lv_coord_t width, lv_coord_t he
 }
 
 /*
- * brief : Build the PIDM ADC oscilloscope panel.
+ * brief : Build the PIDM adaptive detector oscilloscope panel.
  * input : parent - page root; width/height - panel dimensions.
  * output: created scope panel.
  * type  : private
- * theory: bind one LVGL line to the persistent PSRAM point array and redraw it in place.
+ * theory: bind peak and slope lines to persistent PSRAM point arrays and redraw them in place.
  */
 static lv_obj_t* _pidm_build_scope_panel(lv_obj_t* parent,
                                          lv_coord_t width,
                                          lv_coord_t height) {
     lv_obj_t* panel = NULL;
     lv_obj_t* plot = NULL;
+    lv_obj_t* peak_legend_lab = NULL;
+    lv_obj_t* slope_legend_lab = NULL;
 #if LV_USE_LINE != 0
-    lv_obj_t* line = NULL;
+    lv_obj_t* peak_line = NULL;
+    lv_obj_t* slope_line = NULL;
 #endif
     lv_coord_t plot_w = width - 12;
-    lv_coord_t plot_h = height - 31;
+    lv_coord_t plot_h = height - 12;
 
     if (plot_w < 180) {
         plot_w = 180;
@@ -439,7 +493,6 @@ static lv_obj_t* _pidm_build_scope_panel(lv_obj_t* parent,
     if (panel == NULL) {
         return NULL;
     }
-    _pidm_add_panel_title(panel, "PIDM ADC Scope  0 - 4095");
 
     plot = lv_obj_create(panel);
     lv_obj_set_size(plot, plot_w, plot_h);
@@ -455,22 +508,47 @@ static lv_obj_t* _pidm_build_scope_panel(lv_obj_t* parent,
 #if LV_USE_LINE != 0
     if (s_pidm_scope_buffer != NULL) {
         _pidm_scope_reset_samples(plot_w - 2, plot_h - 2);
-        line = lv_line_create(plot);
-        lv_obj_set_size(line, plot_w - 2, plot_h - 2);
-        lv_obj_set_pos(line, 1, 1);
-        lv_obj_set_style_bg_opa(line, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(line, 0, 0);
-        lv_obj_set_style_line_color(line, lv_color_hex(0x55E6A5), 0);
-        lv_obj_set_style_line_width(line, 2, 0);
-        lv_line_set_y_invert(line, true);
-        lv_line_set_points(line,
-                           s_pidm_scope_buffer->points,
+        peak_line = lv_line_create(plot);
+        lv_obj_set_size(peak_line, plot_w - 2, plot_h - 2);
+        lv_obj_set_pos(peak_line, 1, 1);
+        lv_obj_set_style_bg_opa(peak_line, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(peak_line, 0, 0);
+        lv_obj_set_style_line_color(peak_line, lv_color_hex(0xE95420), 0);
+        lv_obj_set_style_line_width(peak_line, 2, 0);
+        lv_line_set_y_invert(peak_line, true);
+        lv_line_set_points(peak_line,
+                           s_pidm_scope_buffer->peak_points,
                            PIDM_UI_SCOPE_POINT_COUNT);
-        s_pidm_ui_runtime.scope_line = line;
+
+        slope_line = lv_line_create(plot);
+        lv_obj_set_size(slope_line, plot_w - 2, plot_h - 2);
+        lv_obj_set_pos(slope_line, 1, 1);
+        lv_obj_set_style_bg_opa(slope_line, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(slope_line, 0, 0);
+        lv_obj_set_style_line_color(slope_line, lv_color_hex(0x2FB5E2), 0);
+        lv_obj_set_style_line_width(slope_line, 2, 0);
+        lv_line_set_y_invert(slope_line, true);
+        lv_line_set_points(slope_line,
+                           s_pidm_scope_buffer->slope_points,
+                           PIDM_UI_SCOPE_POINT_COUNT);
+        s_pidm_ui_runtime.scope_peak_line = peak_line;
+        s_pidm_ui_runtime.scope_slope_line = slope_line;
         s_pidm_ui_runtime.scope_plot_w = plot_w - 2;
         s_pidm_ui_runtime.scope_plot_h = plot_h - 2;
     }
 #endif
+
+    peak_legend_lab = lv_label_create(plot);
+    lv_label_set_text(peak_legend_lab, "DPK");
+    lv_obj_set_pos(peak_legend_lab, 5, 3);
+    lv_obj_set_style_text_color(peak_legend_lab, lv_color_hex(0xE95420), 0);
+    lv_obj_set_style_text_font(peak_legend_lab, &PIDM_UI_TEXT_FONT, 0);
+
+    slope_legend_lab = lv_label_create(plot);
+    lv_label_set_text(slope_legend_lab, "DSL/50");
+    lv_obj_set_pos(slope_legend_lab, 42, 3);
+    lv_obj_set_style_text_color(slope_legend_lab, lv_color_hex(0x2FB5E2), 0);
+    lv_obj_set_style_text_font(slope_legend_lab, &PIDM_UI_TEXT_FONT, 0);
 
     return panel;
 }
@@ -480,7 +558,7 @@ static lv_obj_t* _pidm_build_scope_panel(lv_obj_t* parent,
  * input : parent - page root; width/height - row dimensions.
  * output: none.
  * type  : private
- * theory: split six read-only values across two compact columns for fast scanning.
+ * theory: show adaptive signal features beside the direct calibration and metal result.
  */
 static void _pidm_build_parameter_row(lv_obj_t* parent,
                                       lv_coord_t width,
@@ -488,6 +566,7 @@ static void _pidm_build_parameter_row(lv_obj_t* parent,
     lv_obj_t* row = lv_obj_create(parent);
     lv_obj_t* panel = NULL;
     lv_coord_t panel_w = (width - PIDM_UI_CARD_GAP_PX) / 2;
+    char threshold_text[16] = { 0 };
 
     lv_obj_set_size(row, width, height);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
@@ -503,40 +582,58 @@ static void _pidm_build_parameter_row(lv_obj_t* parent,
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
     panel = _pidm_create_panel(row, panel_w, height);
-    _pidm_add_panel_title(panel, "ADC Values");
-    s_pidm_ui_runtime.latest_edit = _pidm_add_edit_row(
+    _pidm_add_panel_title(panel, "Adaptive Signal");
+    s_pidm_ui_runtime.peak_delta_edit = _pidm_add_edit_row(
         panel,
-        "Latest",
+        "Peak Delta",
         "--",
-        lv_color_hex(0x55E6A5));
-    s_pidm_ui_runtime.average_edit = _pidm_add_edit_row(
+        lv_color_hex(0xE95420));
+    s_pidm_ui_runtime.slope_delta_edit = _pidm_add_edit_row(
         panel,
-        "Average",
+        "Slope Delta",
         "--",
-        lv_color_hex(0x55E6A5));
-    s_pidm_ui_runtime.samples_edit = _pidm_add_edit_row(
+        lv_color_hex(0x2FB5E2));
+    snprintf(threshold_text,
+             sizeof(threshold_text),
+             "%u",
+             (unsigned)PIDM_PEAK_DELTA_MIN);
+    s_pidm_ui_runtime.peak_threshold_edit = _pidm_add_edit_row(
         panel,
-        "Samples",
-        "0",
-        lv_color_hex(0x55E6A5));
+        "Peak Threshold",
+        threshold_text,
+        lv_color_hex(0xFFD166));
+    snprintf(threshold_text,
+             sizeof(threshold_text),
+             "%u",
+             (unsigned)PIDM_SLOPE_DELTA_MIN_ADC_PER_MS);
+    s_pidm_ui_runtime.slope_threshold_edit = _pidm_add_edit_row(
+        panel,
+        "Slope Threshold",
+        threshold_text,
+        lv_color_hex(0xFFD166));
 
     panel = _pidm_create_panel(row, panel_w, height);
-    _pidm_add_panel_title(panel, "Detection");
-    s_pidm_ui_runtime.triggers_edit = _pidm_add_edit_row(
+    _pidm_add_panel_title(panel, "Auto Detection");
+    s_pidm_ui_runtime.metal_edit = _pidm_add_edit_row(
         panel,
-        "Triggers",
-        "0",
+        "Metal",
+        "WAIT",
         lv_color_hex(0xFFD166));
-    s_pidm_ui_runtime.pulse_edit = _pidm_add_edit_row(
+    s_pidm_ui_runtime.result_edit = _pidm_add_edit_row(
         panel,
-        "Pulse",
-        "--",
-        lv_color_hex(0xFFD166));
-    s_pidm_ui_runtime.status_edit = _pidm_add_edit_row(
-        panel,
-        "Status",
+        "Result",
         "OFFLINE",
         lv_color_hex(0x55C7FF));
+    s_pidm_ui_runtime.calibration_edit = _pidm_add_edit_row(
+        panel,
+        "Calibration",
+        "0/10",
+        lv_color_hex(0xFFD166));
+    s_pidm_ui_runtime.pulse_hit_edit = _pidm_add_edit_row(
+        panel,
+        "Pulse Hit",
+        "--",
+        lv_color_hex(0x55E6A5));
 }
 
 /*
@@ -593,10 +690,10 @@ lv_obj_t* pidm_open_screen(lv_obj_t* parent,
     if (inner_h < 280) {
         inner_h = 280;
     }
-    parameter_h = 116;
+    parameter_h = 150;
     scope_h = inner_h - PIDM_UI_CARD_GAP_PX - parameter_h;
-    if (scope_h < 150) {
-        scope_h = 150;
+    if (scope_h < 120) {
+        scope_h = 120;
     }
 
     screen = lv_obj_create(parent);
