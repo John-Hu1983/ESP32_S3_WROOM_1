@@ -3,7 +3,7 @@
 #define TAG "dev_servo"
 
 static bool is_inited = false;
-static t_servo_ctr* servo_ctr = NULL;
+static Servo_Ctr_s* servo_ctr = NULL;
 static algo_pid_s* servo_pid = NULL;
 static uint16_t s_ble_report_elapsed_ms = SERVO_BLE_REPORT_PERIOD_MS;
 static float s_pid_submin_acc = 0.0f;
@@ -29,7 +29,7 @@ algo_pid_s* servo_read_pid_profile(void) {
  * type  : public
  * theory: expose motor runtime snapshot pointer so callers can read pwm and direction state.
  */
-t_servo_ctr* servo_read_motor_profile(void) {
+Servo_Ctr_s* servo_read_motor_profile(void) {
     return servo_ctr;
 }
 
@@ -40,7 +40,7 @@ t_servo_ctr* servo_read_motor_profile(void) {
  * type  : public
  * theory: map abstract motor direction to dual PWM outputs and apply raw duty immediately.
  */
-void servo_run_motor(e_motor_direction dir, uint8_t duty) {
+void servo_run_motor(Mot_Dir_e dir, uint8_t duty) {
     if (servo_ctr == NULL) {
         return;
     }
@@ -154,14 +154,14 @@ esp_err_t servo_init_hw(void) {
 
     // Allocate memory for the servo control structure if it hasn't been allocated yet.
     if (servo_ctr == NULL) {
-        servo_ctr = (t_servo_ctr*)heap_caps_calloc(1,
-                                                   sizeof(t_servo_ctr),
+        servo_ctr = (Servo_Ctr_s*)heap_caps_calloc(1,
+                                                   sizeof(Servo_Ctr_s),
                                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (servo_ctr == NULL) {
             return ESP_ERR_NO_MEM;
         }
     }
-    memset(servo_ctr, 0, sizeof(t_servo_ctr));
+    memset(servo_ctr, 0, sizeof(Servo_Ctr_s));
 
     if (servo_pid == NULL) {
         servo_pid = (algo_pid_s*)heap_caps_calloc(1,
@@ -277,17 +277,23 @@ static void _servo_init_pid(uint16_t ms) {
         return;
     }
 
-    servo_pid->cfg.kp = 0.2f;
-    servo_pid->cfg.ki = 0.08f;
-    servo_pid->cfg.kd = 0.005f;
+    // parameters for PID: kp, ki, kd
+    // 0.2,   0.08 , 0.005
+    // 0.18 , 0.07 , 0.015
+    // 0.095，0.18 ，0.01
+    servo_pid->cfg.kp = 0.095f;
+    servo_pid->cfg.ki = 0.18f;
+    servo_pid->cfg.kd = 0.01f;
     servo_pid->cfg.out_min = -SERVO_PID_DUTY_MAX;
     servo_pid->cfg.out_max = SERVO_PID_DUTY_MAX;
     servo_pid->cfg.i_min = -50.0f;
     servo_pid->cfg.i_max = 50.0f;
     servo_pid->cfg.dt_s = ((float)ms) / 1000.0f;
-    servo_pid->cfg.err_deadband = SERVO_PID_TOL_EXIT_ADC;
+    servo_pid->cfg.err_deadband = SERVO_PID_TOL_COMPUTE;
+    servo_pid->cfg.quiescent_deadband = SERVO_PID_TOL_QUIESCENT;
 
     servo_pid->first_cycle = true;
+    servo_pid->update = false;
     servo_pid->target = 0.0f;
     servo_pid->feedback = 0.0f;
     servo_pid->prev_err = 0.0f;
@@ -342,11 +348,15 @@ static void _servo_report_ble(float duty_f, uint16_t vr, uint16_t ms) {
  * input : see parameters.
  * output: none.
  * type  : public
- * theory: update the shared PID target atomically through a single setter entry point.
+ * theory: mark a changed target for precise convergence before switching to the wider idle deadband.
  */
 void servo_set_target(float target) {
     if (servo_pid == NULL) {
         return;
+    }
+    if (servo_pid->target != target) {
+        servo_pid->update = true;
+        servo_pid->first_cycle = true;
     }
     servo_pid->target = target;
     ESP_LOGI(TAG, "Servo target set to %.3f", target);
@@ -383,7 +393,7 @@ void servo_compute_via_pid(uint16_t ms) {
     float output = 0.0f;
     float duty_f = 0.0f;
     uint8_t duty = 0U;
-    e_motor_direction dir = MOTOR_DIRECTION_STOP;
+    Mot_Dir_e dir = MOTOR_DIRECTION_STOP;
 
     if ((!is_inited) || (servo_ctr == NULL) || (servo_pid == NULL)) {
         return;

@@ -56,6 +56,7 @@ static bool _algo_pid_is_effectively_equal(float lhs, float rhs) {
  * type  : public
  */
 esp_err_t algo_pid_step(algo_pid_s* pid, float feedback, float* output) {
+    float active_deadband = 0.0f;
     float p_term = 0.0f;
     float i_prev = 0.0f;
     float i_delta = 0.0f;
@@ -83,8 +84,14 @@ esp_err_t algo_pid_step(algo_pid_s* pid, float feedback, float* output) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (_algo_pid_abs_f32(pid->curr_err) <= pid->cfg.err_deadband) {
+    active_deadband = pid->update ? pid->cfg.err_deadband
+                                  : pid->cfg.quiescent_deadband;
+    if (active_deadband < pid->cfg.err_deadband) {
+        active_deadband = pid->cfg.err_deadband;
+    }
+    if (_algo_pid_abs_f32(pid->curr_err) <= active_deadband) {
         pid->curr_err = 0.0f;
+        pid->update = false;
     }
 
     p_term = pid->cfg.kp * pid->curr_err;

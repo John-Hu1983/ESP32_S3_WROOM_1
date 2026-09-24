@@ -22,11 +22,13 @@ typedef struct {
     float i_max;          // Upper clamp for integral accumulator i_acc.
     float dt_s;           // Control step period in seconds for each step call.
     float err_deadband;   // Absolute error deadband; inside this range err is treated as 0.
+    float quiescent_deadband; // Wider deadband used after a target update has settled.
 } algo_pid_cfg_s;
 
 typedef struct {
     bool inited;          // True after successful init.
     bool first_cycle;     // True before first step; derivative term is suppressed.
+    bool update;          // True while a changed target is converging with the precise deadband.
     float target;         // Setpoint used to compute error.
     float feedback;       // Cached current feedback from the most recent step.
     float prev_err;       // Previous-step error used by derivative term.

@@ -129,7 +129,7 @@ void bsp_init_env(void)
 {
     esp_err_t ble_ret = ESP_OK;
 
-    speaker_set_volume(90);
+    speaker_set_volume(20);
     ble_ret = ble_start_nimble();
     if (ble_ret != ESP_OK) {
         ESP_LOGE(

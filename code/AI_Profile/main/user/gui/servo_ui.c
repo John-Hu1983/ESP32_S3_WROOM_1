@@ -28,7 +28,7 @@ static void _servo_scope_push_sample(servo_ui_runtime_s* runtime,
                                      int32_t pv_value);
 #endif
 
-static const char* _servo_ui_state_text(e_motor_direction dir) {
+static const char* _servo_ui_state_text(Mot_Dir_e dir) {
     switch (dir) {
     case MOTOR_DIRECTION_STOP:
         return "STOP";
@@ -146,7 +146,7 @@ static void _servo_ui_timer_cb(lv_timer_t* timer) {
  */
 static void _servo_ui_refresh_profile_view(servo_ui_runtime_s* runtime) {
     algo_pid_s* pid = NULL;
-    t_servo_ctr* motor = NULL;
+    Servo_Ctr_s* motor = NULL;
     const char* state_text = "IDLE";
 
     if (runtime == NULL) {
