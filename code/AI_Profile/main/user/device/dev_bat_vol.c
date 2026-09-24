@@ -25,6 +25,13 @@ esp_err_t batvol_init_cfg(void) {
 
     s_bat_adc_ready = true;
 
+#if BATVOL_DIAG_ENABLE
+    ESP_LOGI(TAG,
+             "ADC initialized: unit=%d, channel=%d",
+             SERVO_ADC_UNIT,
+             SERVO_ADC_CHANNEL);
+#endif
+
     return ESP_OK;
 }
 
@@ -36,13 +43,12 @@ esp_err_t batvol_init_cfg(void) {
  * theory: average current oneshot samples, then scale the divider input to battery voltage.
  */
 esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv) {
-     uint16_t raw_value = 0U;
-     uint32_t raw_sum = 0U;
-     uint32_t divider_sum = 0U;
-     uint32_t i = 0U;
+    uint16_t raw_value = 0U;
+    uint16_t io_mv = 0U;
+    uint32_t raw_sum = 0U;
+    uint32_t divider_sum = 0U;
+    uint32_t i = 0U;
     esp_err_t ret = ESP_OK;
-    int raw = 0;
-    int adc_mv = 0;
     uint32_t io_mv_u32 = 0U;
     uint32_t bat_mv_u32 = 0U;
 
@@ -58,14 +64,16 @@ esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv) {
         raw_sum += raw_value;
     }
 
-    raw = (int)(raw_sum / BATVOL_ADC_SAMPLE_COUNT);
-    adc_mv = (int)((((uint32_t)raw) * BATVOL_ADC_FALLBACK_FULL_SCALE_MV)
-                   / BATVOL_ADC_FALLBACK_MAX_RAW);
-
-    if (adc_mv < 0) {
-        adc_mv = 0;
+    raw_value = (uint16_t)(raw_sum / BATVOL_ADC_SAMPLE_COUNT);
+    ret = hal_adc_raw_to_mv(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL, raw_value, &io_mv);
+    if (ret != ESP_OK) {
+        return ret;
     }
-    io_mv_u32 = (uint32_t)adc_mv;
+    io_mv_u32 = (uint32_t)io_mv;
+
+#if BATVOL_DIAG_ENABLE
+    ESP_LOGI(TAG, "ADC: %u mV", io_mv_u32);
+#endif
 
     divider_sum = (uint32_t)up_r + (uint32_t)low_r;
     bat_mv_u32 = ((io_mv_u32 * divider_sum) + ((uint32_t)low_r / 2U)) / (uint32_t)low_r;

@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
@@ -20,6 +22,7 @@ extern "C" {
 
 esp_err_t hal_adc_init(adc_unit_t unit, adc_channel_t channel);
 esp_err_t hal_adc_read(adc_unit_t unit, adc_channel_t channel, uint16_t* raw);
+esp_err_t hal_adc_raw_to_mv(adc_unit_t unit, adc_channel_t channel, uint16_t raw, uint16_t* mv);
 
 #ifdef __cplusplus
 }

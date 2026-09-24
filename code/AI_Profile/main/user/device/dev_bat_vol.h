@@ -14,9 +14,7 @@ extern "C" {
 
 // clang-format off
 #define BATVOL_ADC_SAMPLE_COUNT              (12U)
-#define BATVOL_ADC_FALLBACK_FULL_SCALE_MV    (3300U)
-#define BATVOL_ADC_FALLBACK_MAX_RAW          (4095U)
-#define BATVOL_DIAG_ENABLE                   (1U)
+#define BATVOL_DIAG_ENABLE                   (0U)
 #define BATVOL_DIAG_EVERY_N_READS            (1U)
 #define BATVOL_DIAG_DIRECT_ADC_MV_OUTPUT     (0U)
 #define BATVOL_UP_RESISTER                   (91U)

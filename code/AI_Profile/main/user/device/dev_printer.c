@@ -548,9 +548,7 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    bat_ret = batvol_read_mv(BATVOL_UP_RESISTER,
-                             BATVOL_LOW_RESISTER,
-                             &out_status->working_voltage_raw);
+    bat_ret = printer_read_battery_mv(&out_status->working_voltage_raw);
     if (bat_ret != ESP_OK) {
         if (printer_mv_valid) {
             out_status->working_voltage_raw = printer_mv;
@@ -567,6 +565,22 @@ esp_err_t printer_detect_status(printer_detect_status_t* out_status)
     }
 
     return ESP_OK;
+}
+
+/*
+ * brief : Read local battery voltage independently from printer communication.
+ * input : battery_mv - destination for scaled battery voltage.
+ * output: ESP_OK on success; otherwise argument, ADC state, or conversion error.
+ * type  : public
+ * theory: expose the board ADC measurement without requiring a printer UART response.
+ */
+esp_err_t printer_read_battery_mv(uint16_t* battery_mv)
+{
+    if (battery_mv == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return batvol_read_mv(BATVOL_UP_RESISTER, BATVOL_LOW_RESISTER, battery_mv);
 }
 
 /*

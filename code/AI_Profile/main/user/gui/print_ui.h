@@ -50,6 +50,7 @@ typedef struct {
 
     bool printer_ready;
     bool status_valid;
+    bool battery_valid;
     bool dirty;
     uint8_t selected_cmd;
     uint8_t cmd_count;

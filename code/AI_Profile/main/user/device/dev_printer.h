@@ -108,6 +108,7 @@ bool printer_is_ready(void);
 esp_err_t printer_write_string(const char* text);
 
 esp_err_t printer_detect_status(printer_detect_status_t* out_status);
+esp_err_t printer_read_battery_mv(uint16_t* battery_mv);
 
 /* printer command APIs */
 esp_err_t printer_clear_cache(void);

@@ -93,7 +93,6 @@ static esp_err_t _print_cmd_text(void) {
     time_t now_sec = 0;
     struct tm tm_now = { 0 };
     bool tm_valid = false;
-    printer_detect_status_t status = { 0 };
     uint16_t battery_mv = 0U;
     bool battery_valid = false;
     char line[48] = { 0 };
@@ -106,14 +105,13 @@ static esp_err_t _print_cmd_text(void) {
     now_sec = time(NULL);
     tm_valid = (localtime_r(&now_sec, &tm_now) != NULL);
 
-    ret = printer_detect_status(&status);
-    if ((ret == ESP_OK) && (status.working_voltage_raw > 0U)) {
-        battery_mv = status.working_voltage_raw;
+    ret = printer_read_battery_mv(&battery_mv);
+    if (ret == ESP_OK) {
         battery_valid = true;
     }
     else {
         taskENTER_CRITICAL(&s_print_lock);
-        if (s_print_runtime.status_valid
+        if (s_print_runtime.battery_valid
             && (s_print_runtime.working_voltage_raw > 0U)) {
             battery_mv = s_print_runtime.working_voltage_raw;
             battery_valid = true;
@@ -454,6 +452,7 @@ static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime) {
     taskENTER_CRITICAL(&s_print_lock);
     runtime->printer_ready = (ret == ESP_OK);
     runtime->status_valid = false;
+    runtime->battery_valid = false;
     runtime->last_status_err = ret;
     runtime->dirty = true;
     taskEXIT_CRITICAL(&s_print_lock);
@@ -476,43 +475,48 @@ static esp_err_t _print_try_init_printer(print_ui_runtime_s* runtime) {
  * theory: poll device status and mirror sampled telemetry into UI runtime cache.
  */
 static void _obtain_print_profile(print_ui_runtime_s* runtime) {
-    esp_err_t ret = ESP_FAIL;
+    esp_err_t status_ret = ESP_FAIL;
+    esp_err_t battery_ret = ESP_FAIL;
     printer_detect_status_t status = { 0 };
+    uint16_t battery_mv = 0U;
 
     if (runtime == NULL) {
         return;
     }
 
-    ret = printer_detect_status(&status);
-    if (ret == ESP_OK) {
-        taskENTER_CRITICAL(&s_print_lock);
+    status_ret = printer_detect_status(&status);
+    battery_ret = printer_read_battery_mv(&battery_mv);
+
+    taskENTER_CRITICAL(&s_print_lock);
+    runtime->status_valid = (status_ret == ESP_OK);
+    runtime->battery_valid = (battery_ret == ESP_OK);
+    runtime->last_status_err = status_ret;
+    runtime->dirty = true;
+    if (status_ret == ESP_OK) {
         runtime->printer_ready = true;
-        runtime->status_valid = true;
         runtime->temperature_celsius = status.tph_temperature_celsius;
         runtime->paper_detect_raw = status.paper_detect_raw;
-        runtime->working_voltage_raw = status.working_voltage_raw;
-        runtime->last_status_err = ESP_OK;
-        runtime->dirty = true;
-        taskEXIT_CRITICAL(&s_print_lock);
+    }
+    else if (status_ret == ESP_ERR_INVALID_STATE) {
+        runtime->printer_ready = false;
+    }
+    if (battery_ret == ESP_OK) {
+        runtime->working_voltage_raw = battery_mv;
+    }
+    taskEXIT_CRITICAL(&s_print_lock);
 
+    if (status_ret == ESP_OK) {
         _print_set_status_text(runtime, "Printer online, refresh every 1s");
         return;
     }
 
-    taskENTER_CRITICAL(&s_print_lock);
-    runtime->status_valid = false;
-    runtime->last_status_err = ret;
-    if (ret == ESP_ERR_INVALID_STATE) {
-        runtime->printer_ready = false;
-    }
-    runtime->dirty = true;
-    taskEXIT_CRITICAL(&s_print_lock);
-
-    if (ret == ESP_ERR_INVALID_STATE) {
+    if (status_ret == ESP_ERR_INVALID_STATE) {
         _print_set_status_text(runtime, "Printer not ready, retrying init");
     }
     else {
-        _print_set_status_text(runtime, "Status read failed: err=%d", (int)ret);
+        _print_set_status_text(runtime,
+                               "Printer offline, battery via ADC: err=%d",
+                               (int)status_ret);
     }
 }
 
@@ -627,6 +631,7 @@ static void _print_sync_ui(void* param) {
     bool dirty = false;
     bool _ready_ = false;
     bool status_valid = false;
+    bool battery_valid = false;
     uint8_t selected = 0U;
     uint8_t cmd_count = 0U;
     uint8_t temp_c = 0U;
@@ -655,6 +660,7 @@ static void _print_sync_ui(void* param) {
     if (runtime->dirty) {
         _ready_ = runtime->printer_ready;
         status_valid = runtime->status_valid;
+        battery_valid = runtime->battery_valid;
         selected = runtime->selected_cmd;
         cmd_count = runtime->cmd_count;
         temp_c = runtime->temperature_celsius;
@@ -688,22 +694,27 @@ static void _print_sync_ui(void* param) {
         lv_label_set_text(runtime->paper_value_label, value_text);
         lv_obj_set_style_text_color(runtime->paper_value_label, metric_value_color, 0);
 
-        (void)snprintf(value_text, sizeof(value_text), "%u mV", (unsigned)voltage_raw);
-        lv_label_set_text(runtime->voltage_value_label, value_text);
-        lv_obj_set_style_text_color(runtime->voltage_value_label,
-                                    metric_value_color,
-                                    0);
     }
     else {
         lv_label_set_text(runtime->temp_value_label, "--");
         lv_label_set_text(runtime->paper_value_label, "--");
-        lv_label_set_text(runtime->voltage_value_label, "--");
         lv_obj_set_style_text_color(runtime->temp_value_label,
                                     lv_color_hex(0x7F95A9),
                                     0);
         lv_obj_set_style_text_color(runtime->paper_value_label,
                                     lv_color_hex(0x7F95A9),
                                     0);
+    }
+
+    if (battery_valid) {
+        (void)snprintf(value_text, sizeof(value_text), "%u mV", (unsigned)voltage_raw);
+        lv_label_set_text(runtime->voltage_value_label, value_text);
+        lv_obj_set_style_text_color(runtime->voltage_value_label,
+                                    lv_color_hex(0x1D8D35),
+                                    0);
+    }
+    else {
+        lv_label_set_text(runtime->voltage_value_label, "--");
         lv_obj_set_style_text_color(runtime->voltage_value_label,
                                     lv_color_hex(0x7F95A9),
                                     0);
@@ -763,7 +774,8 @@ static void _print_event_automatic_mode(print_ui_runtime_s* runtime) {
         automatic_mode.interval_ms += PRINT_UI_TASK_PERIOD_MS;
         if (automatic_mode.interval_ms >= AUTO_PRINT_INTERVAL_MS) {
             if (runtime->status_valid && runtime->paper_detect_raw) {
-                printer_image_via_bin(files[file_index]);
+                // printer_image_via_bin(files[file_index]);
+                printer_image_via_bin("05_product_tiger_lineart.bin");
                 s_print_image_count++;
                 _print_cmd_text();
                 file_index = (file_index + 1) % file_count;
