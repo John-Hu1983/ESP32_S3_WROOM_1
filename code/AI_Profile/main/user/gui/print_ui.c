@@ -105,19 +105,12 @@ static esp_err_t _print_cmd_text(void) {
     now_sec = time(NULL);
     tm_valid = (localtime_r(&now_sec, &tm_now) != NULL);
 
-    ret = printer_read_battery_mv(&battery_mv);
-    if (ret == ESP_OK) {
+    taskENTER_CRITICAL(&s_print_lock);
+    if (s_print_runtime.battery_valid && (s_print_runtime.working_voltage_raw > 0U)) {
+        battery_mv = s_print_runtime.working_voltage_raw;
         battery_valid = true;
     }
-    else {
-        taskENTER_CRITICAL(&s_print_lock);
-        if (s_print_runtime.battery_valid
-            && (s_print_runtime.working_voltage_raw > 0U)) {
-            battery_mv = s_print_runtime.working_voltage_raw;
-            battery_valid = true;
-        }
-        taskEXIT_CRITICAL(&s_print_lock);
-    }
+    taskEXIT_CRITICAL(&s_print_lock);
 
     if (battery_valid) {
         (void)snprintf(line,
@@ -693,7 +686,6 @@ static void _print_sync_ui(void* param) {
         (void)snprintf(value_text, sizeof(value_text), "%u", (unsigned)paper_raw);
         lv_label_set_text(runtime->paper_value_label, value_text);
         lv_obj_set_style_text_color(runtime->paper_value_label, metric_value_color, 0);
-
     }
     else {
         lv_label_set_text(runtime->temp_value_label, "--");
