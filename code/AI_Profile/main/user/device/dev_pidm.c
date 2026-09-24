@@ -48,57 +48,30 @@ static uint32_t _pidm_detection_margin(uint32_t noise) {
  * input : slope - destination for the robust slope estimate.
  * output: ESP_OK on success; otherwise ADC or response error code.
  * type  : private
- * theory: yield while the DMA frame spans the 200-1000 us rise, then use trimmed window amplitude as a slope proxy.
+ * theory: synchronously sample the 200-1000 us rise, then use trimmed window amplitude as a slope proxy.
  */
 static esp_err_t _pidm_capture_response_slope(uint32_t* slope) {
-    hal_adc_sample_s sample = { 0 };
-    uint16_t values[HAL_ADC_AVG_SAMPLES] = { 0 };
+    uint16_t values[PIDM_ADC_SAMPLE_COUNT] = { 0 };
     uint16_t key = 0U;
-    uint32_t count = 0U;
     uint32_t low_average = 0U;
     uint32_t high_average = 0U;
     uint32_t i = 0U;
     uint32_t j = 0U;
-    int64_t deadline_us = 0;
-    int64_t remaining_us = 0;
     esp_err_t ret = ESP_OK;
 
     if (slope == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    deadline_us = esp_timer_get_time() + PIDM_RESPONSE_CAPTURE_US;
-    while ((remaining_us = deadline_us - esp_timer_get_time()) > 0) {
-        if (remaining_us > PIDM_CAPTURE_YIELD_US) {
-            esp_rom_delay_us(PIDM_CAPTURE_YIELD_US);
+    esp_rom_delay_us(PIDM_RESPONSE_START_US);
+    for (i = 0U; i < PIDM_ADC_SAMPLE_COUNT; ++i) {
+        ret = hal_adc_read(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL, &values[i]);
+        if (ret != ESP_OK) {
+            return ret;
         }
-        else {
-            esp_rom_delay_us((uint32_t)remaining_us);
-        }
-        taskYIELD();
-    }
-    taskYIELD();
-
-    ret = hal_adc_get_channel_sample(PIDM_ADC_UNIT,
-                                     PIDM_ADC_CHANNEL,
-                                     HAL_ADC_AVG_SAMPLES,
-                                     &sample);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    if (!sample.valid || (sample.raw_cache == NULL) || (sample.sample_count < 4U)) {
-        return ESP_ERR_INVALID_RESPONSE;
     }
 
-    count = sample.sample_count;
-    if (count > HAL_ADC_AVG_SAMPLES) {
-        count = HAL_ADC_AVG_SAMPLES;
-    }
-    for (i = 0U; i < count; ++i) {
-        values[i] = sample.raw_cache[i];
-    }
-
-    for (i = 1U; i < count; ++i) {
+    for (i = 1U; i < PIDM_ADC_SAMPLE_COUNT; ++i) {
         key = values[i];
         j = i;
         while ((j > 0U) && (values[j - 1U] > key)) {
@@ -109,7 +82,9 @@ static esp_err_t _pidm_capture_response_slope(uint32_t* slope) {
     }
 
     low_average = ((uint32_t)values[0] + values[1]) / 2U;
-    high_average = ((uint32_t)values[count - 1U] + values[count - 2U]) / 2U;
+    high_average = ((uint32_t)values[PIDM_ADC_SAMPLE_COUNT - 1U]
+                    + values[PIDM_ADC_SAMPLE_COUNT - 2U])
+                   / 2U;
     if (high_average <= low_average) {
         *slope = 0U;
         return ESP_OK;
@@ -247,7 +222,7 @@ esp_err_t pidm_init_runtime(void) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    ret = hal_adc_insert(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL);
+    ret = hal_adc_init(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL);
     if (ret != ESP_OK) {
         return ret;
     }
@@ -413,25 +388,22 @@ esp_err_t pidm_trigger_detection(void) {
  * input : profile - destination snapshot.
  * output: ESP_OK when ADC data is valid; otherwise argument, state, or ADC error code.
  * type  : public
- * theory: copy scalar ADC/control state so callers never retain the HAL-owned DMA cache pointer.
+ * theory: take one current ADC conversion and copy the scalar control state into the snapshot.
  */
 esp_err_t pidm_read_profile(pidm_profile_s* profile) {
-    hal_adc_sample_s sample = { 0 };
+     uint16_t raw = 0U;
     esp_err_t ret = ESP_OK;
 
     if (profile == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    ret = hal_adc_get_channel_sample(PIDM_ADC_UNIT,
-                                     PIDM_ADC_CHANNEL,
-                                     HAL_ADC_AVG_SAMPLES,
-                                     &sample);
+    ret = hal_adc_read(PIDM_ADC_UNIT, PIDM_ADC_CHANNEL, &raw);
 
-    profile->adc_valid = (ret == ESP_OK) && sample.valid;
-    profile->adc_latest = sample.raw_latest;
-    profile->adc_average = sample.raw_avg;
-    profile->adc_sample_count = sample.sample_count;
+    profile->adc_valid = (ret == ESP_OK);
+    profile->adc_latest = raw;
+    profile->adc_average = raw;
+    profile->adc_sample_count = (ret == ESP_OK) ? 1U : 0U;
     profile->pulse_width_us = PIDM_TRIGGER_PULSE_US;
 
     portENTER_CRITICAL(&s_pidm_lock);

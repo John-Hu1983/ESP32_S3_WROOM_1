@@ -9,7 +9,7 @@ static bool s_bat_adc_ready = false;
  * input : none.
  * output: return value from this function.
  * type  : public
- * theory: register the battery ADC device while leaving all acquisition to the HAL DMA path.
+ * theory: configure the battery channel for synchronous oneshot conversion.
  */
 esp_err_t batvol_init_cfg(void) {
     esp_err_t ret = ESP_OK;
@@ -18,7 +18,7 @@ esp_err_t batvol_init_cfg(void) {
         return ESP_OK;
     }
 
-    ret = hal_adc_insert(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL);
+    ret = hal_adc_init(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL);
     if (ret != ESP_OK) {
         return ret;
     }
@@ -33,10 +33,13 @@ esp_err_t batvol_init_cfg(void) {
  * input : see parameters.
  * output: return value from this function.
  * type  : public
- * theory: convert the HAL DMA average into calibrated divider input and battery voltage.
+ * theory: average current oneshot samples, then scale the divider input to battery voltage.
  */
 esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv) {
-    hal_adc_sample_s sample = { 0 };
+     uint16_t raw_value = 0U;
+     uint32_t raw_sum = 0U;
+     uint32_t divider_sum = 0U;
+     uint32_t i = 0U;
     esp_err_t ret = ESP_OK;
     int raw = 0;
     int adc_mv = 0;
@@ -47,15 +50,15 @@ esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    ret = hal_adc_get_channel_sample(SERVO_ADC_UNIT,
-                                     SERVO_ADC_CHANNEL,
-                                     BATVOL_ADC_SAMPLE_COUNT,
-                                     &sample);
-    if (ret != ESP_OK) {
-        return ret;
+    for (i = 0U; i < BATVOL_ADC_SAMPLE_COUNT; ++i) {
+        ret = hal_adc_read(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL, &raw_value);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        raw_sum += raw_value;
     }
 
-    raw = (int)sample.raw_avg;
+    raw = (int)(raw_sum / BATVOL_ADC_SAMPLE_COUNT);
     adc_mv = (int)((((uint32_t)raw) * BATVOL_ADC_FALLBACK_FULL_SCALE_MV)
                    / BATVOL_ADC_FALLBACK_MAX_RAW);
 
@@ -64,7 +67,7 @@ esp_err_t batvol_read_mv(uint16_t up_r, uint16_t low_r, uint16_t* mv) {
     }
     io_mv_u32 = (uint32_t)adc_mv;
 
-    uint32_t divider_sum = (uint32_t)up_r + (uint32_t)low_r;
+    divider_sum = (uint32_t)up_r + (uint32_t)low_r;
     bat_mv_u32 = ((io_mv_u32 * divider_sum) + ((uint32_t)low_r / 2U)) / (uint32_t)low_r;
 
     if (bat_mv_u32 > UINT16_MAX) {

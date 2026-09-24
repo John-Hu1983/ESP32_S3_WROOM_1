@@ -32,6 +32,7 @@ extern "C" {
 #define SERVO_PID_TOL_QUIESCENT     (SERVO_PID_TOL_COMPUTE * 3.0f)
 #define SERVO_PID_BRAKE_DUTY        (255U)
 #define SERVO_BLE_REPORT_PERIOD_MS  (100U)
+#define SERVO_ADC_SAMPLE_COUNT       (8U)
 
 // clang-format on
 

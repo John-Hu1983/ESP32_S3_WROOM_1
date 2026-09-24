@@ -78,10 +78,12 @@ void servo_run_motor(Mot_Dir_e dir, uint8_t duty) {
  * input : see parameters.
  * output: return value from this function.
  * type  : public
- * theory: return only a valid averaged DMA sample so control never reuses stale feedback.
+ * theory: synchronously convert and average current feedback samples for the control loop.
  */
 esp_err_t servo_get_adc_value(uint16_t* adc_value) {
-    hal_adc_sample_s sample = { 0 };
+     uint16_t raw = 0U;
+     uint32_t sum = 0U;
+     uint32_t i = 0U;
     esp_err_t ret = ESP_OK;
 
     if (adc_value == NULL) {
@@ -91,15 +93,15 @@ esp_err_t servo_get_adc_value(uint16_t* adc_value) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    ret = hal_adc_get_channel_sample(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL, 8U, &sample);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    if (!sample.valid) {
-        return ESP_ERR_INVALID_RESPONSE;
+    for (i = 0U; i < SERVO_ADC_SAMPLE_COUNT; ++i) {
+        ret = hal_adc_read(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL, &raw);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        sum += raw;
     }
 
-    *adc_value = (uint16_t)sample.raw_avg;
+    *adc_value = (uint16_t)(sum / SERVO_ADC_SAMPLE_COUNT);
 
     return ESP_OK;
 }
@@ -173,7 +175,7 @@ esp_err_t servo_init_hw(void) {
     }
     memset(servo_pid, 0, sizeof(algo_pid_s));
 
-    ret = hal_adc_insert(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL);
+    ret = hal_adc_init(SERVO_ADC_UNIT, SERVO_ADC_CHANNEL);
     if (ret != ESP_OK) {
         return ret;
     }
