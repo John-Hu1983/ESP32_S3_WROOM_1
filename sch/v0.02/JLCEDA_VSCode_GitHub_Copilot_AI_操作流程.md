@@ -78,7 +78,7 @@ Test-Path "$env:USERPROFILE\.copilot\skills\easyeda-api\SKILL.md"
 
 ```powershell
 Set-Location "$env:USERPROFILE\.copilot\skills\easyeda-api"
-npm run server
+npm.cmd run server
 ```
 
 4. 保持这个 PowerShell 窗口运行。
@@ -126,3 +126,27 @@ Invoke-RestMethod http://127.0.0.1:49620/health |
 ```
 
 Copilot 能返回连接状态和窗口数量，说明环境搭建完成。
+
+## 日常使用方法
+
+每次电脑重启后，按以下顺序启动：
+
+1. 打开嘉立创EDA专业版和需要操作的工程。
+2. 打开 PowerShell，执行：
+
+```powershell
+Set-Location "$env:USERPROFILE\.copilot\skills\easyeda-api"
+npm.cmd run server
+```
+
+3. 保持这个 PowerShell 窗口运行，不要关闭，也不要按 `Ctrl+C`。
+4. 在嘉立创EDA中选择 `API Gateway → Reconnect`。
+5. 打开 VS Code，将 Copilot Chat 切换为 `Agent` 模式后即可使用。
+
+注意：
+
+- 正确命令是 `npm.cmd run server`，不是 `npm.com run server`。
+- Bridge Server 每次只需启动一次，不需要重复输入命令。
+- 只要 PowerShell 窗口保持运行，Bridge Server 就会一直工作。
+- 关闭 PowerShell、按下 `Ctrl+C` 或重启电脑后，下次使用前需要重新启动 Bridge Server。
+- 使用结束后，可以在 Bridge Server 的 PowerShell 窗口按 `Ctrl+C` 停止服务。
